@@ -1,0 +1,15 @@
+# Billing FinOps Module
+
+Billing FinOps is modeled as an OCSv3 module package. CloudRING Core consumes
+usage ledger, allocation, invoice-preview, evidence, support, and marketplace
+settlement contracts from the manifest.
+
+Payment processors, tax systems, invoice engines, and provider accounting
+adapters remain outside core. This directory exposes only portable connector
+metadata and review references.
+
+Validate the module manifest with:
+
+```powershell
+go run ./cmd/ocsctl validate ./cloudring_core/modules/billing-finops/module-package.json
+```

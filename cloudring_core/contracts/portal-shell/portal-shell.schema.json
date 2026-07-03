@@ -1,0 +1,374 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "portal-shell.schema.json",
+  "title": "CloudRING Core Portal Shell Contract",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "shellId",
+    "identitySession",
+    "switcher",
+    "navigation",
+    "permissions",
+    "moduleSlots",
+    "microfrontends",
+    "analytics",
+    "auditEvidence",
+    "sourceSafety"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "cloudring.portal-shell/v1"
+    },
+    "shellId": {
+      "type": "string",
+      "pattern": "^shell-[a-z0-9-]+$"
+    },
+    "identitySession": {
+      "type": "object",
+      "required": [
+        "authenticated",
+        "principalRef",
+        "tenantRef",
+        "projectRef",
+        "managementVisible",
+        "sessionAssuranceRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "authenticated": {
+          "type": "boolean"
+        },
+        "principalRef": {
+          "type": "string",
+          "pattern": "^principal\\.[a-z0-9-]+$"
+        },
+        "tenantRef": {
+          "type": "string",
+          "pattern": "^tenant\\.[a-z0-9-]+$"
+        },
+        "projectRef": {
+          "type": "string",
+          "pattern": "^project\\.[a-z0-9-]+$"
+        },
+        "managementVisible": {
+          "type": "boolean"
+        },
+        "sessionAssuranceRef": {
+          "type": "string",
+          "pattern": "^assurance\\.[a-z0-9-]+$"
+        }
+      }
+    },
+    "switcher": {
+      "type": "object",
+      "required": [
+        "organizationRefs",
+        "tenantRefs",
+        "teamRefs",
+        "projectRefs",
+        "selectedTenantRef",
+        "selectedProjectRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "organizationRefs": {
+          "$ref": "#/$defs/refList"
+        },
+        "tenantRefs": {
+          "$ref": "#/$defs/refList"
+        },
+        "teamRefs": {
+          "$ref": "#/$defs/refList"
+        },
+        "projectRefs": {
+          "$ref": "#/$defs/refList"
+        },
+        "selectedTenantRef": {
+          "type": "string",
+          "pattern": "^tenant\\.[a-z0-9-]+$"
+        },
+        "selectedProjectRef": {
+          "type": "string",
+          "pattern": "^project\\.[a-z0-9-]+$"
+        }
+      }
+    },
+    "navigation": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/navigationItem"
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/permissionGate"
+      }
+    },
+    "moduleSlots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/moduleSlot"
+      }
+    },
+    "microfrontends": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/microfrontendMount"
+      }
+    },
+    "analytics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/analyticsEvent"
+      }
+    },
+    "auditEvidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/evidenceLink"
+      }
+    },
+    "sourceSafety": {
+      "type": "object",
+      "required": [
+        "catalogSource",
+        "hardcodedServiceCatalog",
+        "coreServiceActions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "catalogSource": {
+          "type": "string",
+          "const": "ocs_connector_metadata"
+        },
+        "hardcodedServiceCatalog": {
+          "type": "boolean",
+          "const": false
+        },
+        "coreServiceActions": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "refList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z]+\\.[a-z0-9-]+$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "navigationItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "labelKey",
+        "placement",
+        "routeRef",
+        "requiredPermission"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^nav\\.[a-z0-9-]+$"
+        },
+        "labelKey": {
+          "type": "string",
+          "pattern": "^portal\\.[a-z0-9.-]+$"
+        },
+        "placement": {
+          "enum": [
+            "primary",
+            "secondary",
+            "support",
+            "admin"
+          ]
+        },
+        "routeRef": {
+          "type": "string",
+          "pattern": "^route\\.[a-z0-9.-]+$"
+        },
+        "requiredPermission": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z]+$"
+        }
+      }
+    },
+    "permissionGate": {
+      "type": "object",
+      "required": [
+        "permission",
+        "decisionRef",
+        "auditRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "permission": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z]+$"
+        },
+        "decisionRef": {
+          "type": "string",
+          "pattern": "^decision\\.[a-z0-9-]+$"
+        },
+        "auditRef": {
+          "type": "string",
+          "pattern": "^audit\\.[a-z0-9-]+$"
+        }
+      }
+    },
+    "moduleSlot": {
+      "type": "object",
+      "required": [
+        "slot",
+        "metadataSource",
+        "serviceClassRef",
+        "routeOwnerRef",
+        "hostRef",
+        "mountRef",
+        "apiRef",
+        "permissionRefs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z]+$"
+        },
+        "metadataSource": {
+          "type": "string",
+          "const": "ocs.service.spec.portalModules"
+        },
+        "serviceClassRef": {
+          "type": "string",
+          "pattern": "^service\\.[a-z0-9-]+$"
+        },
+        "routeOwnerRef": {
+          "type": "string",
+          "pattern": "^module\\.[a-z0-9-]+$"
+        },
+        "hostRef": {
+          "type": "string",
+          "pattern": "^host\\.[a-z0-9-]+$"
+        },
+        "mountRef": {
+          "type": "string",
+          "pattern": "^mount\\.[a-z0-9.-]+$"
+        },
+        "apiRef": {
+          "type": "string",
+          "pattern": "^api\\.[a-z0-9.-]+$"
+        },
+        "permissionRefs": {
+          "$ref": "#/$defs/refList"
+        }
+      }
+    },
+    "microfrontendMount": {
+      "type": "object",
+      "required": [
+        "hostRef",
+        "mountRef",
+        "runtimeRef",
+        "scopedContextRefs",
+        "certificationEvidenceRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "hostRef": {
+          "type": "string",
+          "pattern": "^host\\.[a-z0-9-]+$"
+        },
+        "mountRef": {
+          "type": "string",
+          "pattern": "^mount\\.[a-z0-9.-]+$"
+        },
+        "runtimeRef": {
+          "type": "string",
+          "pattern": "^runtime\\.[a-z0-9-]+$"
+        },
+        "scopedContextRefs": {
+          "$ref": "#/$defs/refList"
+        },
+        "certificationEvidenceRef": {
+          "type": "string",
+          "pattern": "^evidence\\.[a-z0-9-]+$"
+        }
+      }
+    },
+    "analyticsEvent": {
+      "type": "object",
+      "required": [
+        "eventRef",
+        "trigger",
+        "subjectRef",
+        "evidenceRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "eventRef": {
+          "type": "string",
+          "pattern": "^analytics\\.[a-z0-9.-]+$"
+        },
+        "trigger": {
+          "enum": [
+            "navigation",
+            "module_mount",
+            "permission_decision",
+            "support_handoff"
+          ]
+        },
+        "subjectRef": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z0-9-]+$"
+        },
+        "evidenceRef": {
+          "type": "string",
+          "pattern": "^evidence\\.[a-z0-9-]+$"
+        }
+      }
+    },
+    "evidenceLink": {
+      "type": "object",
+      "required": [
+        "evidenceRef",
+        "kind",
+        "freshnessRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "evidenceRef": {
+          "type": "string",
+          "pattern": "^evidence\\.[a-z0-9-]+$"
+        },
+        "kind": {
+          "enum": [
+            "audit",
+            "readiness",
+            "support",
+            "non_claim"
+          ]
+        },
+        "freshnessRef": {
+          "type": "string",
+          "pattern": "^freshness\\.[a-z0-9-]+$"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "cloudring.provider-adapter/v1",
+  "adapterId": "synthetic-capacity-fabric",
+  "displayName": "Synthetic Capacity Fabric",
+  "syntheticOnly": true,
+  "capabilities": [
+    "inventory",
+    "preflight",
+    "plan",
+    "evidence"
+  ],
+  "inventoryClasses": [
+    {
+      "class": "capacity-pool",
+      "description": "Normalized compute and storage capacity visible to core.",
+      "requiredFields": [
+        "poolId",
+        "regionRef",
+        "availableUnits",
+        "storageClass"
+      ],
+      "sample": {
+        "poolId": "pool-synthetic-a",
+        "regionRef": "region-example-a",
+        "availableUnits": 12,
+        "storageClass": "standard-block"
+      }
+    },
+    {
+      "class": "network-fabric",
+      "description": "Normalized network capability without provider service names.",
+      "requiredFields": [
+        "fabricId",
+        "routable",
+        "dualStack"
+      ],
+      "sample": {
+        "fabricId": "fabric-synthetic-a",
+        "routable": true,
+        "dualStack": true
+      }
+    }
+  ],
+  "preflightClasses": [
+    {
+      "class": "quota-check",
+      "description": "Capacity and allocation check performed before planning.",
+      "requiredFields": [
+        "checkId",
+        "status",
+        "observedLimit"
+      ],
+      "sample": {
+        "checkId": "preflight-synthetic-quota",
+        "status": "pass",
+        "observedLimit": "sufficient"
+      }
+    },
+    {
+      "class": "network-check",
+      "description": "Portable connectivity check for the declared fabric.",
+      "requiredFields": [
+        "checkId",
+        "status",
+        "fabricId"
+      ],
+      "sample": {
+        "checkId": "preflight-synthetic-network",
+        "status": "pass",
+        "fabricId": "fabric-synthetic-a"
+      }
+    }
+  ],
+  "planClasses": [
+    {
+      "class": "dry-run-step",
+      "description": "A planned operation described without provider commands.",
+      "requiredFields": [
+        "stepId",
+        "action",
+        "requiresPreflight"
+      ],
+      "sample": {
+        "stepId": "plan-synthetic-allocate",
+        "action": "allocate-capacity",
+        "requiresPreflight": "preflight-synthetic-quota"
+      }
+    },
+    {
+      "class": "apply-barrier",
+      "description": "A confirmation barrier that core can evaluate before mutation.",
+      "requiredFields": [
+        "barrierId",
+        "evidenceClass",
+        "confirmationRequired"
+      ],
+      "sample": {
+        "barrierId": "barrier-synthetic-apply",
+        "evidenceClass": "plan-receipt",
+        "confirmationRequired": true
+      }
+    }
+  ],
+  "evidenceClasses": [
+    {
+      "class": "inventory-receipt",
+      "description": "Receipt proving inventory was collected through the adapter.",
+      "requiredFields": [
+        "receiptId",
+        "capability",
+        "artifactRef"
+      ],
+      "sample": {
+        "receiptId": "evidence-synthetic-inventory",
+        "capability": "inventory",
+        "artifactRef": "artifact://synthetic/inventory"
+      }
+    },
+    {
+      "class": "plan-receipt",
+      "description": "Receipt proving plan output was produced without applying it.",
+      "requiredFields": [
+        "receiptId",
+        "capability",
+        "artifactRef"
+      ],
+      "sample": {
+        "receiptId": "evidence-synthetic-plan",
+        "capability": "plan",
+        "artifactRef": "artifact://synthetic/plan"
+      }
+    }
+  ],
+  "sourceSafety": {
+    "syntheticFixture": true,
+    "containsProviderImplementation": false,
+    "containsRealInventory": false,
+    "containsDeploymentValues": false
+  }
+}

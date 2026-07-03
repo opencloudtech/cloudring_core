@@ -1,0 +1,11 @@
+{
+  "apiVersion": "synthetic.ocsv3.dev/v1alpha1",
+  "kind": "SyntheticServiceClaim",
+  "metadata": {
+    "name": "missing-project-ref",
+    "namespace": "project-a"
+  },
+  "spec": {
+    "plan": "standard"
+  }
+}

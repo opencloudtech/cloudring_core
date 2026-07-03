@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "module-registry.schema.json",
+  "title": "CloudRING Core Module Registry Contract",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "registryId",
+    "modelVersion",
+    "sourceSafety",
+    "dependencyResolution",
+    "modules",
+    "planRequests"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "cloudring.module-registry/v1"
+    },
+    "registryId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "modelVersion": {
+      "type": "string",
+      "minLength": 3
+    },
+    "sourceSafety": {
+      "$ref": "#/$defs/sourceSafety"
+    },
+    "dependencyResolution": {
+      "$ref": "#/$defs/dependencyResolution"
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/module"
+      }
+    },
+    "planRequests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/planRequest"
+      }
+    }
+  },
+  "$defs": {
+    "sourceSafety": {
+      "type": "object",
+      "required": [
+        "syntheticFixture",
+        "containsServiceImplementationReferences",
+        "containsProviderEndpoints",
+        "containsSecrets",
+        "mutatesServices"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "syntheticFixture": {
+          "type": "boolean",
+          "const": true
+        },
+        "containsServiceImplementationReferences": {
+          "type": "boolean",
+          "const": false
+        },
+        "containsProviderEndpoints": {
+          "type": "boolean",
+          "const": false
+        },
+        "containsSecrets": {
+          "type": "boolean",
+          "const": false
+        },
+        "mutatesServices": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "dependencyResolution": {
+      "type": "object",
+      "required": [
+        "strategy",
+        "cyclePolicy",
+        "missingDependencyPolicy",
+        "evidenceRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "enum": [
+            "topological"
+          ]
+        },
+        "cyclePolicy": {
+          "enum": [
+            "block"
+          ]
+        },
+        "missingDependencyPolicy": {
+          "enum": [
+            "block"
+          ]
+        },
+        "evidenceRef": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "required": [
+        "id",
+        "displayName",
+        "packageRef",
+        "channel",
+        "version",
+        "state",
+        "lifecycleStates",
+        "dependencies",
+        "entitlementScope",
+        "operations"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 3
+        },
+        "packageRef": {
+          "type": "string",
+          "minLength": 3
+        },
+        "channel": {
+          "type": "string",
+          "minLength": 3
+        },
+        "version": {
+          "type": "string",
+          "minLength": 3
+        },
+        "state": {
+          "enum": [
+            "installable",
+            "installed",
+            "suspended",
+            "deprecated",
+            "not-installed"
+          ]
+        },
+        "lifecycleStates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 5,
+          "uniqueItems": true
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          }
+        },
+        "entitlementScope": {
+          "type": "string",
+          "minLength": 3
+        },
+        "operations": {
+          "$ref": "#/$defs/operations"
+        },
+        "serviceImplementationRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "required": [
+        "moduleId",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "moduleId": {
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "installed",
+            "installable"
+          ]
+        }
+      }
+    },
+    "operations": {
+      "type": "object",
+      "required": [
+        "install",
+        "update",
+        "remove",
+        "suspend",
+        "deprecate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "install": {
+          "$ref": "#/$defs/operation"
+        },
+        "update": {
+          "$ref": "#/$defs/operation"
+        },
+        "remove": {
+          "$ref": "#/$defs/operation"
+        },
+        "suspend": {
+          "$ref": "#/$defs/operation"
+        },
+        "deprecate": {
+          "$ref": "#/$defs/operation"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "required": [
+        "action",
+        "operationId",
+        "idempotent",
+        "idempotencyKey",
+        "policyAware",
+        "auditReceiptRef",
+        "evidenceReceiptRef",
+        "rollbackRequired",
+        "rollbackHookRef",
+        "nextAction"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "install",
+            "update",
+            "remove",
+            "suspend",
+            "deprecate"
+          ]
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 3
+        },
+        "idempotent": {
+          "type": "boolean",
+          "const": true
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 3
+        },
+        "policyAware": {
+          "type": "boolean",
+          "const": true
+        },
+        "auditReceiptRef": {
+          "type": "string",
+          "minLength": 3
+        },
+        "evidenceReceiptRef": {
+          "type": "string",
+          "minLength": 3
+        },
+        "rollbackRequired": {
+          "type": "boolean",
+          "const": true
+        },
+        "rollbackHookRef": {
+          "type": "string",
+          "minLength": 3
+        },
+        "nextAction": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "planRequest": {
+      "type": "object",
+      "required": [
+        "name",
+        "moduleId",
+        "action",
+        "currentState",
+        "targetVersion"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "moduleId": {
+          "type": "string"
+        },
+        "action": {
+          "enum": [
+            "install",
+            "update",
+            "remove",
+            "suspend",
+            "deprecate"
+          ]
+        },
+        "currentState": {
+          "type": "string"
+        },
+        "targetVersion": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

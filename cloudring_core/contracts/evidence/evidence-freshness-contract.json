@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "cloudring.core.evidence-contract/v1",
+  "contractId": "evidence-freshness-blocked-state-boundary",
+  "scope": "public-core",
+  "liveProductionReady": false,
+  "claims": {
+    "liveProductionReady": false,
+    "productionReadiness": false,
+    "generalAvailability": false,
+    "allowsBlockedEvidenceAsReady": false,
+    "requiresFreshEvidence": true,
+    "liveMutationRequiresApproval": true
+  },
+  "evidenceFreshness": {
+    "staleBlocksReadiness": true,
+    "defaultMaxAgeHours": 24,
+    "classes": [
+      {
+        "id": "bom_compatibility",
+        "maxAgeHours": 168,
+        "requiredForLiveClaim": true
+      },
+      {
+        "id": "backup_restore",
+        "maxAgeHours": 24,
+        "requiredForLiveClaim": true
+      },
+      {
+        "id": "identity_policy",
+        "maxAgeHours": 24,
+        "requiredForLiveClaim": true
+      },
+      {
+        "id": "failure_tolerance",
+        "maxAgeHours": 24,
+        "requiredForLiveClaim": true
+      },
+      {
+        "id": "cleanup",
+        "maxAgeHours": 24,
+        "requiredForLiveClaim": true
+      }
+    ]
+  },
+  "states": [
+    {
+      "id": "accepted",
+      "blocksLiveClaim": false,
+      "requiresArtifactPath": true,
+      "requiresGeneratedAt": true,
+      "requiresCommand": true
+    },
+    {
+      "id": "absent",
+      "blocksLiveClaim": true,
+      "reason": "required evidence was not provided"
+    },
+    {
+      "id": "stale",
+      "blocksLiveClaim": true,
+      "reason": "evidence is older than the class freshness window"
+    },
+    {
+      "id": "blocked",
+      "blocksLiveClaim": true,
+      "reason": "the verifier recorded blockers"
+    },
+    {
+      "id": "synthetic_only",
+      "blocksLiveClaim": true,
+      "reason": "fixture or sample data cannot support a live claim"
+    },
+    {
+      "id": "redacted_private_detail",
+      "blocksLiveClaim": true,
+      "reason": "public core may record the contract shape but not private details"
+    }
+  ],
+  "cleanup": {
+    "requiresMutationAttemptedFlag": true,
+    "requiresCleanupAttemptedFlag": true,
+    "requiresResidualResourceSummary": true
+  },
+  "nonClaims": [
+    "This public contract describes evidence shape only.",
+    "A blocked state remains blocked until a downstream verifier writes fresh scoped evidence.",
+    "No live evidence files are part of CloudRING Core."
+  ]
+}

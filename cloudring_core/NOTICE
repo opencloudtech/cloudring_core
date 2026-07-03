@@ -1,0 +1,10 @@
+CloudRING Core
+Copyright 2026 CloudRING Core contributors
+
+This product includes software developed for the CloudRING Core public platform
+contracts and is licensed under the Apache License, Version 2.0 (Apache-2.0).
+
+CloudRING Core contains public contracts, documentation, and validation surfaces
+only. Private modules, provider adapters, customer deployments, and enterprise
+overlays are separate works unless they are explicitly contributed to this
+subtree.

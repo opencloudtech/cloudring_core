@@ -1,0 +1,9 @@
+{
+  "status": "ready",
+  "subject": "synthetic-service",
+  "claim": "reference implementation exercises OCSv3 lifecycle locally",
+  "nonClaims": [
+    "does not claim live provider readiness",
+    "does not contain credentials or tenant data"
+  ]
+}

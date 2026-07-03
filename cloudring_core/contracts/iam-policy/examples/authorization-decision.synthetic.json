@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "cloudring.core.iam-policy.authorization-decision/v1",
+  "request": {
+    "subject": {
+      "id": "subject-alice",
+      "kind": "human",
+      "issuerRef": "issuer:synthetic-idp",
+      "groupRefs": ["group:tenant-admins"],
+      "credentialClass": "interactive_session",
+      "mfa": {
+        "required": true,
+        "satisfied": true,
+        "methodClass": "webauthn"
+      },
+      "session": {
+        "state": "fresh",
+        "maxAgeSeconds": 900,
+        "reauthenticationRequired": false
+      }
+    },
+    "tenant": {
+      "id": "tenant-alpha",
+      "lifecycle": "active"
+    },
+    "project": {
+      "id": "project-alpha",
+      "tenantId": "tenant-alpha"
+    },
+    "action": "project.read",
+    "target": {
+      "kind": "project",
+      "tenantId": "tenant-alpha",
+      "projectId": "project-alpha",
+      "namespace": "default",
+      "name": "project-alpha"
+    },
+    "context": {
+      "correlationId": "corr-iam-policy",
+      "requestedAt": "2026-07-03T00:00:00Z",
+      "reason": "synthetic contract example"
+    }
+  },
+  "decision": {
+    "outcome": "allow",
+    "reasonCode": "mfa_session_policy_satisfied",
+    "policyRule": "tenant_admin_project_read",
+    "mfa": {
+      "required": true,
+      "satisfied": true,
+      "methodClass": "webauthn"
+    },
+    "session": {
+      "state": "fresh",
+      "maxAgeSeconds": 900,
+      "reauthenticationRequired": false
+    }
+  },
+  "audit": {
+    "eventId": "audit-iam-policy",
+    "actorRef": "subject-alice",
+    "tenantId": "tenant-alpha",
+    "projectId": "project-alpha",
+    "action": "project.read",
+    "target": {
+      "kind": "project",
+      "tenantId": "tenant-alpha",
+      "projectId": "project-alpha",
+      "namespace": "default",
+      "name": "project-alpha"
+    },
+    "outcome": "allow",
+    "reasonCode": "mfa_session_policy_satisfied",
+    "policyRule": "tenant_admin_project_read",
+    "correlationId": "corr-iam-policy",
+    "recordedAt": "2026-07-03T00:00:01Z",
+    "mfa": {
+      "required": true,
+      "satisfied": true,
+      "methodClass": "webauthn"
+    },
+    "session": {
+      "state": "fresh",
+      "maxAgeSeconds": 900,
+      "reauthenticationRequired": false
+    }
+  }
+}

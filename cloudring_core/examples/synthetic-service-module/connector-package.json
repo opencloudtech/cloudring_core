@@ -1,0 +1,391 @@
+{
+  "apiVersion": "ocsv3.cloudring.io/v1alpha1",
+  "kind": "ConnectorPackage",
+  "metadata": {
+    "name": "synthetic-service-package",
+    "displayName": "Synthetic Service Package",
+    "owner": "synthetic-service-team",
+    "version": "v0.1.0"
+  },
+  "service": {
+    "apiVersion": "ocsv3.cloudring.io/v1alpha1",
+    "kind": "ServiceConnector",
+    "metadata": {
+      "name": "synthetic-service",
+      "displayName": "Synthetic Service",
+      "owner": "synthetic-service-team",
+      "version": "v0.1.0"
+    },
+    "spec": {
+      "capabilities": [
+        {
+          "class": "synthetic-work-queue",
+          "name": "queue",
+          "description": "Tenant-scoped synthetic work queue lifecycle"
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "queue-backend",
+          "capabilityClass": "synthetic-work-queue",
+          "role": "data-plane",
+          "portability": "export-import"
+        }
+      ],
+      "lifecycle": [
+        {
+          "name": "provision",
+          "verb": "Apply",
+          "idempotent": true,
+          "idempotencyKey": "metadata.uid"
+        },
+        {
+          "name": "export",
+          "verb": "Export",
+          "idempotent": true,
+          "idempotencyKey": "export.request.id"
+        },
+        {
+          "name": "delete",
+          "verb": "Delete",
+          "idempotent": true,
+          "idempotencyKey": "delete.request.id"
+        }
+      ],
+      "automation": [
+        {
+          "name": "refresh-queue-status",
+          "description": "Refresh queue state through the connector contract",
+          "actionRef": "lifecycle.provision"
+        }
+      ],
+      "usageMeters": [
+        {
+          "name": "queued_jobs",
+          "unit": "job-hour"
+        }
+      ],
+      "billing": {
+        "connectorRef": "synthetic-service-billing",
+        "meters": [
+          {
+            "name": "queued_jobs",
+            "unit": "job-hour"
+          }
+        ]
+      },
+      "portalModules": [
+        {
+          "name": "queue-overview",
+          "slot": "service.detail",
+          "route": "/services/synthetic-service/queues",
+          "apiRef": "service.api.synthetic-service.queues",
+          "hostRef": "ui.synthetic-service.host",
+          "mountRef": "mount.synthetic-service.queue-overview",
+          "permissions": [
+            "synthetic-service.read"
+          ]
+        }
+      ],
+      "ui": {
+        "embedRef": "ui.synthetic-service.bundle",
+        "contextSchemaRef": "schemas/synthetic-service-ui-context.v1alpha1.json",
+        "hostAuthority": [
+          "navigation",
+          "identity",
+          "policy"
+        ],
+        "extensionActions": [
+          "queue.create",
+          "queue.delete"
+        ],
+        "moduleHost": {
+          "host": "cloudring-provider-portal",
+          "runtime": "module-federation",
+          "mountRef": "mount.synthetic-service.queue-overview",
+          "versionRange": ">=0.1.0 <1.0.0",
+          "integrityRef": "evidence.synthetic-service.ui.integrity",
+          "sandbox": "tenant-iam-context",
+          "allowedEvents": [
+            "queue.create.requested",
+            "queue.delete.requested"
+          ],
+          "requiredContext": [
+            "tenant",
+            "project",
+            "iam.subject",
+            "locale",
+            "theme"
+          ]
+        },
+        "evidence": [
+          {
+            "name": "ui-host-shell-certification",
+            "type": "certification-evidence",
+            "ref": "evidence.synthetic-service.ui.host-shell"
+          }
+        ]
+      },
+      "analyticsEvents": [
+        {
+          "name": "synthetic-service.queue.create.submitted",
+          "trigger": "portal-module-action",
+          "subject": "tenant.project.service-order",
+          "properties": [
+            "tenantId",
+            "projectId",
+            "plan",
+            "result"
+          ],
+          "evidenceRef": "evidence.synthetic-service.analytics"
+        }
+      ],
+      "kubernetesBindings": [
+        {
+          "group": "synthetic.cloudring.io",
+          "version": "v1alpha1",
+          "kind": "SyntheticQueue",
+          "plural": "syntheticqueues",
+          "scope": "Namespaced",
+          "crdRef": "crd.syntheticqueues.synthetic.cloudring.io",
+          "statusPath": "status.conditions",
+          "condition": "Ready"
+        }
+      ],
+      "gatewayRoutes": [
+        {
+          "name": "synthetic-service-api",
+          "parentRef": "gateway.platform.service-api",
+          "hostnames": [
+            "synthetic-service.services.example"
+          ],
+          "rules": [
+            "tenant-scoped-queue-api"
+          ],
+          "evidenceRef": "evidence.synthetic-service.gateway-route"
+        }
+      ],
+      "secrets": {
+        "workloadIdentityRef": "workloadidentity.synthetic-service-controller",
+        "secretRefs": [
+          {
+            "name": "queue-credential-reference",
+            "ref": "secretref.synthetic-service.access",
+            "purpose": "tenant data-plane access",
+            "rotation": "operator-initiated"
+          }
+        ]
+      },
+      "policies": [
+        {
+          "name": "tenant-data-residency",
+          "class": "data-residency",
+          "decisionRef": "policy.synthetic-service.residency",
+          "evidenceRef": "evidence.synthetic-service.policy"
+        }
+      ],
+      "dataLifecycle": {
+        "export": {
+          "actionRef": "lifecycle.export",
+          "format": "ocs-portable-archive",
+          "evidenceRef": "evidence.synthetic-service.export"
+        },
+        "delete": {
+          "actionRef": "lifecycle.delete",
+          "format": "tenant-queue-delete-receipt",
+          "evidenceRef": "evidence.synthetic-service.delete"
+        }
+      },
+      "states": [
+        {
+          "name": "degraded",
+          "reason": "portable dependency unavailable",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.degraded",
+          "remediation": "retry after dependency recovery or export data"
+        },
+        {
+          "name": "blocked",
+          "reason": "policy denial or missing entitlement",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.blocked",
+          "remediation": "resolve policy or entitlement before retry"
+        }
+      ],
+      "support": {
+        "owner": "synthetic-service-team",
+        "escalation": "provider-support",
+        "diagnostics": [
+          "queue-status",
+          "usage-ingestion-status"
+        ],
+        "docsRef": "cloudring_core/docs/service-module-authoring.md",
+        "evidence": [
+          {
+            "name": "support-diagnostics",
+            "type": "support-evidence",
+            "ref": "evidence.synthetic-service.support-diagnostics"
+          }
+        ]
+      },
+      "evidenceBundles": [
+        {
+          "name": "ocsv3-support-bundle",
+          "owner": "synthetic-service-team",
+          "claim": "support diagnostics, UI certification, policy, and data lifecycle evidence are linked",
+          "freshness": "review-before-publication",
+          "redaction": "support-safe-summary-only",
+          "evidence": [
+            {
+              "name": "support-diagnostics",
+              "type": "support-evidence",
+              "ref": "evidence.synthetic-service.support-diagnostics"
+            }
+          ],
+          "nonClaims": [
+            "does not claim production readiness"
+          ],
+          "reviewPath": "support.owner.review"
+        }
+      ]
+    }
+  },
+  "billing": {
+    "apiVersion": "ocsv3.cloudring.io/v1alpha1",
+    "kind": "BillingConnector",
+    "metadata": {
+      "name": "synthetic-service-billing",
+      "displayName": "Synthetic Service Billing",
+      "owner": "synthetic-service-team",
+      "version": "v0.1.0"
+    },
+    "meters": [
+      {
+        "name": "queued_jobs",
+        "unit": "job-hour"
+      }
+    ],
+    "costMeters": [
+      {
+        "name": "queue_job_month",
+        "currency": "USD",
+        "unitPrice": "0.00-example",
+        "meterRef": "queued_jobs",
+        "evidenceRef": "evidence.synthetic-service.cost-meter"
+      }
+    ],
+    "events": [
+      {
+        "name": "queue-usage-recorded",
+        "meter": "queued_jobs",
+        "idempotent": true,
+        "idempotencyKey": "usageEvent.id",
+        "entitlementRef": "catalog.plan.standard",
+        "attribution": "tenant.project.subscription",
+        "replayPolicy": "dedupe-by-idempotency-key"
+      }
+    ]
+  },
+  "catalog": {
+    "serviceClass": "synthetic-work-queue",
+    "visibility": "tenant",
+    "portability": "export-import",
+    "plans": [
+      {
+        "name": "standard",
+        "displayName": "Standard Synthetic Service",
+        "billingMode": "metered",
+        "quotaRef": "quota.synthetic-service.standard"
+      }
+    ]
+  },
+  "configuration": {
+    "schemaRef": "schemas/synthetic-service.v1alpha1.json",
+    "version": "v1alpha1"
+  },
+  "readiness": [
+    {
+      "name": "queue-controller-ready",
+      "type": "kubernetes-condition",
+      "target": "SyntheticQueue.status.conditions",
+      "condition": "Ready",
+      "evidenceRef": "support.diagnostics.queue-status"
+    }
+  ],
+  "tenantAccess": {
+    "scope": "project",
+    "entitlementRef": "catalog.plan.standard",
+    "entitlements": [
+      {
+        "name": "standard-plan",
+        "ref": "catalog.plan.standard",
+        "scope": "project"
+      }
+    ],
+    "permissions": [
+      "synthetic-service.read",
+      "synthetic-service.write"
+    ]
+  },
+  "durability": {
+    "stateClass": "stateful",
+    "dataClasses": [
+      "tenant-queue-data",
+      "usage-events"
+    ],
+    "backupPolicyRef": "backup.synthetic-service.standard",
+    "recoveryObjective": "restore-test-required-before-publication",
+    "recoveryEvidence": [
+      {
+        "name": "restore-drill",
+        "type": "runbook-evidence",
+        "ref": "evidence.synthetic-service.restore"
+      }
+    ]
+  },
+  "distribution": {
+    "deploymentProfiles": [
+      "self-hosted",
+      "provider-managed",
+      "edge-zone"
+    ],
+    "channels": [
+      "open-source",
+      "enterprise-marketplace"
+    ],
+    "infrastructureTargets": [
+      "kubernetes",
+      "private-cloud",
+      "public-cloud",
+      "edge"
+    ],
+    "updatePolicyRef": "updates.synthetic-service.compatibility-reviewed"
+  },
+  "federation": {
+    "modes": [
+      "standalone",
+      "connected",
+      "federated"
+    ],
+    "messageBusRef": "federation.bus.ocsv3.events",
+    "crossProviderScenarios": [
+      "migration",
+      "support-handoff"
+    ],
+    "portabilityPolicyRef": "policy.synthetic-service.no-provider-lock-in"
+  },
+  "commercial": {
+    "roles": [
+      "vendor",
+      "provider",
+      "reseller"
+    ],
+    "revenueModel": "metered-usage-with-revenue-share",
+    "licenseRef": "license.synthetic-service.marketplace",
+    "expiryBehavior": "service-keeps-running-updates-stop-except-critical-fixes",
+    "supportRef": "support.synthetic-service.provider-handoff",
+    "serviceProvenance": "synthetic-example",
+    "responsibilityMatrixRef": "responsibility.synthetic-service.provider-and-partner",
+    "continuityPlanRef": "continuity.synthetic-service.restorable"
+  }
+}
