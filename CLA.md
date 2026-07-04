@@ -1,6 +1,6 @@
 # Contributor License Agreement
 
-This contributor license agreement policy is publication scaffolding for the public CloudRING Core repository.
+This contributor license agreement policy is publication scaffolding for the public CloudRING repository.
 
 It is not legal advice and does not replace review by qualified counsel.
 

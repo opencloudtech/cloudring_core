@@ -1,6 +1,6 @@
 {
   "$id": "urn:cloudring-core:contracts:iam-policy:authorization-decision:v1",
-  "title": "CloudRING Core IAM Policy Authorization Decision",
+  "title": "CloudRING IAM Policy Authorization Decision",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "request", "decision", "audit"],

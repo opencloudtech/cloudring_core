@@ -1,6 +1,6 @@
 # Service Module Authoring
 
-Service modules integrate with CloudRING Core through OCSv3 (Open Cloud Standard
+Service modules integrate with CloudRING through OCSv3 (Open Cloud Standard
 3) connector packages. The module source can use any implementation language or
 runtime; the package handed to the platform is declarative metadata.
 

@@ -1,6 +1,6 @@
 # Developer Certificate of Origin
 
-This Developer Certificate of Origin policy is publication scaffolding for the public CloudRING Core repository.
+This Developer Certificate of Origin policy is publication scaffolding for the public CloudRING repository.
 
 It is not legal advice and does not replace review by qualified counsel.
 

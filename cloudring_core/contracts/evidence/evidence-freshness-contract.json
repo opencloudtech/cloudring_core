@@ -84,6 +84,6 @@
   "nonClaims": [
     "This public contract describes evidence shape only.",
     "A blocked state remains blocked until a downstream verifier writes fresh scoped evidence.",
-    "No live evidence files are part of CloudRING Core."
+    "No live evidence files are part of CloudRING."
   ]
 }

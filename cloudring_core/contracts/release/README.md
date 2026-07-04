@@ -1,7 +1,7 @@
 # Release Contract
 
 This directory owns the public release and BOM compatibility boundary for
-CloudRING Core.
+CloudRING.
 
 The contract is not a production readiness claim. It describes which release
 records, BOM rows, evidence gates, stale states, and blocked states a downstream

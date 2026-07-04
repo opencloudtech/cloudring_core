@@ -1,11 +1,11 @@
 # Ownership
 
-CloudRING Core separates public platform contracts from independently owned
+CloudRING separates public platform contracts from independently owned
 service and private implementation work.
 
 ## Core ownership
 
-CloudRING Core owns:
+CloudRING owns:
 
 - OCSv3 registry and validation contracts.
 - IAM, policy, and admission interfaces.

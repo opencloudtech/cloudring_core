@@ -7,4 +7,4 @@ blocked states without embedding provider endpoints or credential values.
 
 The core consumes `module-package.json` metadata only. Runtime backends,
 provider-specific overlays, live endpoints, and raw access material remain
-outside CloudRING Core.
+outside CloudRING.

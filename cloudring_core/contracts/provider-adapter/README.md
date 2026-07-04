@@ -1,6 +1,6 @@
 # Provider Adapter Contract
 
-Provider adapters let CloudRING Core reason about infrastructure without
+Provider adapters let CloudRING reason about infrastructure without
 embedding a provider implementation. Core owns the public interface shape,
 synthetic fixtures, validation expectations, and evidence vocabulary. Provider
 teams own SDK clients, installation logic, preflight execution, deployment

@@ -1,6 +1,6 @@
 # Trademarks
 
-This trademark guidance is publication scaffolding for the public CloudRING Core repository.
+This trademark guidance is publication scaffolding for the public CloudRING repository.
 
 It is not legal advice and does not grant trademark rights.
 

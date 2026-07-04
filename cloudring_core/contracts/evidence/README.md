@@ -1,7 +1,7 @@
 # Evidence Contract
 
 This directory owns the public evidence freshness and blocked-state boundary for
-CloudRING Core.
+CloudRING.
 
 The contract is not a production readiness claim. It defines how a release
 reviewer treats accepted, stale, blocked, absent, synthetic, and redacted

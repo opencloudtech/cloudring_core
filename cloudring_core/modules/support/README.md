@@ -1,6 +1,6 @@
 # Support Module
 
-Support is modeled as an OCSv3 module package. CloudRING Core consumes support
+Support is modeled as an OCSv3 module package. CloudRING consumes support
 case, diagnostic, escalation, evidence, and usage-meter contracts from the
 manifest without owning a ticketing or contact-center implementation.
 

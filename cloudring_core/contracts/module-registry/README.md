@@ -1,6 +1,6 @@
 # Module Registry Contract
 
-This directory defines the public CloudRING Core module registry lifecycle
+This directory defines the public CloudRING module registry lifecycle
 contract. The registry is a source-safe, synthetic contract for module metadata,
 lifecycle operations, dependency resolution, idempotent planning, audit and
 evidence receipts, and rollback hooks.
@@ -33,5 +33,5 @@ integration code outside this public core contract.
 
 The fixtures do not prove a deployed marketplace, service installation, billing
 settlement, support workflow, tenant data migration, or provider operation. They
-only prove that CloudRING Core can validate the portable lifecycle contract
+only prove that CloudRING can validate the portable lifecycle contract
 without importing service implementation details.

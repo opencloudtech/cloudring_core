@@ -1,6 +1,6 @@
 # UI Extension Authoring
 
-CloudRING Core portal extensions are OCSv3 (Open Cloud Standard 3) module
+CloudRING portal extensions are OCSv3 (Open Cloud Standard 3) module
 metadata plus a microfrontend host contract. The shell owns identity, tenant
 context, navigation placement, permissions, and audit context. The service team
 owns the module UI bundle and API contract.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "module-registry.schema.json",
-  "title": "CloudRING Core Module Registry Contract",
+  "title": "CloudRING Module Registry Contract",
   "type": "object",
   "required": [
     "schemaVersion",

@@ -1,4 +1,4 @@
-# CloudRING Core CI Checks
+# CloudRING CI Checks
 
 Public CI for a clean clone should run these read-only checks:
 

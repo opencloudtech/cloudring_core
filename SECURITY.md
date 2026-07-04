@@ -1,6 +1,6 @@
 # Security Policy
 
-CloudRING Core is a public contract surface. Security work focuses on keeping
+CloudRING is a public contract surface. Security work focuses on keeping
 the core portable, tenant-safe, and free of private deployment material.
 
 ## Reporting

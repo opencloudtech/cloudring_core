@@ -1,6 +1,6 @@
 # IAM And Policy Contract
 
-CloudRING Core owns the public authorization contract between identity,
+CloudRING owns the public authorization contract between identity,
 service modules, policy engines, audit sinks, and operator workflows. This
 contract is intentionally portable: it defines the data required to ask for,
 return, and audit an authorization decision without carrying private identity
@@ -72,7 +72,7 @@ Every decision must emit audit metadata with:
 
 Audit entries record references and decisions only. Runtime audit storage,
 identity-provider discovery, key rotation, bootstrap admin setup, and live
-session validation remain outside CloudRING Core.
+session validation remain outside CloudRING.
 
 ## Contract Artifacts
 

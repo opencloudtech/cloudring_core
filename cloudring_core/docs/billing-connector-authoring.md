@@ -2,7 +2,7 @@
 
 Billing connectors translate service usage into OCSv3 (Open Cloud Standard 3)
 meters, cost meters, entitlement links, idempotency keys, replay behavior, and
-dispute-ready evidence. CloudRING Core validates the billing connector without
+dispute-ready evidence. CloudRING validates the billing connector without
 knowing the service billing backend.
 
 ## Required Surfaces
@@ -35,6 +35,6 @@ go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/
 ## Boundary Rules
 
 Do not embed payment credentials, customer records, settlement results, invoice
-truth, or private billing-system schemas in CloudRING Core. The public connector
+truth, or private billing-system schemas in CloudRING. The public connector
 records the contract and evidence refs only. This document does not claim
 production readiness or billing settlement correctness.
