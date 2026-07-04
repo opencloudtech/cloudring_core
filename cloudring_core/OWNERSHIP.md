@@ -3,7 +3,7 @@
 CloudRING separates public platform contracts from independently owned
 service and private implementation work.
 
-## Core ownership
+## Platform ownership
 
 CloudRING owns:
 

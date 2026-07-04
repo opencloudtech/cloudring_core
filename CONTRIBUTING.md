@@ -3,7 +3,7 @@
 CloudRING accepts contributions that improve public platform contracts,
 validation, documentation, SDK guidance, and module interoperability.
 
-## Core ownership
+## Platform ownership
 
 Contributions may change public core contracts for OCSv3 registry and
 validation, IAM and policy interfaces, GitOps abstractions, readiness evidence,
