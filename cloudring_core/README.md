@@ -1,9 +1,9 @@
 # CloudRING Core
 
-CloudRING Core is the public platform core for reusable cloud-service
-orchestration contracts. This subtree is licensed under Apache-2.0 and is
-intended for external companies, service teams, and downstream maintainers that
-need a portable foundation without private deployment material.
+CloudRING Core is an Apache-2.0 open source project for reusable cloud-service
+orchestration contracts. It gives service teams, platform operators, and
+contributors a portable foundation for building cloud modules around OCSv3
+(Open Cloud Standard 3).
 
 ## Core ownership
 
@@ -18,7 +18,7 @@ The public core owns shared contracts and validation surfaces:
 - Developer SDK documentation.
 
 Core does not own service implementation code, deployment-specific values,
-customer data, credentials, private endpoints, or enterprise-only modules.
+customer data, credentials, or live infrastructure endpoints.
 
 ## Service ownership
 
@@ -27,13 +27,6 @@ OCSv3 metadata for its API/controller, portal extension, billing meters, support
 diagnostics, evidence, durability, lifecycle, rollback, delete/export, backup,
 restore, denied, degraded, and retry contracts. The core consumes that metadata
 instead of importing a service implementation.
-
-## Enterprise and private boundary
-
-Private provider adapters, company-specific overlays, enterprise modules,
-customer deployments, live infrastructure values, secrets, and support data stay
-outside CloudRING Core. Downstream users may combine this core with private
-modules in their own repositories while preserving the public boundary.
 
 ## Developer entry points
 
@@ -74,13 +67,11 @@ change limited to public-safe contracts, docs, examples, SDK code, or OCSv3
 validation behavior. Contributions must satisfy source-safety review before
 they can be considered for merge.
 
-Do not include local host paths, private repository paths, tenant/customer
-records, live provider endpoints, tokens, cookies, kubeconfigs, credentials, or
-private deployment evidence in code, docs, examples, tests, commits, or pull
-request text.
+Do not include local host paths, tenant/customer records, live provider
+endpoints, tokens, cookies, kubeconfigs, credentials, or deployment evidence in
+code, docs, examples, tests, commits, or pull request text.
 
 ## Non-claims
 
-These documents establish public-root metadata only. They do not claim live
-production readiness, legal clearance for material outside this subtree, or
-completeness of later module extraction work.
+These documents establish project metadata and public validation paths. They do
+not claim live production readiness for any particular deployment.
