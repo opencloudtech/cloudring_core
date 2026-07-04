@@ -1,0 +1,504 @@
+{
+  "apiVersion": "ocsv3.cloudring.io/v1alpha1",
+  "kind": "ConnectorPackage",
+  "metadata": {
+    "name": "synthetic-service-module-package",
+    "displayName": "Synthetic Service Module Package",
+    "owner": "synthetic-service-module-team",
+    "version": "v0.1.0"
+  },
+  "service": {
+    "apiVersion": "ocsv3.cloudring.io/v1alpha1",
+    "kind": "ServiceConnector",
+    "metadata": {
+      "name": "synthetic-service-module",
+      "displayName": "Synthetic Service Module",
+      "owner": "synthetic-service-module-team",
+      "version": "v0.1.0"
+    },
+    "spec": {
+      "capabilities": [
+        {
+          "class": "synthetic-service",
+          "name": "synthetic-instance",
+          "description": "Tenant-scoped S3-compatible synthetic-instance lifecycle"
+        },
+        {
+          "class": "s3-compatible-api",
+          "name": "portable-object-api",
+          "description": "Generic S3-compatible object API contract without provider endpoint or credential values"
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "s3-compatible-backend",
+          "capabilityClass": "s3-compatible-api",
+          "role": "data-plane",
+          "portability": "s3-compatible-api-contract"
+        }
+      ],
+      "lifecycle": [
+        {
+          "name": "provision",
+          "verb": "Apply",
+          "idempotent": true,
+          "idempotencyKey": "metadata.uid"
+        },
+        {
+          "name": "rotateAccessGrant",
+          "verb": "Rotate",
+          "idempotent": true,
+          "idempotencyKey": "rotation.request.id",
+          "rollbackRef": "support.restorePreviousGrant"
+        },
+        {
+          "name": "export",
+          "verb": "Export",
+          "idempotent": true,
+          "idempotencyKey": "export.request.id"
+        },
+        {
+          "name": "delete",
+          "verb": "Delete",
+          "idempotent": true,
+          "idempotencyKey": "delete.request.id",
+          "rollbackRef": "lifecycle.rollback"
+        },
+        {
+          "name": "backup",
+          "verb": "Backup",
+          "idempotent": true,
+          "idempotencyKey": "backup.request.id"
+        },
+        {
+          "name": "restore",
+          "verb": "Restore",
+          "idempotent": true,
+          "idempotencyKey": "restore.request.id"
+        },
+        {
+          "name": "retry",
+          "verb": "Apply",
+          "idempotent": true,
+          "idempotencyKey": "retry.request.id",
+          "rollbackRef": "lifecycle.rollback"
+        },
+        {
+          "name": "rollback",
+          "verb": "Rollback",
+          "idempotent": true,
+          "idempotencyKey": "rollback.request.id"
+        }
+      ],
+      "automation": [
+        {
+          "name": "apply-synthetic-instance",
+          "description": "Apply tenant synthetic-instance intent through the synthetic service connector",
+          "actionRef": "lifecycle.provision"
+        },
+        {
+          "name": "rotate-access-grant",
+          "description": "Rotate tenant access references through the connector without raw credential material",
+          "actionRef": "lifecycle.rotateAccessGrant"
+        }
+      ],
+      "usageMeters": [
+        {
+          "name": "synthetic_units",
+          "unit": "unit-hour",
+          "aggregation": "sum"
+        },
+        {
+          "name": "request_units",
+          "unit": "request",
+          "aggregation": "sum"
+        }
+      ],
+      "billing": {
+        "connectorRef": "synthetic-service-module-billing",
+        "meters": [
+          {
+            "name": "synthetic_units",
+            "unit": "unit-hour",
+            "aggregation": "sum"
+          },
+          {
+            "name": "request_units",
+            "unit": "request",
+            "aggregation": "sum"
+          }
+        ]
+      },
+      "portalModules": [
+        {
+          "name": "synthetic-instance-overview",
+          "slot": "service.detail",
+          "route": "/services/synthetic-service/synthetic-instances",
+          "apiRef": "service.api.synthetic-service.synthetic-instances",
+          "hostRef": "ui.synthetic-service.host",
+          "mountRef": "mount.synthetic-service.synthetic-instance-overview",
+          "permissions": [
+            "synthetic-service.read",
+            "synthetic-service.write"
+          ]
+        }
+      ],
+      "ui": {
+        "embedRef": "ui.synthetic-service.bundle",
+        "contextSchemaRef": "schemas/synthetic-service-ui-context.v1alpha1.json",
+        "hostAuthority": [
+          "navigation",
+          "identity",
+          "policy"
+        ],
+        "extensionActions": [
+          "synthetic-instance.create",
+          "synthetic-instance.grant.rotate",
+          "synthetic-instance.delete"
+        ],
+        "moduleHost": {
+          "host": "cloudring-provider-portal",
+          "runtime": "module-federation",
+          "mountRef": "mount.synthetic-service.synthetic-instance-overview",
+          "versionRange": ">=0.1.0 <1.0.0",
+          "integrityRef": "evidence.synthetic-service.ui.integrity",
+          "sandbox": "tenant-iam-context",
+          "allowedEvents": [
+            "synthetic-instance.create.requested",
+            "synthetic-instance.grant.rotate.requested",
+            "synthetic-instance.delete.requested"
+          ],
+          "requiredContext": [
+            "tenant",
+            "project",
+            "iam.subject",
+            "locale",
+            "theme"
+          ]
+        },
+        "evidence": [
+          {
+            "name": "ui-host-shell-certification",
+            "type": "certification-evidence",
+            "ref": "evidence.synthetic-service.ui.host-shell"
+          }
+        ]
+      },
+      "analyticsEvents": [
+        {
+          "name": "synthetic-service.synthetic-instance.apply.submitted",
+          "trigger": "portal-module-action",
+          "subject": "tenant.project.synthetic-instance-order",
+          "properties": [
+            "tenantId",
+            "projectId",
+            "plan",
+            "storageClass",
+            "result"
+          ],
+          "evidenceRef": "evidence.synthetic-service.analytics"
+        }
+      ],
+      "kubernetesBindings": [
+        {
+          "group": "storage.cloudring.io",
+          "version": "v1alpha1",
+          "kind": "SyntheticServiceClaim",
+          "plural": "objectsynthetic-instances",
+          "scope": "Namespaced",
+          "crdRef": "crd.objectsynthetic-instances.storage.cloudring.io",
+          "statusPath": "status.conditions",
+          "condition": "Ready"
+        }
+      ],
+      "gatewayRoutes": [
+        {
+          "name": "synthetic-service-api",
+          "parentRef": "gateway-api.parent.platform-services",
+          "hostnames": [
+            "synthetic-service.services.example"
+          ],
+          "rules": [
+            "tenant-synthetic-instance-api"
+          ],
+          "evidenceRef": "evidence.synthetic-service.gateway-route"
+        }
+      ],
+      "secrets": {
+        "workloadIdentityRef": "workloadidentity.synthetic-service-controller",
+        "secretRefs": [
+          {
+            "name": "s3-credential-reference",
+            "ref": "credentialref.synthetic-service.access-grant",
+            "purpose": "tenant data-plane access by reference",
+            "rotation": "operator-initiated"
+          }
+        ]
+      },
+      "policies": [
+        {
+          "name": "tenant-data-residency",
+          "class": "data-residency",
+          "decisionRef": "policy.synthetic-service.residency",
+          "evidenceRef": "evidence.synthetic-service.policy"
+        }
+      ],
+      "dataLifecycle": {
+        "export": {
+          "actionRef": "lifecycle.export",
+          "format": "s3-compatible-object-archive",
+          "evidenceRef": "evidence.synthetic-service.export"
+        },
+        "delete": {
+          "actionRef": "lifecycle.delete",
+          "format": "tenant-object-delete-receipt",
+          "evidenceRef": "evidence.synthetic-service.delete"
+        }
+      },
+      "states": [
+        {
+          "name": "degraded",
+          "reason": "S3-compatible backend capability is unavailable",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.degraded",
+          "remediation": "retry after capability recovery or export affected synthetic-instance data"
+        },
+        {
+          "name": "denied",
+          "reason": "IAM, quota, or data-residency policy denies the requested synthetic-instance operation",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.denied",
+          "remediation": "resolve entitlement, quota, or policy before retry"
+        },
+        {
+          "name": "blocked",
+          "reason": "policy denial or missing entitlement blocks reconciliation",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.blocked",
+          "remediation": "resolve policy or entitlement before retry"
+        },
+        {
+          "name": "ready",
+          "reason": "controller ready",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.ready",
+          "remediation": "continue normal operation"
+        },
+        {
+          "name": "retryable",
+          "reason": "transient dependency failure",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.retryable",
+          "remediation": "retry with the same idempotency key"
+        }
+      ],
+      "support": {
+        "owner": "synthetic-service-module-team",
+        "escalation": "provider-support",
+        "diagnostics": [
+          "synthetic-instance-status",
+          "usage-ingestion-status",
+          "access-grant-status"
+        ],
+        "docsRef": "docs/modules/synthetic-service.md",
+        "evidence": [
+          {
+            "name": "support-diagnostics",
+            "type": "support-evidence",
+            "ref": "evidence.synthetic-service.support-diagnostics"
+          }
+        ]
+      },
+      "evidenceBundles": [
+        {
+          "name": "synthetic-service-module-evidence",
+          "owner": "synthetic-service-module-team",
+          "claim": "synthetic service UI, billing, support, readiness, durability, degraded, and denied states are declared through OCSv3 metadata",
+          "freshness": "review-before-publication",
+          "redaction": "support-safe-summary-only",
+          "evidence": [
+            {
+              "name": "support-diagnostics",
+              "type": "support-evidence",
+              "ref": "evidence.synthetic-service.support-diagnostics"
+            }
+          ],
+          "nonClaims": [
+            "does not claim live deployment readiness",
+            "does not include provider endpoints or raw credentials"
+          ],
+          "reviewPath": "support.owner.review"
+        }
+      ]
+    }
+  },
+  "billing": {
+    "apiVersion": "ocsv3.cloudring.io/v1alpha1",
+    "kind": "BillingConnector",
+    "metadata": {
+      "name": "synthetic-service-module-billing",
+      "displayName": "Synthetic Service Module Billing",
+      "owner": "synthetic-service-module-team",
+      "version": "v0.1.0"
+    },
+    "meters": [
+      {
+        "name": "synthetic_units",
+        "unit": "unit-hour",
+        "aggregation": "sum"
+      },
+      {
+        "name": "request_units",
+        "unit": "request",
+        "aggregation": "sum"
+      }
+    ],
+    "costMeters": [
+      {
+        "name": "storage_gib_month",
+        "currency": "USD",
+        "unitPrice": "0.00-example",
+        "meterRef": "synthetic_units",
+        "evidenceRef": "evidence.synthetic-service.storage-cost-meter"
+      },
+      {
+        "name": "request_unit_month",
+        "currency": "USD",
+        "unitPrice": "0.00-example",
+        "meterRef": "request_units",
+        "evidenceRef": "evidence.synthetic-service.request-cost-meter"
+      }
+    ],
+    "events": [
+      {
+        "name": "storage-usage-recorded",
+        "meter": "synthetic_units",
+        "idempotent": true,
+        "idempotencyKey": "usageEvent.id",
+        "entitlementRef": "catalog.plan.standard",
+        "attribution": "tenant.project.subscription",
+        "replayPolicy": "dedupe-by-idempotency-key"
+      },
+      {
+        "name": "request-usage-recorded",
+        "meter": "request_units",
+        "idempotent": true,
+        "idempotencyKey": "usageEvent.id",
+        "entitlementRef": "catalog.plan.standard",
+        "attribution": "tenant.project.subscription",
+        "replayPolicy": "dedupe-by-idempotency-key"
+      }
+    ]
+  },
+  "catalog": {
+    "serviceClass": "synthetic-service",
+    "visibility": "tenant",
+    "portability": "s3-compatible-api-contract",
+    "plans": [
+      {
+        "name": "standard",
+        "displayName": "Standard Synthetic Service",
+        "billingMode": "metered",
+        "quotaRef": "quota.synthetic-service.standard"
+      }
+    ]
+  },
+  "configuration": {
+    "schemaRef": "schemas/synthetic-service.v1alpha1.json",
+    "version": "v1alpha1"
+  },
+  "readiness": [
+    {
+      "name": "synthetic-instance-controller-ready",
+      "type": "kubernetes-condition",
+      "target": "SyntheticServiceClaim.status.conditions",
+      "condition": "Ready",
+      "evidenceRef": "support.diagnostics.synthetic-instance-status"
+    },
+    {
+      "name": "access-grant-ready",
+      "type": "connector-condition",
+      "target": "SyntheticServiceClaim.status.accessGrant",
+      "condition": "Granted",
+      "evidenceRef": "support.diagnostics.access-grant-status"
+    }
+  ],
+  "tenantAccess": {
+    "scope": "project",
+    "entitlementRef": "catalog.plan.standard",
+    "entitlements": [
+      {
+        "name": "standard-plan",
+        "ref": "catalog.plan.standard",
+        "scope": "project"
+      }
+    ],
+    "permissions": [
+      "synthetic-service.read",
+      "synthetic-service.write"
+    ]
+  },
+  "durability": {
+    "stateClass": "stateful",
+    "dataClasses": [
+      "synthetic-service-data",
+      "synthetic-instance-metadata",
+      "usage-events"
+    ],
+    "backupPolicyRef": "backup.synthetic-service.standard",
+    "recoveryObjective": "restore-test-required-before-production",
+    "recoveryEvidence": [
+      {
+        "name": "synthetic-service-restore-drill",
+        "type": "runbook-evidence",
+        "ref": "evidence.synthetic-service.restore"
+      }
+    ]
+  },
+  "distribution": {
+    "deploymentProfiles": [
+      "self-hosted",
+      "provider-managed",
+      "edge-zone"
+    ],
+    "channels": [
+      "open-source",
+      "enterprise-marketplace"
+    ],
+    "infrastructureTargets": [
+      "kubernetes",
+      "private-cloud",
+      "public-cloud",
+      "edge"
+    ],
+    "updatePolicyRef": "updates.synthetic-service.compatibility-reviewed"
+  },
+  "federation": {
+    "modes": [
+      "standalone",
+      "connected",
+      "federated"
+    ],
+    "messageBusRef": "federation.bus.ocsv3.events",
+    "crossProviderScenarios": [
+      "replication",
+      "migration",
+      "support-handoff"
+    ],
+    "portabilityPolicyRef": "policy.synthetic-service.no-provider-lock-in"
+  },
+  "commercial": {
+    "roles": [
+      "vendor",
+      "provider",
+      "reseller"
+    ],
+    "revenueModel": "metered-usage-with-revenue-share",
+    "licenseRef": "license.synthetic-service.enterprise-marketplace",
+    "expiryBehavior": "service-keeps-running-updates-stop-except-critical-fixes",
+    "supportRef": "support.synthetic-service.provider-handoff",
+    "serviceProvenance": "first-party-provider-managed",
+    "responsibilityMatrixRef": "responsibility.synthetic-service.provider-and-partner",
+    "continuityPlanRef": "continuity.synthetic-service.dr-restorable"
+  }
+}

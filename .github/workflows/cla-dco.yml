@@ -1,0 +1,34 @@
+name: cla-dco
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+      - shell: bash
+        run: |
+          set -euo pipefail
+          git log -1 --pretty=%B | grep -qi "Signed-off-by:"
+
+  cla:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          test -s CLA.md
+          grep -qi "contributor" CLA.md

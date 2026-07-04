@@ -1,0 +1,9 @@
+{
+  "diagnostics": [
+    "claim-status",
+    "mock-provider-state",
+    "billing-event-spool",
+    "evidence-freshness"
+  ],
+  "redaction": "synthetic identifiers only"
+}

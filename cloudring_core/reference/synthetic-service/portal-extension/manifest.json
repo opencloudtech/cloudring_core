@@ -1,0 +1,11 @@
+{
+  "name": "synthetic-service-overview",
+  "slot": "service.detail",
+  "route": "/services/synthetic-service",
+  "apiRef": "service.api.synthetic-service",
+  "hostRef": "ui.synthetic-service.host",
+  "mountRef": "mount.synthetic-service.overview",
+  "permissions": [
+    "synthetic-service.read"
+  ]
+}

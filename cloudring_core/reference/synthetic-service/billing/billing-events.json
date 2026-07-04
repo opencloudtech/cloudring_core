@@ -1,0 +1,10 @@
+{
+  "events": [
+    {
+      "name": "synthetic-service-usage-recorded",
+      "meter": "synthetic_units",
+      "idempotencyKey": "lifecycle.action:project:name",
+      "attribution": "tenant.project.subscription"
+    }
+  ]
+}

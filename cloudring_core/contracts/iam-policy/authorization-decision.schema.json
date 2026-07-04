@@ -1,0 +1,295 @@
+{
+  "$id": "urn:cloudring-core:contracts:iam-policy:authorization-decision:v1",
+  "title": "CloudRING Core IAM Policy Authorization Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "request", "decision", "audit"],
+  "properties": {
+    "schemaVersion": {
+      "const": "cloudring.core.iam-policy.authorization-decision/v1"
+    },
+    "request": {
+      "$ref": "#/$defs/authorizationRequest"
+    },
+    "decision": {
+      "$ref": "#/$defs/authorizationDecision"
+    },
+    "audit": {
+      "$ref": "#/$defs/auditRecord"
+    }
+  },
+  "$defs": {
+    "authorizationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "tenant", "project", "action", "target", "context"],
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/subject"
+        },
+        "tenant": {
+          "$ref": "#/$defs/tenant"
+        },
+        "project": {
+          "$ref": "#/$defs/project"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "context": {
+          "$ref": "#/$defs/requestContext"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "issuerRef", "credentialClass", "mfa", "session"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "kind": {
+          "enum": ["human", "service_account", "api_token", "support_operator"]
+        },
+        "issuerRef": {
+          "description": "Symbolic identity-provider reference; never a live issuer URL.",
+          "$ref": "#/$defs/symbolicRef"
+        },
+        "groupRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/symbolicRef"
+          }
+        },
+        "credentialClass": {
+          "enum": ["interactive_session", "short_lived_api_token", "support_grant", "break_glass"]
+        },
+        "mfa": {
+          "$ref": "#/$defs/mfaExpectation"
+        },
+        "session": {
+          "$ref": "#/$defs/sessionExpectation"
+        }
+      }
+    },
+    "tenant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "lifecycle"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "lifecycle": {
+          "enum": ["active", "suspended", "deleting", "recovering", "exporting"]
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tenantId"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "tenantId": {
+          "$ref": "#/$defs/syntheticID"
+        }
+      }
+    },
+    "action": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "tenantId", "projectId"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "tenantId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "projectId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "namespace": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        }
+      }
+    },
+    "requestContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correlationId", "requestedAt"],
+      "properties": {
+        "correlationId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ticketRef": {
+          "$ref": "#/$defs/symbolicRef"
+        },
+        "supportGrantRef": {
+          "$ref": "#/$defs/symbolicRef"
+        },
+        "breakGlass": {
+          "type": "boolean"
+        }
+      }
+    },
+    "authorizationDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "reasonCode", "policyRule", "mfa", "session"],
+      "properties": {
+        "outcome": {
+          "enum": ["allow", "deny", "degraded"]
+        },
+        "reasonCode": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "policyRule": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "degradedDependency": {
+          "enum": ["audit_sink", "policy_store", "session_assurance", "identity_discovery"]
+        },
+        "mfa": {
+          "$ref": "#/$defs/mfaExpectation"
+        },
+        "session": {
+          "$ref": "#/$defs/sessionExpectation"
+        }
+      }
+    },
+    "auditRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "actorRef",
+        "tenantId",
+        "projectId",
+        "action",
+        "target",
+        "outcome",
+        "policyRule",
+        "recordedAt"
+      ],
+      "properties": {
+        "eventId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "actorRef": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "representedSubjectRef": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "tenantId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "projectId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "outcome": {
+          "enum": ["allow", "deny", "degraded"]
+        },
+        "reasonCode": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "policyRule": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "correlationId": {
+          "$ref": "#/$defs/syntheticID"
+        },
+        "ticketRef": {
+          "$ref": "#/$defs/symbolicRef"
+        },
+        "recordedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "mfa": {
+          "$ref": "#/$defs/mfaExpectation"
+        },
+        "session": {
+          "$ref": "#/$defs/sessionExpectation"
+        }
+      }
+    },
+    "mfaExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "satisfied"],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "satisfied": {
+          "type": "boolean"
+        },
+        "methodClass": {
+          "enum": ["none", "totp", "webauthn", "hardware_key", "external_idp"]
+        }
+      }
+    },
+    "sessionExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "maxAgeSeconds", "reauthenticationRequired"],
+      "properties": {
+        "state": {
+          "enum": ["fresh", "stale", "absent", "revoked"]
+        },
+        "maxAgeSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reauthenticationRequired": {
+          "type": "boolean"
+        }
+      }
+    },
+    "syntheticID": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,63}$"
+    },
+    "symbolicRef": {
+      "type": "string",
+      "pattern": "^(cloudring|tenant|project|group|ticket|support|issuer|audit|policy):[a-z0-9][a-z0-9-]{2,63}$"
+    }
+  }
+}

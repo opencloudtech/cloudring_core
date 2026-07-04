@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "cloudring.core.release-contract/v1",
+  "contractId": "release-bom-readiness-boundary",
+  "scope": "public-core",
+  "liveProductionReady": false,
+  "bomCompatibility": {
+    "requiresReleaseId": true,
+    "requiresReviewedAt": true,
+    "requiresTargetKubernetesWindow": true,
+    "requiresComponentCompatibilityRows": true,
+    "requiresModuleCompatibilityRows": true,
+    "requiresUpgradeGate": true,
+    "requiresRollbackGate": true,
+    "requiresEvidenceGate": true,
+    "unsupportedVersionState": "blocked"
+  },
+  "claims": {
+    "liveProductionReady": false,
+    "productionReadiness": false,
+    "generalAvailability": false,
+    "allowsBlockedEvidenceAsReady": false,
+    "requiresFreshEvidence": true,
+    "liveMutationRequiresApproval": true
+  },
+  "evidenceFreshness": {
+    "staleBlocksReadiness": true,
+    "freshnessPolicyRef": "../evidence/evidence-freshness-contract.json"
+  },
+  "releaseGates": [
+    {
+      "id": "bom_compatibility",
+      "requiresEvidence": true,
+      "allowsReadyClaim": false,
+      "allowsGaPromotion": false,
+      "blockedStates": [
+        "missing_component",
+        "unsupported_version",
+        "missing_upgrade_gate",
+        "missing_rollback_gate"
+      ]
+    },
+    {
+      "id": "live_evidence",
+      "requiresEvidence": true,
+      "allowsReadyClaim": false,
+      "allowsGaPromotion": false,
+      "blockedStates": [
+        "absent",
+        "stale",
+        "blocked",
+        "synthetic_only"
+      ]
+    }
+  ],
+  "nonClaims": [
+    "Public core release records are contract templates, not live deployment receipts.",
+    "Synthetic examples and blocked evidence do not authorize live promotion.",
+    "Provider-specific values and tenant records remain outside this contract."
+  ]
+}

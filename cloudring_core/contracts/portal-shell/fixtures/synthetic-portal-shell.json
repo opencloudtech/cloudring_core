@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "cloudring.portal-shell/v1",
+  "shellId": "shell-synthetic",
+  "identitySession": {
+    "authenticated": true,
+    "principalRef": "principal.synthetic-user",
+    "tenantRef": "tenant.synthetic",
+    "projectRef": "project.synthetic",
+    "managementVisible": false,
+    "sessionAssuranceRef": "assurance.standard"
+  },
+  "switcher": {
+    "organizationRefs": [
+      "organization.synthetic"
+    ],
+    "tenantRefs": [
+      "tenant.synthetic"
+    ],
+    "teamRefs": [
+      "team.synthetic"
+    ],
+    "projectRefs": [
+      "project.synthetic"
+    ],
+    "selectedTenantRef": "tenant.synthetic",
+    "selectedProjectRef": "project.synthetic"
+  },
+  "navigation": [
+    {
+      "id": "nav.catalog",
+      "labelKey": "portal.catalog",
+      "placement": "primary",
+      "routeRef": "route.catalog",
+      "requiredPermission": "project.read"
+    }
+  ],
+  "permissions": [
+    {
+      "permission": "project.read",
+      "decisionRef": "decision.synthetic-allow",
+      "auditRef": "audit.synthetic-read"
+    }
+  ],
+  "moduleSlots": [
+    {
+      "slot": "service.detail",
+      "metadataSource": "ocs.service.spec.portalModules",
+      "serviceClassRef": "service.synthetic",
+      "routeOwnerRef": "module.synthetic-overview",
+      "hostRef": "host.synthetic-module",
+      "mountRef": "mount.synthetic.overview",
+      "apiRef": "api.synthetic.lifecycle",
+      "permissionRefs": [
+        "permission.project-read"
+      ]
+    }
+  ],
+  "microfrontends": [
+    {
+      "hostRef": "host.synthetic-module",
+      "mountRef": "mount.synthetic.overview",
+      "runtimeRef": "runtime.web-component",
+      "scopedContextRefs": [
+        "tenant.synthetic",
+        "project.synthetic"
+      ],
+      "certificationEvidenceRef": "evidence.synthetic-ui-cert"
+    }
+  ],
+  "analytics": [
+    {
+      "eventRef": "analytics.module.mount",
+      "trigger": "module_mount",
+      "subjectRef": "module.synthetic-overview",
+      "evidenceRef": "evidence.synthetic-analytics"
+    }
+  ],
+  "auditEvidence": [
+    {
+      "evidenceRef": "evidence.synthetic-read",
+      "kind": "audit",
+      "freshnessRef": "freshness.synthetic"
+    }
+  ],
+  "sourceSafety": {
+    "catalogSource": "ocs_connector_metadata",
+    "hardcodedServiceCatalog": false,
+    "coreServiceActions": false
+  }
+}
