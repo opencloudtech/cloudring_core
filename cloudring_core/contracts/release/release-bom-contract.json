@@ -53,7 +53,7 @@
     }
   ],
   "nonClaims": [
-    "Public core release records are contract templates, not live deployment receipts.",
+    "CloudRING public release records are contract templates, not live deployment receipts.",
     "Synthetic examples and blocked evidence do not authorize live promotion.",
     "Provider-specific values and tenant records remain outside this contract."
   ]

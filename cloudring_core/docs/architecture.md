@@ -24,7 +24,7 @@ Provider-specific code lives behind adapters outside `cloudring_core`. Public
 core may include only synthetic/mock adapters.
 
 This provider-specific boundary is mandatory: a module can depend on a public
-adapter interface, but public core must not import the implementation.
+adapter interface, but CloudRING public must not import the implementation.
 
 ## Request Path
 

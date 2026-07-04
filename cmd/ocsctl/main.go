@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/opencloudtech/cloudring_core/cloudring_core/sdk/ocsv3"
-	"github.com/opencloudtech/cloudring_core/pkg/ocs"
+	"github.com/opencloudtech/CloudRING/cloudring_core/sdk/ocsv3"
+	"github.com/opencloudtech/CloudRING/pkg/ocs"
 )
 
 func main() {

@@ -5,7 +5,7 @@ safe for downstream companies to adopt.
 
 ## Platform ownership
 
-Core maintainers own public contracts, compatibility policy, validation rules,
+CloudRING maintainers own public contracts, compatibility policy, validation rules,
 release gates, module registry behavior, evidence semantics, and public
 developer documentation. Changes should preserve implementation neutrality.
 
@@ -13,7 +13,7 @@ developer documentation. Changes should preserve implementation neutrality.
 
 Service module maintainers own their own module manifests, controllers,
 adapters, portal extensions, billing connectors, support diagnostics, evidence,
-and lifecycle behavior. Core maintainers review whether those modules satisfy
+and lifecycle behavior. CloudRING maintainers review whether those modules satisfy
 public contracts.
 
 ## Enterprise and private boundary

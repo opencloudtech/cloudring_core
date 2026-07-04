@@ -10,9 +10,9 @@ project policy context, not legal advice.
 | Material | Default classification | May be open-sourced in CloudRING? |
 | --- | --- | --- |
 | Reusable contracts, SDK surfaces, validators, public docs, synthetic fixtures, and module metadata schemas under `cloudring_core/` | Apache-2.0 core | Yes, when it contains no private source text, deployment values, credentials, tenant data, or customer-specific assumptions. |
-| Material outside `cloudring_core/` in this repository | outer repository license | Not by default. It must be reviewed, copied or moved intentionally, and made compatible with the public-core boundary before publication. |
+| Material outside `cloudring_core/` in this repository | outer repository license | Not by default. It must be reviewed, copied or moved intentionally, and made compatible with the CloudRING public boundary before publication. |
 | Enterprise/private IP, commercial packaging, proprietary support workflows, closed integrations, private policy packs, and company-specific automation | private or separately licensed enterprise work | No, unless the owner intentionally contributes a separable public-core part under Apache-2.0. |
-| Concrete provider adapters, live infrastructure integration, account-specific provisioning logic, and deployment overlays | private adapter or downstream implementation | No by default. Public core may define adapter interfaces and synthetic examples only. |
+| Concrete provider adapters, live infrastructure integration, account-specific provisioning logic, and deployment overlays | private adapter or downstream implementation | No by default. CloudRING public may define adapter interfaces and synthetic examples only. |
 | Customer deployments, customer topology, live evidence, support records, billing records, and operational runbooks for a real tenant or environment | customer-controlled or deployment-specific material | No. Keep it in the customer or operator repository and reference only public interfaces from core. |
 | User-owned modules and service implementations built against OCSv3 contracts | owned by the module author or their organization | Not automatically. The module owner decides whether to publish it and under which compatible terms. |
 
@@ -42,7 +42,7 @@ material is safe for public Apache-2.0 distribution.
 
 Do not place customer names, private endpoints, real account identifiers,
 tenant data, support cases, billing records, live topology, or copied private
-source text in public core. Public examples must use synthetic identifiers and
+source text in CloudRING public. Public examples must use synthetic identifiers and
 interface-level behavior.
 
 ## Contribution Rules
@@ -75,7 +75,7 @@ A fresh reader should classify a proposed artifact this way:
 | Does it implement a customer deployment, proprietary module, commercial workflow, or concrete provider integration? | Keep it enterprise/private or user-owned. |
 | Does it contain live evidence, tenant records, credentials, private endpoints, or employer/customer source text? | Do not publish in core. |
 | Is it a service built by a user or downstream company against OCSv3? | It is a user-owned module unless the owner intentionally contributes it. |
-| Is it only an interface, schema, validator, or synthetic example needed by service or adapter authors? | Candidate for public core after source-safety review. |
+| Is it only an interface, schema, validator, or synthetic example needed by service or adapter authors? | Candidate for CloudRING public after source-safety review. |
 
 ## Non-Claims
 

@@ -5,9 +5,9 @@ contract. The registry is a source-safe, synthetic contract for module metadata,
 lifecycle operations, dependency resolution, idempotent planning, audit and
 evidence receipts, and rollback hooks.
 
-Core validates registry shape and lifecycle safety only. Service teams own
+CloudRING validates registry shape and lifecycle safety only. Service teams own
 service-specific controllers, data schemas, mutation commands, and provider
-integration code outside this public core contract.
+integration code outside this CloudRING public contract.
 
 ## Contract Rules
 

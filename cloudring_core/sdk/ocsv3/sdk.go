@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/opencloudtech/cloudring_core/pkg/ocs"
+	"github.com/opencloudtech/CloudRING/pkg/ocs"
 )
 
 const APIVersion = ocs.APIVersion

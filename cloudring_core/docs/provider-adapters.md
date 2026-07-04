@@ -2,7 +2,7 @@
 
 Provider adapters connect a module controller to an external or internal
 provider. OCSv3 core defines the adapter contract; provider implementation is
-outside public core.
+outside CloudRING public.
 
 Allowed in `cloudring_core`:
 

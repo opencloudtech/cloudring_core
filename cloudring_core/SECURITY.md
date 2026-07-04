@@ -11,7 +11,7 @@ endpoints, or exploit material that is not needed to describe the issue.
 
 ## Platform ownership
 
-The public core owns security contracts for IAM decisions, policy evaluation,
+CloudRING owns security contracts for IAM decisions, policy evaluation,
 admission behavior, audit evidence, module readiness, rollback gates, and
 source-safety checks.
 
@@ -19,7 +19,7 @@ source-safety checks.
 
 Service module owners are responsible for their runtime security, data handling,
 backup and restore behavior, support access, billing linkage, UI extension
-behavior, and incident evidence. Core validation should fail closed when a
+behavior, and incident evidence. CloudRING validation should fail closed when a
 module omits required security metadata.
 
 ## Enterprise and private boundary

@@ -5,7 +5,7 @@ validation, documentation, SDK guidance, and module interoperability.
 
 ## Platform ownership
 
-Contributions may change public core contracts for OCSv3 registry and
+Contributions may change CloudRING public contracts for OCSv3 registry and
 validation, IAM and policy interfaces, GitOps abstractions, readiness evidence,
 module lifecycle gates, BOM and rollback contracts, portal shell extension
 points, provider adapter interfaces, and developer documentation.
@@ -14,7 +14,7 @@ points, provider adapter interfaces, and developer documentation.
 
 Service-specific controllers, billing integrations, user interfaces, support
 flows, durability logic, and provider implementations belong in independently
-owned modules. Public core changes should describe the metadata and contracts
+owned modules. CloudRING public changes should describe the metadata and contracts
 those modules publish, not embed their runtime implementation.
 
 ## Enterprise and private boundary

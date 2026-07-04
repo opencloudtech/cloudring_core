@@ -35,19 +35,19 @@ The ownership verifier requires these paths to be classified as publishable
 
 The manifest also marks `cmd/ocsctl`, `internal/releasebom`,
 `internal/docscheck`, `internal/sourcecheck`, and selected provider adapter
-contract documents as public-core candidates. Those paths still need extraction
+contract documents as CloudRING public candidates. Those paths still need extraction
 or facade work before publication when they currently live under `internal/`.
 
 ## Provider Implementation Guard
 
 `internal/ovhinstall` is classified as `provider-adapter` with
 `publishableInCore:false`. It is concrete provider implementation code, so it is
-not a public-core package. The runtime-gate verifier fails if this path is mapped
+not a CloudRING public package. The runtime-gate verifier fails if this path is mapped
 to `public-core` or if `publishableInCore` is set to true.
 
 This guard is intentionally path-based and machine-checked. It prevents a future
 manifest edit from accidentally making concrete provider implementation code
-part of the publishable public core.
+part of the publishable CloudRING public.
 
 ## Migration Notes
 

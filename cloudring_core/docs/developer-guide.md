@@ -22,8 +22,8 @@ External developers should be able to validate the public tree without access
 to any private repository or live provider account:
 
 ```bash
-gh repo clone opencloudtech/cloudring_core
-cd cloudring_core
+gh repo clone opencloudtech/CloudRING
+cd CloudRING
 go mod download
 go test ./... -count=1
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
@@ -98,7 +98,7 @@ go run ./cmd/ocsctl conformance ./cloudring_core/reference/synthetic-service/mod
 ```
 
 Repository maintainers also run source-safety and publication-boundary checks
-before merging public-core changes.
+before merging CloudRING public changes.
 
 ## Pull Request Path
 
@@ -117,7 +117,7 @@ private deployment evidence into the public repository or pull request text.
 
 The enterprise/downstream maintainer role path extends CloudRING by
 keeping private adapters, commercial packaging, customer-specific policy, and
-deployment material outside the public core. Downstream maintainers can consume
+deployment material outside CloudRING. Downstream maintainers can consume
 the OCSv3 contracts and publish their own module packages, but they own their
 service implementation, extension delivery, billing settlement, support process,
 and release evidence.

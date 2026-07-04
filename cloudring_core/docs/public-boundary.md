@@ -5,7 +5,7 @@ what must remain in independently owned modules or private downstream work.
 
 ## Platform ownership
 
-Public core material may include:
+CloudRING public material may include:
 
 - OCSv3 registry schemas, validators, and SDK documentation.
 - IAM, policy, admission, audit, and evidence contracts.
@@ -17,7 +17,7 @@ Public core material may include:
 - Developer entry points for service teams, adapter teams, security reviewers,
   and downstream maintainers.
 
-Public core material must be reusable without private infrastructure values or a
+CloudRING public material must be reusable without private infrastructure values or a
 single service implementation.
 
 ## Service ownership
@@ -26,11 +26,11 @@ Service modules own runtime code and service-specific behavior. A module
 publishes portable metadata for API/controller behavior, UI extension points,
 billing meters, support diagnostics, data durability, lifecycle actions,
 rollback, delete/export, backup/restore, denied, degraded, and retry states.
-The core validates those declarations and orchestrates against contracts.
+CloudRING validates those declarations and orchestrates against contracts.
 
 ## Enterprise and private boundary
 
-The following material stays outside public core:
+The following material stays outside CloudRING public:
 
 - Credentials, tokens, private keys, session data, and secret references tied to
   a real deployment.

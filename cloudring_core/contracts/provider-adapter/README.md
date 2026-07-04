@@ -1,7 +1,7 @@
 # Provider Adapter Contract
 
 Provider adapters let CloudRING reason about infrastructure without
-embedding a provider implementation. Core owns the public interface shape,
+embedding a provider implementation. CloudRING owns the public interface shape,
 synthetic fixtures, validation expectations, and evidence vocabulary. Provider
 teams own SDK clients, installation logic, preflight execution, deployment
 actions, inventory collection, and provider-specific configuration.
@@ -20,7 +20,7 @@ An adapter package publishes a document that follows
 - `evidenceClasses` describe the receipts emitted by inventory, preflight, and
   plan runs.
 
-The interface is capability-oriented. Core may validate that the classes exist
+The interface is capability-oriented. CloudRING may validate that the classes exist
 and that evidence links back to declared capabilities. Core does not import an
 adapter SDK, call a provider API directly, or store deployment-specific values.
 
@@ -33,4 +33,4 @@ profiles, support records, or operational runbooks.
 
 The source-safety gate for `cloudring_core` rejects provider-specific
 installation fields and real inventory strings before the files can be treated
-as public core material.
+as CloudRING public material.

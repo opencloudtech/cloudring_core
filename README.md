@@ -25,12 +25,12 @@ customer data, credentials, or live infrastructure endpoints.
 Each cloud service is owned by an independent module team. A module publishes
 OCSv3 metadata for its API/controller, portal extension, billing meters, support
 diagnostics, evidence, durability, lifecycle, rollback, delete/export, backup,
-restore, denied, degraded, and retry contracts. The core consumes that metadata
+restore, denied, degraded, and retry contracts. CloudRING consumes that metadata
 instead of importing a service implementation.
 
 ## Developer entry points
 
-- Read `docs/public-boundary.md` before adding public-core material.
+- Read `docs/public-boundary.md` before adding CloudRING public-safe material.
 - Follow `docs/developer-guide.md` for the external developer path.
 - Use `docs/conformance.md` to validate OCSv3 module packages.
 - Use `cloudring_core/examples/synthetic-service-module/connector-package.json`
@@ -46,8 +46,8 @@ instead of importing a service implementation.
 Prerequisites: Git and a supported Go toolchain. From a fresh public clone:
 
 ```bash
-gh repo clone opencloudtech/cloudring_core
-cd cloudring_core
+gh repo clone opencloudtech/CloudRING
+cd CloudRING
 go mod download
 go test ./... -count=1
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json

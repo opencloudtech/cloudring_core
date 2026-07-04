@@ -21,5 +21,5 @@ The public CI contract covers these checks:
 
 This contract does not require live provider credentials, secret environment
 variables, network mutation, or live Kubernetes access. Passing it only means
-the public-core tree is locally safe to publish and validate; it is not a
+the CloudRING public tree is locally safe to publish and validate; it is not a
 production readiness claim.

@@ -26,7 +26,7 @@ denied/degraded/retry state handling.
 
 Private adapters, company overlays, enterprise-only modules, customer
 deployments, live configuration, and support evidence remain outside the public
-core. Public core artifacts may describe interfaces for those systems, but not
+core. CloudRING public artifacts may describe interfaces for those systems, but not
 their private implementation details.
 
 ## Developer entry points

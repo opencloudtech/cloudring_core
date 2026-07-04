@@ -73,7 +73,7 @@
     {
       "id": "redacted_private_detail",
       "blocksLiveClaim": true,
-      "reason": "public core may record the contract shape but not private details"
+      "reason": "CloudRING public may record the contract shape but not private details"
     }
   ],
   "cleanup": {

@@ -4,8 +4,8 @@ Run validation and conformance before publishing a module. From a fresh public
 clone:
 
 ```bash
-gh repo clone opencloudtech/cloudring_core
-cd cloudring_core
+gh repo clone opencloudtech/CloudRING
+cd CloudRING
 go mod download
 go test ./... -count=1
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json

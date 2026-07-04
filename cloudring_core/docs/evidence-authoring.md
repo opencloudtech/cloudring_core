@@ -25,7 +25,7 @@ Evidence should cover:
 1. Name the claim in plain language.
 2. Link the evidence ref in the connector package.
 3. State freshness, reviewer role, redaction boundary, and non-claims.
-4. Keep artifacts synthetic or sanitized for public core.
+4. Keep artifacts synthetic or sanitized for CloudRING public.
 5. Validate the package and source-safety:
 
 ```powershell

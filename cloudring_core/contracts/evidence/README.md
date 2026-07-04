@@ -9,7 +9,7 @@ evidence before any downstream live promotion claim is evaluated.
 
 Public evidence contracts must keep `liveProductionReady` set to `false`.
 Downstream repositories may attach scoped evidence records, but those records
-must remain outside the public core tree when they contain live deployment
+must remain outside CloudRING tree when they contain live deployment
 details.
 
 ## Files

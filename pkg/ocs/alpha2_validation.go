@@ -169,7 +169,7 @@ func isPlatformCoupled(value string) bool {
 	return strings.Contains(normalized, "internal/") ||
 		strings.Contains(normalized, "internal\\") ||
 		strings.Contains(normalized, "platform-internal") ||
-		strings.Contains(normalized, "github.com/opencloudtech/cloudring_core/internal")
+		strings.Contains(normalized, "github.com/opencloudtech/CloudRING/internal")
 }
 
 func isProviderLockIn(value string) bool {
