@@ -3,7 +3,7 @@
 CloudRING governance keeps the public platform core small, portable, and
 safe for downstream companies to adopt.
 
-## Core ownership
+## Platform ownership
 
 Core maintainers own public contracts, compatibility policy, validation rules,
 release gates, module registry behavior, evidence semantics, and public

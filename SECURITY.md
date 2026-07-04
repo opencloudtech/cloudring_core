@@ -9,7 +9,7 @@ Report suspected vulnerabilities through the project maintainer channel used by
 the receiving repository. Do not include secrets, tenant data, private
 endpoints, or exploit material that is not needed to describe the issue.
 
-## Core ownership
+## Platform ownership
 
 The public core owns security contracts for IAM decisions, policy evaluation,
 admission behavior, audit evidence, module readiness, rollback gates, and

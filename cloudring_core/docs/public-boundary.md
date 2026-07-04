@@ -3,7 +3,7 @@
 This document defines what belongs in the Apache-2.0 CloudRING subtree and
 what must remain in independently owned modules or private downstream work.
 
-## Core ownership
+## Platform ownership
 
 Public core material may include:
 
