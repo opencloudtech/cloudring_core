@@ -1,6 +1,6 @@
-# Contributing To CloudRING Core
+# Contributing To CloudRING
 
-CloudRING Core accepts contributions that improve public platform contracts,
+CloudRING accepts contributions that improve public platform contracts,
 validation, documentation, SDK guidance, and module interoperability.
 
 ## Core ownership

@@ -1,13 +1,13 @@
-# CloudRING Core
+# CloudRING
 
-CloudRING Core is an Apache-2.0 open source project for reusable cloud-service
+CloudRING is an Apache-2.0 open source project for reusable cloud-service
 orchestration contracts. It gives service teams, platform operators, and
 contributors a portable foundation for building cloud modules around OCSv3
 (Open Cloud Standard 3).
 
-## Core ownership
+## Platform ownership
 
-The public core owns shared contracts and validation surfaces:
+The project owns shared contracts and validation surfaces:
 
 - OCSv3 registry and package validation.
 - IAM, policy, and admission contracts.
@@ -17,7 +17,7 @@ The public core owns shared contracts and validation surfaces:
 - Provider adapter interfaces.
 - Developer SDK documentation.
 
-Core does not own service implementation code, deployment-specific values,
+CloudRING does not own service implementation code, deployment-specific values,
 customer data, credentials, or live infrastructure endpoints.
 
 ## Service ownership

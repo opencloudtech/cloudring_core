@@ -1,6 +1,6 @@
 # Message Delivery Module
 
-Message delivery is modeled as an OCSv3 module package. CloudRING Core owns the
+Message delivery is modeled as an OCSv3 module package. CloudRING owns the
 connector contract for notification intent, retry, evidence, support, and usage
 metering; transport implementations stay outside core.
 

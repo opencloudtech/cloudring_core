@@ -1,6 +1,6 @@
 # Marketplace Module
 
-Marketplace is modeled as an OCSv3 module package. CloudRING Core consumes
+Marketplace is modeled as an OCSv3 module package. CloudRING consumes
 catalog listing, entitlement, order handoff, revenue-share, evidence, support,
 and billing contracts from the manifest.
 

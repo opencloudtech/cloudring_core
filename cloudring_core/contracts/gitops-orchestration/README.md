@@ -1,6 +1,6 @@
 # GitOps Orchestration Contract
 
-CloudRING Core owns the public GitOps/orchestration handoff contract, not a
+CloudRING owns the public GitOps/orchestration handoff contract, not a
 live environment overlay. The contract defines how a module enters GitOps,
 which controller owns reconciliation for each object class, and which receipts
 must exist for dry-run, apply, and rollback decisions.

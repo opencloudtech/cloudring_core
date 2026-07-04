@@ -1,6 +1,6 @@
 # Portal Shell Contract
 
-CloudRING Core owns the generic portal shell contract. The shell creates the
+CloudRING owns the generic portal shell contract. The shell creates the
 authenticated workspace frame and renders service modules from OCSv3 connector
 metadata. Service modules own their domain screens, actions, lifecycle APIs,
 and implementation code behind the connector boundary.

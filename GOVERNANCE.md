@@ -1,6 +1,6 @@
 # Governance
 
-CloudRING Core governance keeps the public platform core small, portable, and
+CloudRING governance keeps the public platform core small, portable, and
 safe for downstream companies to adopt.
 
 ## Core ownership
@@ -20,7 +20,7 @@ public contracts.
 
 Enterprise modules, private adapters, company overlays, and customer deployment
 records are governed by their owning organizations. They are not part of
-CloudRING Core unless intentionally contributed as public, source-safe material.
+CloudRING unless intentionally contributed as public, source-safe material.
 
 ## Developer entry points
 

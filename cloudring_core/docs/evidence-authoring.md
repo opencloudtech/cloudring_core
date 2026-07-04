@@ -1,7 +1,7 @@
 # Evidence Authoring
 
 Evidence authoring records what a module package proves, what it does not prove,
-and where a reviewer can inspect freshness and redaction. CloudRING Core uses
+and where a reviewer can inspect freshness and redaction. CloudRING uses
 OCSv3 (Open Cloud Standard 3) evidence refs to keep service, billing, UI,
 support, policy, data lifecycle, readiness, and durability claims reviewable.
 
@@ -39,7 +39,7 @@ example.
 
 ## Non-Claims
 
-Example evidence in CloudRING Core does not claim production readiness, a running
+Example evidence in CloudRING does not claim production readiness, a running
 deployment, billing settlement, data migration, support operation, or recovery
 success. It proves that the package has the metadata and evidence refs needed
 for service-team, platform-operator, security-reviewer, and

@@ -1,13 +1,13 @@
 # CloudRING Enterprise Boundary
 
 This document defines how downstream companies, downstream/internal enterprise
-repos, and user-owned services consume or sync CloudRING Core while keeping
+repos, and user-owned services consume or sync CloudRING while keeping
 enterprise modules, provider adapters, and customer deployments separate. It is
 project policy context, not legal advice.
 
 ## License Boundary
 
-| Material | Default classification | May be open-sourced in CloudRING Core? |
+| Material | Default classification | May be open-sourced in CloudRING? |
 | --- | --- | --- |
 | Reusable contracts, SDK surfaces, validators, public docs, synthetic fixtures, and module metadata schemas under `cloudring_core/` | Apache-2.0 core | Yes, when it contains no private source text, deployment values, credentials, tenant data, or customer-specific assumptions. |
 | Material outside `cloudring_core/` in this repository | outer repository license | Not by default. It must be reviewed, copied or moved intentionally, and made compatible with the public-core boundary before publication. |
@@ -31,7 +31,7 @@ boundary:
 
 Downstream/internal enterprise repos follow the same rule: they may consume
 the Apache-2.0 core, but internal enterprise/private IP does not become
-Apache-2.0 merely because it integrates with or syncs from CloudRING Core.
+Apache-2.0 merely because it integrates with or syncs from CloudRING.
 
 ## Employer/Customer Separation
 

@@ -1,6 +1,6 @@
 # Package Ownership
 
-CloudRING Core publishes reusable platform contracts, validation surfaces, policy
+CloudRING publishes reusable platform contracts, validation surfaces, policy
 interfaces, OCSv3 SDK surfaces, release evidence contracts, and public developer
 documentation. It does not publish concrete service implementations, concrete
 provider implementations, enterprise overlays, or generated evidence as runtime
@@ -61,7 +61,7 @@ degraded, and retry contracts before core consumes them as modules.
 
 Mixed paths such as `cmd`, `docs`, `internal`, `portal`, and `scripts` must be
 split before any public publication. Only the generic contract, shell, policy,
-and validation pieces can move into CloudRING Core.
+and validation pieces can move into CloudRING.
 
 Evidence paths remain evidence. A passing ownership manifest does not claim
 production readiness, deployment readiness, tenant data durability, backup

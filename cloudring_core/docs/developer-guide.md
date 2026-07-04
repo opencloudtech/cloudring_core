@@ -1,6 +1,6 @@
-# CloudRING Core Developer Guide
+# CloudRING Developer Guide
 
-CloudRING Core exposes OCSv3 (Open Cloud Standard 3) contracts for service
+CloudRING exposes OCSv3 (Open Cloud Standard 3) contracts for service
 modules, billing connectors, portal UI extensions, and reviewable evidence. A
 service module is accepted by metadata and API contracts, not by importing
 platform internals or depending on a provider-specific implementation.
@@ -73,7 +73,7 @@ actions, tenant access, support owner, readiness refs, and durability refs
 before admitting a module to a registry or marketplace flow.
 
 Operators must not wire service-specific controllers, database schemas,
-frontend bundles, or billing logic directly into CloudRING Core. The platform
+frontend bundles, or billing logic directly into CloudRING. The platform
 reads module metadata and invokes documented API or automation refs owned by the
 module.
 
@@ -115,7 +115,7 @@ private deployment evidence into the public repository or pull request text.
 
 ## Enterprise/Downstream Maintainer Role Path
 
-The enterprise/downstream maintainer role path extends CloudRING Core by
+The enterprise/downstream maintainer role path extends CloudRING by
 keeping private adapters, commercial packaging, customer-specific policy, and
 deployment material outside the public core. Downstream maintainers can consume
 the OCSv3 contracts and publish their own module packages, but they own their

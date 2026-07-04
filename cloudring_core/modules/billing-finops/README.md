@@ -1,6 +1,6 @@
 # Billing FinOps Module
 
-Billing FinOps is modeled as an OCSv3 module package. CloudRING Core consumes
+Billing FinOps is modeled as an OCSv3 module package. CloudRING consumes
 usage ledger, allocation, invoice-preview, evidence, support, and marketplace
 settlement contracts from the manifest.
 
