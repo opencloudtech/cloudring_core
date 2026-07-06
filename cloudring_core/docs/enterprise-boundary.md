@@ -81,5 +81,6 @@ A fresh reader should classify a proposed artifact this way:
 
 This boundary does not relicense the outer repository, private downstream
 repositories, enterprise modules, provider adapters, customer deployments, or
-user-owned modules. It also does not grant trademark rights, deployment
-readiness, customer approval, or authority to submit employer/customer work.
+user-owned modules. It is not legal advice and does not grant trademark rights,
+deployment readiness, customer approval, or authority to submit employer/customer
+work.
