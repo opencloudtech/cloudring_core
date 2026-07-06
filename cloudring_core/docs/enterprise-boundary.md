@@ -3,7 +3,7 @@
 This document defines how downstream companies, downstream/internal enterprise
 repos, and user-owned services consume or sync CloudRING while keeping
 enterprise modules, provider adapters, and customer deployments separate. It is
-project policy context, not legal advice.
+project policy context for source-safe publication and downstream sync.
 
 ## License Boundary
 

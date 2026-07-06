@@ -1,9 +1,12 @@
 # Developer Certificate of Origin
 
-This Developer Certificate of Origin policy is publication scaffolding for the public CloudRING repository.
+CloudRING accepts signed-off commits from contributors who are authorized to
+submit the work under the Apache License 2.0.
 
-It is not legal advice and does not replace review by qualified counsel.
+Use a `Signed-off-by:` line only when the contribution is your original work,
+or you have the right to submit it, and the contribution can be distributed as
+part of CloudRING under Apache-2.0.
 
-Contributors should sign off commits only when they are authorized to contribute the work under the repository license and contribution policy.
-
-TODO(counsel): Confirm the final DCO wording and its relationship to any CLA requirement before broad external contribution intake.
+Maintainers may ask for provenance or authorization details when a contribution
+touches public contracts, licensing, trademarks, generated code, or material
+that could have come from a private downstream environment.

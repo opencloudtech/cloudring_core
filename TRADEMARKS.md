@@ -1,9 +1,12 @@
 # Trademarks
 
-This trademark guidance is publication scaffolding for the public CloudRING repository.
+CloudRING, OPENCLOUDTECH, CLOUDRING, and related project names or marks are
+owned by Elena Trukhina ZZP.
 
-It is not legal advice and does not grant trademark rights.
+You may use the names to truthfully identify this project, compatible modules,
+or unmodified distributions. Do not use the names in a way that suggests
+endorsement, certification, official hosting, or deployment approval unless
+Elena Trukhina ZZP has granted that permission.
 
-Use project names and marks only to identify the project and avoid suggesting endorsement, certification, or deployment approval.
-
-TODO(counsel): Replace or approve the final trademark policy before broad external use of project marks.
+Modified versions and downstream deployments should make their own identity
+clear when they differ from the reference CloudRING project.
