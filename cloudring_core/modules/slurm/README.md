@@ -6,6 +6,6 @@ to report Slurm as `not-installed` without failing readiness.
 
 Validate the manifest with:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/modules/slurm/module-package.json
 ```

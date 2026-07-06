@@ -28,7 +28,7 @@ the billing connector metadata name.
 5. Link entitlement refs to the catalog plan or subscription scope.
 6. Validate with the service package:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
 ```
 

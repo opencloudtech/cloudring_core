@@ -12,6 +12,6 @@ owner; they are not live installation readiness claims.
 
 Validate the manifest with:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/modules/gpu/module-package.json
 ```

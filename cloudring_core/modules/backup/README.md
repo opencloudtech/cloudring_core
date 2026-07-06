@@ -10,6 +10,6 @@ implementation concerns. This directory contains only the contract manifest.
 
 Validate the module manifest with:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/modules/backup/module-package.json
 ```

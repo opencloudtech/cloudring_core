@@ -6,6 +6,6 @@ integration, compatibility windows, billing meters, and first-class
 
 Validate the manifest with:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/modules/scheduler/module-package.json
 ```

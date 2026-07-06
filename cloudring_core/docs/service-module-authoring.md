@@ -34,7 +34,7 @@ Declare these surfaces in the connector package:
    lifecycle, and recovery.
 6. Validate the package:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
 ```
 

@@ -10,6 +10,6 @@ review paths.
 
 Validate the module manifest with:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/modules/support/module-package.json
 ```

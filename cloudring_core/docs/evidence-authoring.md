@@ -28,7 +28,7 @@ Evidence should cover:
 4. Keep artifacts synthetic or sanitized for CloudRING public.
 5. Validate the package and source-safety:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
 go run ./cmd/ocsctl conformance ./cloudring_core/reference/synthetic-service/module-package.json --evidence ./evidence/reference-conformance.json
 ```

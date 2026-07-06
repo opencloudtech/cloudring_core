@@ -12,6 +12,6 @@ actions, or virtualization runtime implementation.
 
 Validate the module manifest with:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/modules/universal-iaas/module-package.json
 ```

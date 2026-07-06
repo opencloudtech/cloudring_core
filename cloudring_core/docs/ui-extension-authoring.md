@@ -27,7 +27,7 @@ Declare:
 4. Keep service API calls behind the module's public API refs.
 5. Validate the connector package:
 
-```powershell
+```sh
 go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
 ```
 
