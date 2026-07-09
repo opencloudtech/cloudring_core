@@ -3,7 +3,7 @@
 This document defines how downstream companies, downstream/internal enterprise
 repos, and user-owned services consume or sync CloudRING while keeping
 enterprise modules, provider adapters, and customer deployments separate. It is
-project policy context, not legal advice.
+project policy context for source-safe publication and downstream sync.
 
 ## License Boundary
 
@@ -81,5 +81,5 @@ A fresh reader should classify a proposed artifact this way:
 
 This boundary does not relicense the outer repository, private downstream
 repositories, enterprise modules, provider adapters, customer deployments, or
-user-owned modules. It also does not grant trademark rights, deployment
-readiness, customer approval, or authority to submit employer/customer work.
+user-owned modules. It does not grant trademark rights, deployment readiness,
+customer approval, or authority to submit employer/customer work.

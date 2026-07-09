@@ -5,9 +5,12 @@ the core portable, tenant-safe, and free of private deployment material.
 
 ## Reporting
 
-Report suspected vulnerabilities through the project maintainer channel used by
-the receiving repository. Do not include secrets, tenant data, private
-endpoints, or exploit material that is not needed to describe the issue.
+Report suspected vulnerabilities confidentially to `yuri@trukhin.com`.
+
+Do not include secrets, tenant data, private endpoints, cookies, kubeconfigs, or
+exploit material that is not needed to describe the issue. A good report
+includes the affected component, expected impact, reproduction steps, and any
+safe synthetic evidence.
 
 ## Platform ownership
 

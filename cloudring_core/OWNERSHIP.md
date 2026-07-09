@@ -3,6 +3,9 @@
 CloudRING separates public platform contracts from independently owned
 service and private implementation work.
 
+Copyright is stated in `NOTICE`. Project ownership and trademarks are held by
+Elena Trukhina ZZP.
+
 ## Platform ownership
 
 CloudRING owns:
