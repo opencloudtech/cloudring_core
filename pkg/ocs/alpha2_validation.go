@@ -174,9 +174,11 @@ func isPlatformCoupled(value string) bool {
 
 func isProviderLockIn(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "provider-lock-in", "provider-specific", "ovh", "aws", "azure", "gcp":
+	case "provider-lock-in", "single-provider-binding", "single-vendor-binding", "vendor-locked":
 		return true
 	default:
-		return strings.Contains(strings.ToLower(value), "ovh/")
+		normalized := strings.ToLower(value)
+		return strings.Contains(normalized, "single-provider/") ||
+			strings.Contains(normalized, "single-vendor/")
 	}
 }

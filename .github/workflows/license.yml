@@ -20,6 +20,6 @@ jobs:
           set -euo pipefail
           grep -q "Apache License" LICENSE
           grep -q "Apache-2.0" NOTICE
-          if grep -qi "Elastic License" LICENSE; then
+          if grep -Eqi "MIT License|Mozilla Public License|GNU GENERAL PUBLIC LICENSE" LICENSE; then
             exit 1
           fi
