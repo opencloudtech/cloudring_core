@@ -29,7 +29,7 @@ The public CI contract covers these checks:
 | Check | Contract |
 | --- | --- |
 | Go tests | The public module must pass tests on supported minimum/current Go releases, plus race, vet, read-only module graph, and build checks. |
-| Windows | The same unit suite, including native ACL and replacement behavior, must pass on `windows-latest` with both supported Go releases. |
+| Windows | The same unit suite is run on `windows-latest` as a portability signal. Native Windows support is not a release-readiness blocker for the current goal. |
 | OCS validation | The synthetic connector package must pass `go run ./cmd/ocsctl validate`. |
 | OCS conformance | The reference synthetic module must pass `go run ./cmd/ocsctl conformance`. |
 | Source-safety | The Go scanner must approve the complete tree and pre-push commit range, including intermediate commits and reviewed non-text artifacts. |
@@ -41,3 +41,22 @@ This contract does not require live provider credentials, secret environment
 variables, network mutation, or live Kubernetes access. Passing it only means
 the CloudRING public tree is locally safe to publish and validate; it is not a
 production readiness claim.
+
+## SafePush trust boundary
+
+`.github/workflow-policy.json` binds every required workflow to its exact
+canonical YAML/JSON semantic surface. The supply-chain job also rejects an
+unexpected workflow or job, event/permission expansion, mutable action or
+runtime image, credential context, conditional skip, and `continue-on-error`.
+Changing a reviewed workflow requires changing its recorded digest in the same
+review.
+
+This repository check is defense in depth, not a self-authenticating policy: a
+pull request controls the workflow revision that evaluates that pull request.
+The server-side trust control is protected `main` with an up-to-date branch,
+one independent approving review, stale-review dismissal, required
+conversations and checks, and administrator enforcement. The repository has no
+available organization required-workflow ruleset, so a pull request without an
+eligible independent approval remains blocked and must not be merged by an
+administrator bypass. `CODEOWNERS` routes review; it does not currently require
+the repository author's personal approval.
