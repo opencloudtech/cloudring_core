@@ -69,6 +69,10 @@ func closeEvidenceTemporaryBeforeReplace() bool {
 	return true
 }
 
+func canonicalEvidenceDestinationForParentCreation(path string) (string, error) {
+	return windowsExtendedPath(path)
+}
+
 type windowsEvidenceACLPolicy struct {
 	owner      string
 	principals map[string]struct{}

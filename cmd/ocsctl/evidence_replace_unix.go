@@ -3,12 +3,19 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+)
+
+const (
+	unixEvidenceRandomBytes    = 16
+	unixEvidenceCreateAttempts = 16
 )
 
 type evidenceFileIdentity struct {
@@ -30,6 +37,44 @@ func closeEvidenceTemporaryBeforeReplace() bool {
 
 func closeEvidenceNamespace(_ *evidenceNamespaceState) error {
 	return nil
+}
+
+func canonicalEvidenceDestinationForParentCreation(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	absolute = filepath.Clean(absolute)
+	parent := filepath.Dir(absolute)
+	relativeParent := strings.TrimPrefix(parent, string(os.PathSeparator))
+	components := splitRelativePath(relativeParent)
+	if len(components) == 0 {
+		return absolute, nil
+	}
+	// macOS exposes paths such as /var and /tmp through root-owned top-level
+	// compatibility symlinks. Normalize only that immutable system boundary;
+	// ensureEvidenceParentDirectory rejects every lower-level symlink component.
+	topLevel := filepath.Join(string(os.PathSeparator), components[0])
+	info, err := lstatWithinParent(topLevel)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return absolute, err
+	}
+	_, owner, err := unixIdentityAndOwner(info)
+	if err != nil {
+		return "", fmt.Errorf("inspect top-level evidence namespace link owner: %w", err)
+	}
+	if owner != "0" {
+		return "", fmt.Errorf("top-level evidence parent component %q is an untrusted symbolic link", topLevel)
+	}
+	resolvedTopLevel, err := filepath.EvalSymlinks(topLevel)
+	if err != nil {
+		return "", fmt.Errorf("resolve trusted top-level evidence namespace link: %w", err)
+	}
+	resolvedParent := resolvedTopLevel
+	if len(components) > 1 {
+		resolvedParent = filepath.Join(append([]string{resolvedTopLevel}, components[1:]...)...)
+	}
+	return filepath.Join(resolvedParent, filepath.Base(absolute)), nil
 }
 
 func prepareEvidenceNamespace(path string) (string, evidenceNamespaceState, error) {
@@ -81,7 +126,7 @@ func validateUnixAncestorChain(path string) error {
 		return errors.New("evidence parent is not absolute")
 	}
 	current := string(os.PathSeparator)
-	previousInfo, err := os.Lstat(current)
+	previousInfo, err := lstatWithinParent(current)
 	if err != nil {
 		return fmt.Errorf("inspect evidence namespace root: %w", err)
 	}
@@ -97,7 +142,7 @@ func validateUnixAncestorChain(path string) error {
 			continue
 		}
 		current = filepath.Join(current, component)
-		info, err := os.Lstat(current) // #nosec G304 G703 -- canonical parent components are checked without following links.
+		info, err := lstatWithinParent(current)
 		if err != nil {
 			return fmt.Errorf("inspect evidence ancestor %q: %w", current, err)
 		}
@@ -139,7 +184,7 @@ func verifyUnixNamespaceEdge(parentPath string, parentInfo os.FileInfo, childPat
 }
 
 func verifyControlledUnixDirectory(path string) (evidenceFileIdentity, error) {
-	info, err := os.Lstat(path) // #nosec G304 G703 -- the canonical destination parent is checked without following links.
+	info, err := lstatWithinParent(path)
 	if err != nil {
 		return evidenceFileIdentity{}, err
 	}
@@ -163,29 +208,64 @@ func verifyControlledUnixDirectory(path string) (evidenceFileIdentity, error) {
 }
 
 func createPrivateEvidenceTemporary(dir string) (*os.File, string, error) {
-	// #nosec G703 -- dir is a canonical, owner-controlled destination parent.
-	// CreateTemp randomizes the filename, uses O_EXCL, and creates it with 0600.
-	temporary, err := os.CreateTemp(dir, evidenceTemporaryPattern)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return nil, "", fmt.Errorf("create private evidence temporary file: %w", err)
+		return nil, "", fmt.Errorf("open private evidence parent: %w", err)
+	}
+	closeRootAfterFailure := func(primary error) error {
+		if closeErr := root.Close(); closeErr != nil {
+			return errors.Join(primary, fmt.Errorf("close private evidence parent after failure: %w", closeErr))
+		}
+		return primary
+	}
+	var (
+		temporary     *os.File
+		temporaryPath string
+	)
+	for attempt := 0; attempt < unixEvidenceCreateAttempts; attempt++ {
+		randomName := make([]byte, unixEvidenceRandomBytes)
+		if _, err := rand.Read(randomName); err != nil {
+			return nil, "", closeRootAfterFailure(fmt.Errorf("generate evidence temporary filename: %w", err))
+		}
+		name := strings.TrimSuffix(evidenceTemporaryPattern, "*") + hex.EncodeToString(randomName)
+		temporary, err = root.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return nil, "", closeRootAfterFailure(fmt.Errorf("create private evidence temporary file: %w", err))
+		}
+		temporaryPath = filepath.Join(dir, name)
+		break
+	}
+	if temporary == nil {
+		return nil, "", closeRootAfterFailure(fmt.Errorf("create private evidence temporary file: %d cryptographic name collisions", unixEvidenceCreateAttempts))
+	}
+	if err := root.Close(); err != nil {
+		return nil, "", joinEvidenceCleanupError(
+			fmt.Errorf("close private evidence parent: %w", err),
+			temporary,
+			temporaryPath,
+			removeEvidenceFile,
+		)
 	}
 	if err := temporary.Chmod(0o600); err != nil {
 		return nil, "", joinEvidenceCleanupError(
 			fmt.Errorf("set evidence temporary file permissions: %w", err),
 			temporary,
-			temporary.Name(),
+			temporaryPath,
 			removeEvidenceFile,
 		)
 	}
-	if err := verifyPrivateUnixEvidenceFile(temporary.Name(), nil); err != nil {
+	if err := verifyPrivateUnixEvidenceFile(temporaryPath, nil); err != nil {
 		return nil, "", joinEvidenceCleanupError(
 			fmt.Errorf("verify private evidence temporary file: %w", err),
 			temporary,
-			temporary.Name(),
+			temporaryPath,
 			removeEvidenceFile,
 		)
 	}
-	return temporary, temporary.Name(), nil
+	return temporary, temporaryPath, nil
 }
 
 func evidenceIdentityFromOpenFile(file *os.File) (evidenceFileIdentity, error) {
@@ -215,7 +295,7 @@ func verifyPrivateEvidenceDestination(path string, expected evidenceFileIdentity
 }
 
 func verifyPrivateUnixEvidenceFile(path string, expected *evidenceFileIdentity) error {
-	info, err := os.Lstat(path) // #nosec G304 G703 -- verifies the canonical evidence path without following symlinks.
+	info, err := lstatWithinParent(path)
 	if err != nil {
 		return err
 	}
@@ -239,7 +319,7 @@ func verifyPrivateUnixEvidenceFile(path string, expected *evidenceFileIdentity) 
 }
 
 func validateEvidenceTargetOwner(path string) error {
-	info, err := os.Lstat(path) // #nosec G304 G703 -- checks ownership without following the selected destination.
+	info, err := lstatWithinParent(path)
 	if err != nil {
 		return err
 	}
@@ -266,7 +346,7 @@ func unixEffectiveUID() string {
 }
 
 func removeEvidenceDestinationIfIdentityMatches(path string, expected evidenceFileIdentity) error {
-	info, err := os.Lstat(path) // #nosec G304 G703 -- validates identity before removing an unverified published file.
+	info, err := lstatWithinParent(path)
 	if err != nil {
 		return err
 	}
@@ -281,11 +361,9 @@ func removeEvidenceDestinationIfIdentityMatches(path string, expected evidenceFi
 }
 
 func removeEvidenceFile(path string) error {
-	return os.Remove(path) // #nosec G304 G703 -- removes only a bound temporary or identity-verified published path.
+	return removeWithinParent(path)
 }
 
 func replaceEvidenceFile(source string, destination string) error {
-	// #nosec G703 -- source is an O_EXCL file whose dev/inode was rechecked in
-	// an owner-controlled parent; destination was Lstat-checked in that parent.
-	return os.Rename(source, destination)
+	return renameWithinParent(source, destination)
 }

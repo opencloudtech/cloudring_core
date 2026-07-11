@@ -48,6 +48,42 @@ func TestRunValidateSuccessAndFailure(t *testing.T) {
 	})
 }
 
+func TestReadOperatorSelectedFileConfinesSymlinksToSelectedParent(t *testing.T) {
+	sandbox := t.TempDir()
+	selectedParent := filepath.Join(sandbox, "selected")
+	outsideParent := filepath.Join(sandbox, "outside")
+	if err := os.Mkdir(selectedParent, 0o700); err != nil {
+		t.Fatalf("create selected parent: %v", err)
+	}
+	if err := os.Mkdir(outsideParent, 0o700); err != nil {
+		t.Fatalf("create outside parent: %v", err)
+	}
+	insidePath := writeTestFileInDirectory(t, selectedParent, []byte("inside\n"))
+	outsidePath := writeTestFileInDirectory(t, outsideParent, []byte("outside\n"))
+	insideLink := filepath.Join(selectedParent, "inside-link.json")
+	escapeLink := filepath.Join(selectedParent, "escape-link.json")
+	if err := os.Symlink(filepath.Base(insidePath), insideLink); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+	if err := os.Symlink(filepath.Join("..", filepath.Base(outsideParent), filepath.Base(outsidePath)), escapeLink); err != nil {
+		t.Skipf("symlink traversal fixture is unavailable: %v", err)
+	}
+
+	inside, err := readOperatorSelectedFile(insideLink)
+	if err != nil {
+		t.Fatalf("read symlink confined to selected parent: %v", err)
+	}
+	if string(inside) != "inside\n" {
+		t.Fatalf("confined symlink payload = %q, want inside payload", inside)
+	}
+	if _, err := readOperatorSelectedFile(escapeLink); err == nil {
+		t.Fatal("read through parent-escaping symlink succeeded")
+	}
+	if got := string(readTestFile(t, outsidePath)); got != "outside\n" {
+		t.Fatalf("outside file changed after rejected traversal: %q", got)
+	}
+}
+
 func TestRunConformanceSuccessAndFailureEvidence(t *testing.T) {
 	validPath := validConnectorFixture(t)
 
@@ -172,7 +208,7 @@ func TestWriteConformanceEvidenceUsesPrivatePermissions(t *testing.T) {
 func TestWriteConformanceEvidenceSafelyReplacesExistingFile(t *testing.T) {
 	directory := privateEvidenceTestDirectory(t)
 	evidencePath := writeTestFileInDirectory(t, directory, []byte("previous evidence\n"))
-	if err := os.Chmod(evidencePath, 0o644); err != nil { // #nosec G302 -- this negative test intentionally starts with an over-permissive predecessor.
+	if err := makeEvidenceTestPredecessorPermissive(evidencePath); err != nil {
 		t.Fatalf("make old evidence permissive: %v", err)
 	}
 
@@ -215,6 +251,24 @@ func TestWritePrivateFileSafelyPreservesDestinationOnReplaceFailure(t *testing.T
 		t.Fatalf("destination changed after failed replacement: %q", got)
 	}
 	assertNoEvidenceTemporaryFiles(t, directory)
+}
+
+func TestRenameWithinParentRejectsCrossParentTraversal(t *testing.T) {
+	left := t.TempDir()
+	right := t.TempDir()
+	source := writeTestFileInDirectory(t, left, []byte("source\n"))
+	destination := filepath.Join(right, "destination.json")
+
+	err := renameWithinParent(source, destination)
+	if err == nil || !strings.Contains(err.Error(), "must share a parent directory") {
+		t.Fatalf("cross-parent rename error = %v, want confinement refusal", err)
+	}
+	if got := string(readTestFile(t, source)); got != "source\n" {
+		t.Fatalf("source changed after rejected cross-parent rename: %q", got)
+	}
+	if _, err := lstatWithinParent(destination); !os.IsNotExist(err) {
+		t.Fatalf("cross-parent destination unexpectedly exists: %v", err)
+	}
 }
 
 func TestWritePrivateFileSafelyReturnsCleanupFailure(t *testing.T) {
@@ -272,6 +326,36 @@ func TestWriteConformanceEvidenceRejectsSymlinkDestination(t *testing.T) {
 	assertNoEvidenceTemporaryFiles(t, directory)
 }
 
+func TestWriteConformanceEvidenceRejectsSymlinkedParentWithoutSideEffects(t *testing.T) {
+	sandbox := privateEvidenceTestDirectory(t)
+	selectedParent := filepath.Join(sandbox, "selected")
+	externalParent := filepath.Join(sandbox, "external")
+	if err := os.Mkdir(selectedParent, 0o700); err != nil {
+		t.Fatalf("create selected evidence parent: %v", err)
+	}
+	if err := os.Mkdir(externalParent, 0o700); err != nil {
+		t.Fatalf("create external evidence parent: %v", err)
+	}
+	redirect := filepath.Join(selectedParent, "redirect")
+	if err := os.Symlink(externalParent, redirect); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+	externalNested := filepath.Join(externalParent, "must-not-exist")
+	evidencePath := filepath.Join(redirect, filepath.Base(externalNested), "report.json")
+
+	err := writeConformanceEvidence(evidencePath, []ocsv3.ConformanceReport{testConformanceReport("parent-symlink")})
+	if err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("write error = %v, want symlinked-parent refusal", err)
+	}
+	if _, statErr := lstatWithinParent(externalNested); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("symlink target received an unexpected directory: %v", statErr)
+	}
+	if _, statErr := lstatWithinParent(filepath.Join(externalNested, "report.json")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("symlink target received an unexpected evidence file: %v", statErr)
+	}
+	assertNoEvidenceTemporaryFiles(t, externalParent)
+}
+
 func TestWriteConformanceEvidenceRejectsNonRegularDestination(t *testing.T) {
 	directory := privateEvidenceTestDirectory(t)
 	evidencePath := filepath.Join(directory, "report.json")
@@ -318,10 +402,18 @@ func writeTestFileInDirectory(t *testing.T, directory string, data []byte) strin
 	return file.Name()
 }
 
+func writeTestFileWithinParent(path string, data []byte, mode os.FileMode) (resultErr error) {
+	rooted, err := openParentRootPath(path)
+	if err != nil {
+		return err
+	}
+	defer rooted.close(&resultErr)
+	return rooted.root.WriteFile(rooted.name, data, mode)
+}
+
 func readTestFile(t *testing.T, path string) []byte {
 	t.Helper()
-	// #nosec G304 -- tests only pass paths created by t.TempDir or a repository fixture.
-	data, err := os.ReadFile(path)
+	data, err := readOperatorSelectedFile(path)
 	if err != nil {
 		t.Fatalf("read test file: %v", err)
 	}

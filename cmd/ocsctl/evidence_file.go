@@ -67,8 +67,6 @@ func writePrivateFileSafelyWithHooks(path string, data []byte, replace func(stri
 				resultErr = errors.Join(resultErr, fmt.Errorf("close unpublished evidence temporary file: %w", err))
 			}
 		}
-		// #nosec G703 -- temporaryPath is returned by the platform's exclusive
-		// creator, not accepted from the CLI; cleanup removes that exact unpublished file.
 		if err := remove(temporaryPath); err != nil && !os.IsNotExist(err) {
 			resultErr = errors.Join(resultErr, fmt.Errorf("remove unpublished evidence temporary file: %w", err))
 		}
@@ -137,9 +135,7 @@ func writePrivateFileSafelyWithHooks(path string, data []byte, replace func(stri
 }
 
 func validateEvidenceTarget(path string) error {
-	// #nosec G304 G703 -- Lstat examines the explicit --evidence destination
-	// without following a symlink; this is the security check for that CLI path.
-	info, err := os.Lstat(path)
+	info, err := lstatWithinParent(path)
 	if os.IsNotExist(err) {
 		return nil
 	}

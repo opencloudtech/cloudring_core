@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func privateEvidenceTestDirectory(t *testing.T) string {
@@ -14,16 +16,17 @@ func privateEvidenceTestDirectory(t *testing.T) string {
 	return t.TempDir()
 }
 
+func makeEvidenceTestPredecessorPermissive(path string) error {
+	return unix.Chmod(path, 0o644)
+}
+
 func TestUnixEvidenceRejectsWritableDestinationParent(t *testing.T) {
 	directory := t.TempDir()
-	// #nosec G302 -- this negative test deliberately creates a world-writable
-	// t.TempDir-owned parent so the production namespace guard must reject it.
-	if err := os.Chmod(directory, 0o777); err != nil {
+	if err := unix.Chmod(directory, 0o777); err != nil {
 		t.Fatalf("make evidence parent writable: %v", err)
 	}
 	t.Cleanup(func() {
-		// #nosec G302 -- 0700 is the required private directory restoration mode.
-		_ = os.Chmod(directory, 0o700)
+		_ = unix.Chmod(directory, 0o700)
 	})
 	evidencePath := filepath.Join(directory, "evidence.json")
 	err := writePrivateFileSafely(evidencePath, []byte("must not publish\n"))
@@ -40,14 +43,11 @@ func TestUnixEvidenceRejectsWritableNonStickyAncestor(t *testing.T) {
 	if err := os.MkdirAll(controlledParent, 0o700); err != nil {
 		t.Fatalf("create evidence namespace: %v", err)
 	}
-	// #nosec G302 -- this negative fixture must expose a non-sticky writable
-	// ancestor to prove the production ancestor check rejects it.
-	if err := os.Chmod(mutableAncestor, 0o777); err != nil {
+	if err := unix.Chmod(mutableAncestor, 0o777); err != nil {
 		t.Fatalf("make ancestor writable: %v", err)
 	}
 	t.Cleanup(func() {
-		// #nosec G302 -- 0700 restores the t.TempDir descendant after the fixture.
-		_ = os.Chmod(mutableAncestor, 0o700)
+		_ = unix.Chmod(mutableAncestor, 0o700)
 	})
 	err := writePrivateFileSafely(filepath.Join(controlledParent, "evidence.json"), []byte("must not publish\n"))
 	if err == nil || !strings.Contains(err.Error(), "namespace mutation") {
@@ -60,17 +60,14 @@ func TestUnixEvidenceNamespaceTamperBeforeReplaceFailsClosed(t *testing.T) {
 	directory := t.TempDir()
 	evidencePath := filepath.Join(directory, "namespace-tamper.json")
 	hooks := evidenceWriteHooks{beforeReplaceValidation: func(_, _ string) error {
-		// #nosec G302 -- the test intentionally changes its own t.TempDir to 0777
-		// between validation and replacement to exercise fail-closed revalidation.
-		return os.Chmod(directory, 0o777)
+		return unix.Chmod(directory, 0o777)
 	}}
 	err := writePrivateFileSafelyWithHooks(evidencePath, []byte("must not publish\n"), replaceEvidenceFile, hooks)
 	if err == nil || !strings.Contains(err.Error(), "group/other write must be disabled") {
 		t.Fatalf("write error = %v, want namespace-tamper rejection", err)
 	}
 	assertNoEvidenceTemporaryFiles(t, directory)
-	// #nosec G302 -- 0700 is the required private directory restoration mode.
-	if err := os.Chmod(directory, 0o700); err != nil {
+	if err := unix.Chmod(directory, 0o700); err != nil {
 		t.Fatalf("restore evidence parent mode: %v", err)
 	}
 }
@@ -79,14 +76,10 @@ func TestUnixEvidenceTemporaryIdentityReplacementFailsClosed(t *testing.T) {
 	directory := t.TempDir()
 	evidencePath := filepath.Join(directory, "temp-identity.json")
 	hooks := evidenceWriteHooks{beforeReplaceValidation: func(temporaryPath, _ string) error {
-		// #nosec G703 -- temporaryPath is the exact O_EXCL path supplied by the
-		// internal production hook; removing it is the identity-substitution trigger.
-		if err := os.Remove(temporaryPath); err != nil {
+		if err := removeWithinParent(temporaryPath); err != nil {
 			return err
 		}
-		// #nosec G703 -- the same internal O_EXCL path is deliberately recreated
-		// inside this t.TempDir to prove dev/inode substitution is rejected.
-		return os.WriteFile(temporaryPath, []byte("replacement object\n"), 0o600)
+		return writeTestFileWithinParent(temporaryPath, []byte("replacement object\n"), 0o600)
 	}}
 	err := writePrivateFileSafelyWithHooks(evidencePath, []byte("original object\n"), replaceEvidenceFile, hooks)
 	if err == nil || !strings.Contains(err.Error(), "file identity changed") {
@@ -101,19 +94,16 @@ func TestUnixEvidenceTemporaryIdentityReplacementFailsClosed(t *testing.T) {
 func TestUnixEvidencePublishedIdentityReplacementFailsClosed(t *testing.T) {
 	directory := t.TempDir()
 	evidencePath := filepath.Join(directory, "published-identity.json")
-	displacedPath := filepath.Join(directory, "displaced-sensitive.json")
+	var displacedPath string
 	err := writePrivateFileSafelyWith(evidencePath, []byte("sensitive test object\n"), func(source, destination string) error {
 		if err := replaceEvidenceFile(source, destination); err != nil {
 			return err
 		}
-		// #nosec G703 -- destination is the canonical path supplied by the internal
-		// replacement callback and displacedPath is fixed under this test's t.TempDir.
-		if err := os.Rename(destination, displacedPath); err != nil {
+		displacedPath = filepath.Join(filepath.Dir(destination), "displaced-sensitive.json")
+		if err := renameWithinParent(destination, displacedPath); err != nil {
 			return err
 		}
-		// #nosec G703 -- destination is deliberately recreated under the controlled
-		// test directory to prove post-publication dev/inode verification fails.
-		return os.WriteFile(destination, []byte("different object\n"), 0o600)
+		return writeTestFileWithinParent(destination, []byte("different object\n"), 0o600)
 	})
 	if err == nil || !strings.Contains(err.Error(), "file identity changed") {
 		t.Fatalf("write error = %v, want published identity rejection", err)

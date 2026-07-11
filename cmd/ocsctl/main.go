@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/opencloudtech/CloudRING/cloudring_core/sdk/ocsv3"
@@ -157,13 +156,8 @@ func usageError() error {
 }
 
 func writeConformanceEvidence(path string, reports []ocsv3.ConformanceReport) error {
-	if dir := filepath.Dir(path); dir != "." {
-		// #nosec G703 -- path is the operator-selected --evidence destination. The
-		// writer below separately validates owner, namespace, permissions/ACL, and
-		// file identity while still supporting absolute and workspace-external paths.
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
-		}
+	if err := ensureEvidenceParentDirectory(path); err != nil {
+		return err
 	}
 	var (
 		data []byte
@@ -192,11 +186,4 @@ func validateFile(path string) error {
 		return err
 	}
 	return pkg.Validate()
-}
-
-func readOperatorSelectedFile(path string) ([]byte, error) {
-	// #nosec G304 G703 -- reading an explicit CLI operand is ocsctl's purpose. The
-	// contents are parsed and validated without execution; restricting the path to
-	// the repository would break valid absolute and workspace-external inputs.
-	return os.ReadFile(path)
 }

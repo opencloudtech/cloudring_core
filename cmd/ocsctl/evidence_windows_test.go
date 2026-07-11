@@ -19,6 +19,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+func makeEvidenceTestPredecessorPermissive(string) error {
+	return nil
+}
+
 func TestWindowsEvidenceRejectsPermissiveParent(t *testing.T) {
 	directory := t.TempDir()
 	if err := applyWindowsTestDACL(directory, "D:P(A;OICI;FA;;;WD)(A;OICI;FA;;;AU)"); err != nil {
