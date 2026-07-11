@@ -98,6 +98,7 @@ jobs:
           github_context='git''hub'
           expression_open='$'
           expression_open+='{{'
+          # shellcheck disable=SC2016 # jq variables intentionally remain literal.
           workflow_policy='
             def safe_root_permissions:
               type == "object" and
