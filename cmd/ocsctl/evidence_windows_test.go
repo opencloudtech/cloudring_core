@@ -464,7 +464,10 @@ func TestWindowsConcurrentReadersObserveCompleteOldAndNewPayloads(t *testing.T) 
 
 	deadline := time.Now().Add(15 * time.Second)
 	replacementRetries := 0
-	for replacement := 0; replacement < 24; {
+	// Use an odd number of successful replacements so the same bounded retry
+	// loop leaves the published value at the new payload. A separate un-retried
+	// final write would make an expected reader sharing race look like a failure.
+	for replacement := 0; replacement < 25; {
 		payload := oldPayload
 		if replacement%2 == 0 {
 			payload = newPayload
@@ -484,10 +487,6 @@ func TestWindowsConcurrentReadersObserveCompleteOldAndNewPayloads(t *testing.T) 
 			t.Fatalf("concurrent readers prevented replacement for 15s; retries=%d", replacementRetries)
 		}
 		runtime.Gosched()
-	}
-	if err := writePrivateFileSafely(evidencePath, newPayload); err != nil {
-		stopReaders()
-		t.Fatalf("publish final new payload: %v", err)
 	}
 	waitForWindowsReadObservation(t, &newReads, "new payload")
 	stopReaders()
