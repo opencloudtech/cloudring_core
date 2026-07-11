@@ -71,42 +71,35 @@ jobs:
           fi
 
           uses_query='[.jobs[]? | (.uses?, .steps[]?.uses?) | select(. != null)]'
-          reference_is_immutable() {
-            local reference="$1"
-            case "${reference}" in
-              ./*) return 0 ;;
-              docker://*) [[ "${reference}" =~ ^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]] ;;
-              *) [[ "${reference}" =~ @([0-9a-f]{40})$ ]] ;;
-            esac
-          }
+          immutable_query='type == "array" and
+            all(.[]; type == "string") and
+            all(.[];
+              if startswith("./") then true
+              elif startswith("docker://") then test("^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$")
+              else test("@[0-9a-f]{40}$")
+              end)'
 
           # Prove the semantic extractor handles YAML-equivalent quoted keys and
           # whitespace before the colon; a line-oriented grep does not.
           semantic_fixture=$'jobs:\n  reusable:\n    "uses": owner/repository/.github/workflows/check.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n  steps:\n    runs-on: ubuntu-latest\n    steps:\n      - "uses": docker://registry.example/image:latest\n      - uses : ./local-action\n'
           fixture_references="$(printf '%s' "${semantic_fixture}" \
             | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 "${uses_query}" -)"
-          jq -e 'length == 3 and index("docker://registry.example/image:latest") != null and index("./local-action") != null' \
-            <<<"${fixture_references}" >/dev/null
-          if reference_is_immutable 'docker://registry.example/image:latest'; then
+          printf '%s\n' "${fixture_references}" \
+            | jq -e 'length == 3 and index("docker://registry.example/image:latest") != null and index("./local-action") != null' >/dev/null
+          if printf '%s\n' "${fixture_references}" | jq -e "${immutable_query}" >/dev/null; then
             echo "mutable container reference regression" >&2
             exit 1
           fi
-          reference_is_immutable 'docker://registry.example/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+          printf '%s\n' '["docker://registry.example/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]' \
+            | jq -e "${immutable_query}" >/dev/null
 
           violations=0
           for workflow in "${workflow_files[@]}"; do
             references_json="$(go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 \
               "${uses_query}" "${workflow}")"
-            if ! jq -e 'type == "array" and all(.[]; type == "string")' <<<"${references_json}" >/dev/null; then
-              echo "workflow contains a non-string uses reference: ${workflow}" >&2
+            if ! printf '%s\n' "${references_json}" | jq -e "${immutable_query}" >/dev/null; then
+              echo "workflow contains a non-immutable uses reference: ${workflow}" >&2
               violations=1
-              continue
             fi
-            while IFS= read -r ref; do
-              if ! reference_is_immutable "${ref}"; then
-                echo "workflow reference is not pinned to immutable content: ${workflow}" >&2
-                violations=1
-              fi
-            done < <(jq -r '.[]' <<<"${references_json}")
           done
           exit "${violations}"
