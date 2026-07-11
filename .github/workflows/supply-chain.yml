@@ -62,17 +62,51 @@ jobs:
             exit 1
           fi
 
+          shopt -s nullglob
+          workflow_files=(.github/workflows/*.yml .github/workflows/*.yaml)
+          shopt -u nullglob
+          if (( ${#workflow_files[@]} == 0 )); then
+            echo "no workflows found for immutable-reference validation" >&2
+            exit 1
+          fi
+
+          uses_query='[.jobs[]? | (.uses?, .steps[]?.uses?) | select(. != null)]'
+          reference_is_immutable() {
+            local reference="$1"
+            case "${reference}" in
+              ./*) return 0 ;;
+              docker://*) [[ "${reference}" =~ ^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]] ;;
+              *) [[ "${reference}" =~ @([0-9a-f]{40})$ ]] ;;
+            esac
+          }
+
+          # Prove the semantic extractor handles YAML-equivalent quoted keys and
+          # whitespace before the colon; a line-oriented grep does not.
+          semantic_fixture=$'jobs:\n  reusable:\n    "uses": owner/repository/.github/workflows/check.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n  steps:\n    runs-on: ubuntu-latest\n    steps:\n      - "uses": docker://registry.example/image:latest\n      - uses : ./local-action\n'
+          fixture_references="$(printf '%s' "${semantic_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 "${uses_query}" -)"
+          jq -e 'length == 3 and index("docker://registry.example/image:latest") != null and index("./local-action") != null' \
+            <<<"${fixture_references}" >/dev/null
+          if reference_is_immutable 'docker://registry.example/image:latest'; then
+            echo "mutable container reference regression" >&2
+            exit 1
+          fi
+          reference_is_immutable 'docker://registry.example/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
           violations=0
-          while IFS= read -r line; do
-            if [[ "${line}" =~ uses:[[:space:]]*([^[:space:]#]+) ]]; then
-              ref="${BASH_REMATCH[1]}"
-              case "${ref}" in
-                ./*|docker://*) continue ;;
-              esac
-              if [[ ! "${ref}" =~ @([0-9a-f]{40})$ ]]; then
-                echo "action is not pinned to an immutable commit: ${line}" >&2
+          for workflow in "${workflow_files[@]}"; do
+            references_json="$(go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 \
+              "${uses_query}" "${workflow}")"
+            if ! jq -e 'type == "array" and all(.[]; type == "string")' <<<"${references_json}" >/dev/null; then
+              echo "workflow contains a non-string uses reference: ${workflow}" >&2
+              violations=1
+              continue
+            fi
+            while IFS= read -r ref; do
+              if ! reference_is_immutable "${ref}"; then
+                echo "workflow reference is not pinned to immutable content: ${workflow}" >&2
                 violations=1
               fi
-            fi
-          done < <(grep -RnE '^[[:space:]-]*uses:[[:space:]]*[^[:space:]#]+' .github/workflows)
+            done < <(jq -r '.[]' <<<"${references_json}")
+          done
           exit "${violations}"
