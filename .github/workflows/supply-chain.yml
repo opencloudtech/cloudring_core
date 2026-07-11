@@ -1,0 +1,78 @@
+name: supply-chain
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  supply-chain-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Validate workflow syntax
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Verify CycloneDX SBOM generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sbom="${RUNNER_TEMP}/cloudring-sbom.cdx.json"
+          go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0 \
+            mod -json -test -licenses -output "${sbom}" .
+          jq -e '.bomFormat == "CycloneDX" and .specVersion == "1.6" and (.components | length) >= 1' "${sbom}"
+          rm -f "${sbom}"
+      - name: Enforce pull request workflow policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if grep -RniE '^[[:space:]]*pull_request_target:' .github/workflows; then
+            echo "pull_request_target is forbidden in required workflows" >&2
+            exit 1
+          fi
+          if grep -RniE 'permissions:[[:space:]]*write-all|^[[:space:]]+(actions|checks|contents|deployments|id-token|issues|packages|pages|pull-requests|repository-projects|statuses):[[:space:]]+write' .github/workflows; then
+            echo "unexpected write permission in required workflows" >&2
+            exit 1
+          fi
+          if grep -RniE '@(latest|main|master)([[:space:]#]|$)' .github/workflows; then
+            echo "mutable tool or action reference is forbidden" >&2
+            exit 1
+          fi
+          if grep -RniE '\$\{\{[[:space:]]*secrets\.' .github/workflows; then
+            echo "required pull request workflows must not depend on repository secrets" >&2
+            exit 1
+          fi
+
+          violations=0
+          while IFS= read -r line; do
+            if [[ "${line}" =~ uses:[[:space:]]*([^[:space:]#]+) ]]; then
+              ref="${BASH_REMATCH[1]}"
+              case "${ref}" in
+                ./*|docker://*) continue ;;
+              esac
+              if [[ ! "${ref}" =~ @([0-9a-f]{40})$ ]]; then
+                echo "action is not pinned to an immutable commit: ${line}" >&2
+                violations=1
+              fi
+            fi
+          done < <(grep -RnE '^[[:space:]-]*uses:[[:space:]]*[^[:space:]#]+' .github/workflows)
+          exit "${violations}"

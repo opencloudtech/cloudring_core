@@ -5,28 +5,31 @@ what must remain in independently owned modules or private downstream work.
 
 ## Platform ownership
 
-CloudRING public material may include:
+CloudRING public material includes or may include:
 
-- OCSv3 registry schemas, validators, and SDK documentation.
-- IAM, policy, admission, audit, and evidence contracts.
-- GitOps and bootstrap abstractions that are implementation-neutral.
-- Module lifecycle, BOM compatibility, rollback, readiness, and non-claim
-  contracts.
-- Portal shell slots and extension metadata.
-- Provider adapter interfaces expressed as portable capabilities.
-- Developer entry points for service teams, adapter teams, security reviewers,
-  and downstream maintainers.
+- The provider-neutral Go control plane and APIs.
+- OCSv3 schemas, validators, SDKs, conformance tests, and reference modules.
+- IAM, identity, policy, admission, durable audit, catalog, billing, portal,
+  and self-service implementations.
+- Generic installers, GitOps bases, observability, backup/restore, lifecycle,
+  upgrade, rollback, readiness, and operations tooling.
+- Open source service modules and reusable provider adapters that satisfy the
+  project's contribution and source-safety requirements.
+- Developer and operator entry points for service teams, adapter teams,
+  security reviewers, providers, and downstream maintainers.
 
-CloudRING public material must be reusable without private infrastructure values or a
-single service implementation.
+CloudRING public material must be reusable without a particular company's
+accounts, topology, private endpoints, customer data, or proprietary modules.
 
 ## Service ownership
 
-Service modules own runtime code and service-specific behavior. A module
-publishes portable metadata for API/controller behavior, UI extension points,
-billing meters, support diagnostics, data durability, lifecycle actions,
-rollback, delete/export, backup/restore, denied, degraded, and retry states.
-CloudRING validates those declarations and orchestrates against contracts.
+CloudRING may distribute complete service modules under Apache-2.0. A module
+developed outside the project remains owned and licensed by its author unless
+it is contributed. Every module publishes portable metadata for its
+API/controller behavior, UI extension points, billing meters, support
+diagnostics, data durability, lifecycle actions, rollback, delete/export,
+backup/restore, and denied/degraded/retry states. The platform orchestrates the
+declared interfaces without importing a module's private internals.
 
 ## Enterprise and private boundary
 
@@ -39,11 +42,13 @@ The following material stays outside CloudRING public:
   deployment-specific values.
 - Company-only modules, enterprise overlays, and proprietary implementation
   details.
-- Copied private-source text or implementation-specific dependencies.
+- Account-, customer-, topology-, and installation-specific provider values.
+- Copied private-source text or dependencies on private implementation
+  details.
 
-Public examples should use synthetic identifiers and capability names. Public
-docs may describe an interface but must not include a downstream deployment's
-private values or operational runbook.
+Public examples should use synthetic identifiers and capability names. Generic
+operator runbooks belong in public; a downstream deployment's private values,
+inventory, incidents, and live evidence do not.
 
 ## Source-safety checklist
 
@@ -70,5 +75,6 @@ contracts.
 ## Non-claims
 
 The public boundary does not claim that any private deployment is ready, that
-all future modules have been extracted, or that material outside this subtree
-has the same license. Readiness must be proven by scoped evidence.
+the current extraction is complete, that every third-party module is open
+source, or that material outside this repository has the same license.
+Readiness must be proven by scoped evidence.

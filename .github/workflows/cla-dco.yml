@@ -6,29 +6,70 @@ on:
     branches:
       - main
   merge_group:
+    types:
+      - checks_requested
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dco:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - if: github.event_name == 'pull_request'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
-      - shell: bash
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate every pull request commit
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          DCO_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DCO_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          git log -1 --pretty=%B | grep -qi "Signed-off-by:"
+          git cat-file -e "${DCO_BASE_SHA}^{commit}"
+          git cat-file -e "${DCO_HEAD_SHA}^{commit}"
+
+          commit_count=0
+          missing=0
+          while IFS= read -r commit; do
+            commit_count=$((commit_count + 1))
+            if ! git show -s --format=%B "${commit}" \
+              | git interpret-trailers --parse \
+              | grep -Eiq '^Signed-off-by:[[:space:]]+[^<]+<[^>]+>[[:space:]]*$'; then
+              git show -s --format='Missing Signed-off-by trailer: %h %s' "${commit}" >&2
+              missing=1
+            fi
+          done < <(git rev-list --reverse "${DCO_BASE_SHA}..${DCO_HEAD_SHA}")
+
+          if (( commit_count == 0 )); then
+            echo "No commits found in pull request range ${DCO_BASE_SHA}..${DCO_HEAD_SHA}" >&2
+            exit 1
+          fi
+          exit "${missing}"
+      - name: Keep the dco context stable outside pull requests
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: echo "DCO is validated on the pull request commit range; no revalidation is needed for this event."
 
   cla:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - shell: bash
         run: |
           set -euo pipefail
           test -s CLA.md
-          grep -qi "contributor" CLA.md
+          grep -Fq "By submitting a contribution" CLA.md
+          grep -Fq "right to contribute" CLA.md
+          grep -Fq "Apache-2.0" CLA.md

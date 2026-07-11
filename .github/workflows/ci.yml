@@ -6,45 +6,145 @@ on:
     branches:
       - main
   merge_group:
+    types:
+      - checks_requested
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   go-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
           cache: true
-      - run: go test ./... -count=1
+      - name: Test minimum supported Go
+        run: go test ./... -count=1
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.x
+          check-latest: true
+          cache: true
+      - name: Test current Go
+        run: go test ./... -count=1
+
+  go-test-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - run: go test -race ./... -count=1
+
+  go-vet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - run: go vet ./...
+
+  windows-go-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Test minimum supported Go
+        run: go test ./... -count=1
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.x
+          check-latest: true
+          cache: true
+      - name: Test current Go
+        run: go test ./... -count=1
+
+  go-build-module-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Verify module graph and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod verify
+          go mod tidy -diff
+          go list -mod=readonly -m all
+          go build -mod=readonly -trimpath ./...
 
   ocs-validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
           cache: true
       - run: go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json ./cloudring_core/reference/synthetic-service/module-package.json
 
   ocs-conformance:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
           cache: true
       - run: go run ./cmd/ocsctl conformance ./cloudring_core/reference/synthetic-service/module-package.json
 
   docscheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - shell: bash
         run: |
           set -euo pipefail
@@ -55,14 +155,41 @@ jobs:
 
   source-safety:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - shell: bash
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Scan complete checkout
+        run: go run ./cmd/cloudring-sourcecheck scan --scope full
+      - name: Scan every commit in the proposed range
+        shell: bash
         run: |
           set -euo pipefail
-          private_module='cloudring[.]'local'/platform'
-          private_trace='require''ments/'
-          private_evidence='[.]'omo'/'
-          if find . -path ./.git -prune -o -type f -print0 | xargs -0 grep -nE "${private_module}|${private_trace}|${private_evidence}"; then
-            exit 1
-          fi
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              base_sha="$(jq -r '.pull_request.base.sha // empty' "${GITHUB_EVENT_PATH}")"
+              head_sha="$(jq -r '.pull_request.head.sha // empty' "${GITHUB_EVENT_PATH}")"
+              ;;
+            merge_group)
+              base_sha="$(jq -r '.merge_group.base_sha // empty' "${GITHUB_EVENT_PATH}")"
+              head_sha="$(jq -r '.merge_group.head_sha // empty' "${GITHUB_EVENT_PATH}")"
+              ;;
+            push)
+              base_sha="$(jq -r '.before // empty' "${GITHUB_EVENT_PATH}")"
+              head_sha="$(jq -r '.after // empty' "${GITHUB_EVENT_PATH}")"
+              ;;
+            *)
+              echo "unsupported GitHub event for source-safety history scan: ${GITHUB_EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          head_sha="${head_sha:-${GITHUB_SHA}}"
+          base_sha="${base_sha:-0000000000000000000000000000000000000000}"
+          go run ./cmd/cloudring-sourcecheck scan --scope pre-push --base "${base_sha}" --head "${head_sha}"

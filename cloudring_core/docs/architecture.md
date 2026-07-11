@@ -1,6 +1,8 @@
 # OCSv3 Architecture
 
-OCSv3 separates platform core from service implementation.
+OCSv3 separates platform responsibilities from service-team implementation
+details. This remains true whether a service ships in CloudRING or is maintained
+in another repository.
 
 ```text
 platform core
@@ -19,12 +21,11 @@ service module
   owns evidence receipts
 ```
 
-The platform core depends on metadata and contracts, not implementation code.
-Provider-specific code lives behind adapters outside `cloudring_core`. Public
-core may include only synthetic/mock adapters.
-
-This provider-specific boundary is mandatory: a module can depend on a public
-adapter interface, but CloudRING public must not import the implementation.
+The platform core depends on service metadata and APIs rather than importing a
+service's internal packages. Provider integration lives behind adapter
+interfaces. Reusable, source-safe adapters may ship in CloudRING; concrete
+accounts, inventory, credentials, private endpoints, and installation overlays
+stay in the downstream provider repository.
 
 ## Request Path
 

@@ -115,12 +115,13 @@ private deployment evidence into the public repository or pull request text.
 
 ## Enterprise/Downstream Maintainer Role Path
 
-The enterprise/downstream maintainer role path extends CloudRING by
-keeping private adapters, commercial packaging, customer-specific policy, and
-deployment material outside CloudRING. Downstream maintainers can consume
-the OCSv3 contracts and publish their own module packages, but they own their
-service implementation, extension delivery, billing settlement, support process,
-and release evidence.
+The enterprise/downstream maintainer role path extends CloudRING by keeping
+commercial packaging, proprietary modules, customer-specific policy, concrete
+installation values, and live evidence outside CloudRING. Downstream
+maintainers consume the pinned public core, contribute reusable platform
+changes upstream, and may publish or privately operate their own OCSv3 modules.
+Reusable adapters and services may be proposed to CloudRING; private internals
+and customer data may not.
 
 This guide does not claim production readiness. It documents the public authoring
 path and the local validation commands required before a module can be reviewed.

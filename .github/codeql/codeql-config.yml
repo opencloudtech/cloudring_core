@@ -1,7 +1,6 @@
 name: cloudring-core-codeql
 paths:
-  - cmd/ocsctl
-  - pkg/ocs
+  - cmd
+  - internal
+  - pkg
   - cloudring_core
-paths-ignore:
-  - "**/*_test.go"

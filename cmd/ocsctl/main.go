@@ -97,7 +97,7 @@ func runConformance(args []string, stdout io.Writer, stderr io.Writer) error {
 }
 
 func conformanceReportForPath(path string) (ocsv3.ConformanceReport, error) {
-	data, err := os.ReadFile(path)
+	data, err := readOperatorSelectedFile(path)
 	if err != nil {
 		return ocsv3.ConformanceReport{}, fmt.Errorf("read connector package: %w", err)
 	}
@@ -118,6 +118,9 @@ func parseConformanceArgs(args []string) ([]string, string, error) {
 				return nil, "", errors.New("usage: --evidence requires a path")
 			}
 			evidencePath = args[i+1]
+			if evidencePath == "" {
+				return nil, "", errors.New("usage: --evidence requires a path")
+			}
 			i++
 			continue
 		}
@@ -155,7 +158,10 @@ func usageError() error {
 
 func writeConformanceEvidence(path string, reports []ocsv3.ConformanceReport) error {
 	if dir := filepath.Dir(path); dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		// #nosec G703 -- path is the operator-selected --evidence destination. The
+		// writer below separately validates owner, namespace, permissions/ACL, and
+		// file identity while still supporting absolute and workspace-external paths.
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
 	}
@@ -172,11 +178,11 @@ func writeConformanceEvidence(path string, reports []ocsv3.ConformanceReport) er
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o600)
+	return writePrivateFileSafely(path, data)
 }
 
 func validateFile(path string) error {
-	data, err := os.ReadFile(path)
+	data, err := readOperatorSelectedFile(path)
 	if err != nil {
 		return err
 	}
@@ -186,4 +192,11 @@ func validateFile(path string) error {
 		return err
 	}
 	return pkg.Validate()
+}
+
+func readOperatorSelectedFile(path string) ([]byte, error) {
+	// #nosec G304 G703 -- reading an explicit CLI operand is ocsctl's purpose. The
+	// contents are parsed and validated without execution; restricting the path to
+	// the repository would break valid absolute and workspace-external inputs.
+	return os.ReadFile(path)
 }

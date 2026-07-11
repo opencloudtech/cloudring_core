@@ -1,32 +1,44 @@
 # CloudRING
 
-CloudRING is an Apache-2.0 open source project for reusable cloud-service
-orchestration contracts. It gives service teams, platform operators, and
-contributors a portable foundation for building cloud modules around OCSv3
-(Open Cloud Standard 3).
+CloudRING is an Apache-2.0 open source cloud platform. It gives operators a
+portable control plane for building a cloud provider and gives independent
+service teams stable integration surfaces through OCSv3 (Open Cloud Standard
+3).
 
 ## Platform ownership
 
-The project owns shared contracts and validation surfaces:
+The public project owns the reusable platform, including:
 
-- OCSv3 registry and package validation.
-- IAM, policy, and admission contracts.
-- GitOps and bootstrap abstractions.
-- Evidence, readiness, module lifecycle, BOM, and rollback gates.
-- Portal shell and extension contracts.
-- Provider adapter interfaces.
-- Developer SDK documentation.
+- OCSv3 contracts, SDKs, validators, and conformance tooling.
+- Identity, IAM, policy, admission, and durable audit services.
+- Catalog, billing/FinOps, portal, and self-service lifecycle surfaces.
+- Provider-neutral control-plane runtimes and provider adapter interfaces.
+- Installers, GitOps bases, observability, backup/restore, readiness, upgrade,
+  rollback, and operations tooling.
+- Open source service modules and reusable provider adapters accepted by the
+  project.
 
-CloudRING does not own service implementation code, deployment-specific values,
-customer data, credentials, or live infrastructure endpoints.
+Deployment-specific values, credentials, customer data, live evidence, and
+company-only modules remain in downstream repositories. A downstream product
+must configure and extend the public platform rather than maintain a duplicate
+fork of generic core behavior.
 
 ## Service ownership
 
-Each cloud service is owned by an independent module team. A module publishes
-OCSv3 metadata for its API/controller, portal extension, billing meters, support
-diagnostics, evidence, durability, lifecycle, rollback, delete/export, backup,
-restore, denied, degraded, and retry contracts. CloudRING consumes that metadata
-instead of importing a service implementation.
+CloudRING may ship service implementations under Apache-2.0. Independently
+developed modules remain owned and licensed by their authors unless they are
+contributed to this repository. In either case, a module integrates through
+OCSv3 metadata and APIs so the platform does not depend on its implementation
+language, deployment substrate, or release cadence.
+
+## Repository state
+
+This directory currently contains the first extraction slice. Contracts and
+conformance are available first; runtime, IAM, billing, portal, installer,
+operations, and service slices are being moved with their tests. Green checks
+prove only the surfaces present in a commit and must not be interpreted as a
+claim that the full platform extraction or a production installation is
+complete.
 
 ## Developer entry points
 
@@ -43,7 +55,8 @@ instead of importing a service implementation.
 
 ## Fresh clone validation
 
-Prerequisites: Git and a supported Go toolchain. From a fresh public clone:
+Prerequisites: Git and the latest security patch of Go 1.25 or 1.26. From a
+fresh public clone:
 
 ```bash
 gh repo clone opencloudtech/CloudRING
@@ -63,9 +76,10 @@ receipts.
 Contributions should arrive through a pull request against the public
 repository. Before opening a PR, run the fresh-clone validation commands above,
 read `CONTRIBUTING.md`, sign the required CLA/DCO attestations, and keep the
-change limited to public-safe contracts, docs, examples, SDK code, or OCSv3
-validation behavior. Contributions must satisfy source-safety review before
-they can be considered for merge.
+change public-safe and reusable. Platform runtime, tests, documentation,
+service modules, adapters, and OCSv3 changes are all valid contributions when
+they respect the public/downstream boundary. Contributions must satisfy
+source-safety review before they can be considered for merge.
 
 Do not include local host paths, tenant/customer records, live provider
 endpoints, tokens, cookies, kubeconfigs, credentials, or deployment evidence in
