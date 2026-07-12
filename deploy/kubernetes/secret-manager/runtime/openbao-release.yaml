@@ -58,6 +58,7 @@ spec:
     snapshotAgent:
       enabled: false
     server:
+      podManagementPolicy: Parallel
       affinity: |
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -141,6 +142,7 @@ spec:
       ha:
         enabled: true
         replicas: 3
+        apiAddr: https://openbao-active.openbao.svc:8200
         disruptionBudget:
           enabled: true
           maxUnavailable: 1

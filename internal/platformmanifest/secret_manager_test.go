@@ -162,6 +162,36 @@ func TestSecretManagerProfileRejectsClusterStoreOutsidePrivilegedNamespace(t *te
 	}
 }
 
+func TestSecretManagerProfileRejectsOrderedReadyOpenBaoBootstrap(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("      podManagementPolicy: Parallel"), []byte("      podManagementPolicy: OrderedReady"))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "TLS HA Raft contract") {
+		t.Fatalf("OrderedReady OpenBao bootstrap was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsPodIPHAAddress(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("        apiAddr: https://openbao-active.openbao.svc:8200"), []byte("        apiAddr: https://$(POD_IP):8200"))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "TLS HA Raft contract") {
+		t.Fatalf("Pod-IP OpenBao HA address was accepted: %v", err)
+	}
+}
+
 func TestSecretManagerProfileRejectsReadinessTLSSkipVerify(t *testing.T) {
 	root := copyProfile(t)
 	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
