@@ -55,8 +55,13 @@ go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-packa
 Expected output:
 
 ```text
-ocs_connector_package_valid examples/synthetic-service-module/connector-package.json
+ocs_connector_package_valid input-sha256:<digest>
 ```
+
+`ocsctl` intentionally identifies every selected input with a stable opaque
+digest. It does not emit the selected path or the package-declared name to
+stdout or conformance evidence. Re-running the command with the same selected
+file and unchanged content produces the same identity.
 
 Run conformance against a module package when the package includes the reference
 module surfaces:

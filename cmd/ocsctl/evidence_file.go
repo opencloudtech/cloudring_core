@@ -12,6 +12,7 @@ const evidenceTemporaryPattern = ".ocsctl-evidence-*"
 type evidenceWriteHooks struct {
 	afterCreateVerified     func(*os.File, string) error
 	beforeReplaceValidation func(string, string) error
+	beforePublish           func(string, string) error
 	remove                  func(string) error
 }
 
@@ -109,6 +110,11 @@ func writePrivateFileSafelyWithHooks(path string, data []byte, replace func(stri
 	}
 	if err := verifyEvidenceTemporary(path, temporaryPath, temporaryIdentity); err != nil {
 		return fmt.Errorf("verify evidence temporary file before replacement: %w", err)
+	}
+	if hooks.beforePublish != nil {
+		if err := hooks.beforePublish(temporaryPath, path); err != nil {
+			return fmt.Errorf("before evidence publication: %w", err)
+		}
 	}
 	if err := replace(temporaryPath, path); err != nil {
 		return fmt.Errorf("replace evidence file: %w", err)

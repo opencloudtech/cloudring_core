@@ -24,8 +24,12 @@ func TestRunValidateSuccessAndFailure(t *testing.T) {
 		if err := runWithIO([]string{"validate", validPath}, &stdout, &stderr); err != nil {
 			t.Fatalf("run validate: %v", err)
 		}
-		if !strings.Contains(stdout.String(), "ocs_connector_package_valid "+validPath) {
+		if !strings.Contains(stdout.String(), "ocs_connector_package_valid input-sha256:") {
 			t.Fatalf("stdout does not report the valid package: %q", stdout.String())
+		}
+		assertTextOmitsPath(t, stdout.String(), validPath)
+		if strings.Contains(stdout.String(), "synthetic-service-module-package") {
+			t.Fatalf("stdout leaks the declared package name: %q", stdout.String())
 		}
 		if stderr.Len() != 0 {
 			t.Fatalf("unexpected stderr: %q", stderr.String())
@@ -39,12 +43,14 @@ func TestRunValidateSuccessAndFailure(t *testing.T) {
 			t.Fatalf("expected aggregate validation failure, got %v", err)
 		}
 		output := stdout.String()
-		if !strings.Contains(output, "ocs_connector_package_invalid "+invalidPath) {
+		if !strings.Contains(output, "ocs_connector_package_invalid input-sha256:") {
 			t.Fatalf("stdout does not report the invalid package: %q", output)
 		}
-		if !strings.Contains(output, "ocs_connector_package_valid "+validPath) {
+		if !strings.Contains(output, "ocs_connector_package_valid input-sha256:") {
 			t.Fatalf("validation stopped before the valid operand: %q", output)
 		}
+		assertTextOmitsPath(t, output, invalidPath)
+		assertTextOmitsPath(t, output, validPath)
 	})
 }
 
@@ -93,16 +99,23 @@ func TestRunConformanceSuccessAndFailureEvidence(t *testing.T) {
 		if err := runWithIO([]string{"conformance", validPath, "--evidence", evidencePath}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("run conformance: %v", err)
 		}
-		if !strings.Contains(stdout.String(), "ocs_conformance_passed "+validPath) {
+		if !strings.Contains(stdout.String(), "ocs_conformance_passed input-sha256:") {
 			t.Fatalf("stdout does not report conformance success: %q", stdout.String())
+		}
+		assertTextOmitsPath(t, stdout.String(), validPath)
+		if strings.Contains(stdout.String(), "synthetic-service-module-package") {
+			t.Fatalf("stdout leaks the declared package name: %q", stdout.String())
 		}
 
 		var report ocsv3.ConformanceReport
 		if err := json.Unmarshal(readTestFile(t, evidencePath), &report); err != nil {
 			t.Fatalf("decode success evidence: %v", err)
 		}
-		if !report.Passed || report.PackageName != "synthetic-service-module-package" {
+		if !report.Passed || !strings.HasPrefix(report.PackageName, "input-sha256:") || report.PackageVersion != "v0.1.0" {
 			t.Fatalf("unexpected success report: %+v", report)
+		}
+		if strings.Contains(string(readTestFile(t, evidencePath)), "synthetic-service-module-package") {
+			t.Fatal("success evidence leaks the declared package name")
 		}
 	})
 
@@ -114,18 +127,403 @@ func TestRunConformanceSuccessAndFailureEvidence(t *testing.T) {
 		if err == nil || err.Error() != "conformance failed for 1 connector package(s)" {
 			t.Fatalf("expected conformance failure, got %v", err)
 		}
-		if !strings.Contains(stdout.String(), "ocs_conformance_failed "+invalidPath) {
+		if !strings.Contains(stdout.String(), "ocs_conformance_failed input-sha256:") {
 			t.Fatalf("stdout does not report conformance failure: %q", stdout.String())
 		}
+		assertTextOmitsPath(t, stdout.String(), invalidPath)
 
 		var report ocsv3.ConformanceReport
 		if err := json.Unmarshal(readTestFile(t, evidencePath), &report); err != nil {
 			t.Fatalf("decode failure evidence: %v", err)
 		}
-		if report.Passed || report.PackageName != invalidPath || report.Summary == "" {
+		if report.Passed || !strings.HasPrefix(report.PackageName, "input-sha256:") || report.Summary == "" {
 			t.Fatalf("unexpected failure report: %+v", report)
 		}
+		assertTextOmitsPath(t, string(readTestFile(t, evidencePath)), invalidPath)
 	})
+}
+
+func TestOperatorSelectedPathsNeverReachOutputOrEvidence(t *testing.T) {
+	directory := privateEvidenceTestDirectory(t)
+	inputPath := writeTestFileInDirectory(t, directory, []byte("{\n"))
+	evidencePath := filepath.Join(directory, "failure-evidence.json")
+
+	var validateOutput bytes.Buffer
+	validateErr := runWithIO([]string{"validate", inputPath}, &validateOutput, &bytes.Buffer{})
+	if validateErr == nil {
+		t.Fatal("validate unexpectedly passed malformed input")
+	}
+	assertTextOmitsPath(t, validateOutput.String(), inputPath)
+	assertTextOmitsPath(t, validateErr.Error(), inputPath)
+
+	var conformanceOutput bytes.Buffer
+	conformanceErr := runWithIO([]string{"conformance", inputPath, "--evidence", evidencePath}, &conformanceOutput, &bytes.Buffer{})
+	if conformanceErr == nil {
+		t.Fatal("conformance unexpectedly passed malformed input")
+	}
+	assertTextOmitsPath(t, conformanceOutput.String(), inputPath)
+	assertTextOmitsPath(t, conformanceErr.Error(), inputPath)
+	evidence := string(readTestFile(t, evidencePath))
+	assertTextOmitsPath(t, evidence, inputPath)
+	if !strings.Contains(evidence, `"packageName": "input-sha256:`) {
+		t.Fatalf("failure evidence lacks an opaque input identity: %s", evidence)
+	}
+}
+
+func TestUnsafeDeclaredPackageNameCannotReintroduceSelectedPath(t *testing.T) {
+	directory := privateEvidenceTestDirectory(t)
+	inputPath := filepath.Join(directory, "operator-selected-package.json")
+	var fixture map[string]any
+	if err := json.Unmarshal(readTestFile(t, validConnectorFixture(t)), &fixture); err != nil {
+		t.Fatalf("decode valid fixture: %v", err)
+	}
+	metadata, ok := fixture["metadata"].(map[string]any)
+	if !ok {
+		t.Fatal("valid fixture metadata is not an object")
+	}
+	metadata["name"] = inputPath
+	data, err := json.Marshal(fixture)
+	if err != nil {
+		t.Fatalf("encode unsafe-name fixture: %v", err)
+	}
+	if err := writeTestFileWithinParent(inputPath, data, 0o600); err != nil {
+		t.Fatalf("write unsafe-name fixture: %v", err)
+	}
+	evidencePath := filepath.Join(directory, "unsafe-name-evidence.json")
+
+	var stdout bytes.Buffer
+	err = runWithIO([]string{"conformance", inputPath, "--evidence", evidencePath}, &stdout, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("conformance with an otherwise valid package failed: %v", err)
+	}
+	assertTextOmitsPath(t, stdout.String(), inputPath)
+	evidence := string(readTestFile(t, evidencePath))
+	assertTextOmitsPath(t, evidence, inputPath)
+	if !strings.Contains(evidence, `"packageName": "input-sha256:`) {
+		t.Fatalf("unsafe package name was not replaced with an opaque identity: %s", evidence)
+	}
+}
+
+func TestDeclaredPackageNamesAlwaysUseStableOpaqueIdentity(t *testing.T) {
+	declaredNames := []string{
+		"synthetic-service-module-package",
+		"ghp_",
+		"github_pat_",
+		"AKIA",
+		"private-api.corp.example.invalid",
+		"Q7mP9xK2" + "vN4rT8cL6wF3sH1jD5bZ0aY",
+	}
+	for _, declaredName := range declaredNames {
+		t.Run(strings.ReplaceAll(declaredName, "/", "_"), func(t *testing.T) {
+			directory := privateEvidenceTestDirectory(t)
+			inputPath := filepath.Join(directory, "operator-selected-package.json")
+			name := declaredName
+			pkg, err := ocsv3.ParseConnectorPackage(readTestFile(t, validConnectorFixture(t)))
+			if err != nil {
+				t.Fatalf("parse valid fixture: %v", err)
+			}
+			pkg.Metadata.Name = name
+			data, err := json.Marshal(pkg)
+			if err != nil {
+				t.Fatalf("encode declared-name fixture: %v", err)
+			}
+			if err := writeTestFileWithinParent(inputPath, data, 0o600); err != nil {
+				t.Fatalf("write declared-name fixture: %v", err)
+			}
+
+			var validateOutput bytes.Buffer
+			if err := runWithIO([]string{"validate", inputPath}, &validateOutput, &bytes.Buffer{}); err != nil {
+				t.Fatalf("validate declared-name fixture: %v", err)
+			}
+			runConformance := func(evidenceName string) (ocsv3.ConformanceReport, string) {
+				t.Helper()
+				evidencePath := filepath.Join(directory, evidenceName)
+				var stdout bytes.Buffer
+				if err := runWithIO([]string{"conformance", inputPath, "--evidence", evidencePath}, &stdout, &bytes.Buffer{}); err != nil {
+					t.Fatalf("run declared-name conformance: %v", err)
+				}
+				var report ocsv3.ConformanceReport
+				if err := json.Unmarshal(readTestFile(t, evidencePath), &report); err != nil {
+					t.Fatalf("decode declared-name evidence: %v", err)
+				}
+				return report, stdout.String() + string(readTestFile(t, evidencePath))
+			}
+			first, firstOutput := runConformance("first-evidence.json")
+			second, secondOutput := runConformance("second-evidence.json")
+			if !first.Passed || !strings.HasPrefix(first.PackageName, "input-sha256:") {
+				t.Fatalf("unexpected opaque report: %+v", first)
+			}
+			if first.PackageName != second.PackageName {
+				t.Fatalf("opaque identity changed for unchanged input: %q != %q", first.PackageName, second.PackageName)
+			}
+			if !strings.Contains(validateOutput.String(), "ocs_connector_package_valid "+first.PackageName) {
+				t.Fatalf("validate output does not use opaque identity %q: %q", first.PackageName, validateOutput.String())
+			}
+			allOutput := validateOutput.String() + firstOutput + secondOutput
+			for _, sensitive := range []string{name, strings.ToLower(name), inputPath, strings.ToLower(inputPath)} {
+				if sensitive != "" && strings.Contains(allOutput, sensitive) {
+					t.Fatalf("output/evidence leaks declared input value %q: %q", sensitive, allOutput)
+				}
+			}
+		})
+	}
+
+	t.Run("selected path as declared name", func(t *testing.T) {
+		directory := privateEvidenceTestDirectory(t)
+		inputPath := filepath.Join(directory, "operator-selected-package.json")
+		pkg, err := ocsv3.ParseConnectorPackage(readTestFile(t, validConnectorFixture(t)))
+		if err != nil {
+			t.Fatalf("parse valid fixture: %v", err)
+		}
+		pkg.Metadata.Name = inputPath
+		data, err := json.Marshal(pkg)
+		if err != nil {
+			t.Fatalf("encode selected-path name fixture: %v", err)
+		}
+		if err := writeTestFileWithinParent(inputPath, data, 0o600); err != nil {
+			t.Fatalf("write selected-path name fixture: %v", err)
+		}
+		evidencePath := filepath.Join(directory, "evidence.json")
+		var stdout bytes.Buffer
+		if err := runWithIO([]string{"conformance", inputPath, "--evidence", evidencePath}, &stdout, &bytes.Buffer{}); err != nil {
+			t.Fatalf("run selected-path name conformance: %v", err)
+		}
+		assertTextOmitsPath(t, stdout.String(), inputPath)
+		assertTextOmitsPath(t, string(readTestFile(t, evidencePath)), inputPath)
+	})
+}
+
+func TestUntrustedVersionAndDynamicNamesAreSanitized(t *testing.T) {
+	for _, reverseOverlapOrder := range []bool{false, true} {
+		name := "short before long"
+		if reverseOverlapOrder {
+			name = "long before short"
+		}
+		t.Run(name, func(t *testing.T) {
+			directory := privateEvidenceTestDirectory(t)
+			inputPath := filepath.Join(directory, "operator-selected-package.json")
+			pkg, err := ocsv3.ParseConnectorPackage(readTestFile(t, validConnectorFixture(t)))
+			if err != nil {
+				t.Fatalf("parse valid fixture: %v", err)
+			}
+			if len(pkg.Service.Spec.Lifecycle) < 5 || len(pkg.Service.Spec.States) < 4 {
+				t.Fatal("valid fixture lacks lifecycle/state sanitization fixtures")
+			}
+
+			const actionShort = "OverlapActionSecret"
+			const actionLong = actionShort + "-LongSuffixSecret"
+			actionOverlap := []string{actionShort, actionLong}
+			const stateShort = "OverlapStateSecret"
+			const stateLong = stateShort + "-LongSuffixSecret"
+			stateOverlap := []string{stateShort, stateLong}
+			if reverseOverlapOrder {
+				actionOverlap[0], actionOverlap[1] = actionOverlap[1], actionOverlap[0]
+				stateOverlap[0], stateOverlap[1] = stateOverlap[1], stateOverlap[0]
+			}
+			const punctuatedAction = "Päth/秘密:ActionSecret"
+			const punctuatedState = "Σ-state/秘密:StateSecret"
+			const selectedSuffix = "SelectedPathSuffixSecret"
+			actionNames := []string{actionOverlap[0], actionOverlap[1], punctuatedAction, inputPath, inputPath + "-" + selectedSuffix}
+			stateNames := []string{stateOverlap[0], stateOverlap[1], punctuatedState, inputPath + "-" + selectedSuffix}
+			pkg.Metadata.Version = inputPath + "-VersionSecret"
+			for index, actionName := range actionNames {
+				pkg.Service.Spec.Lifecycle[index].Name = actionName
+				pkg.Service.Spec.Lifecycle[index].Idempotent = false
+				pkg.Service.Spec.Lifecycle[index].IdempotencyKey = ""
+			}
+			for index, stateName := range stateNames {
+				pkg.Service.Spec.States[index].Name = stateName
+				pkg.Service.Spec.States[index].EvidenceRef = ""
+				pkg.Service.Spec.States[index].Remediation = ""
+			}
+			data, err := json.Marshal(pkg)
+			if err != nil {
+				t.Fatalf("encode untrusted-value fixture: %v", err)
+			}
+			if err := writeTestFileWithinParent(inputPath, data, 0o600); err != nil {
+				t.Fatalf("write untrusted-value fixture: %v", err)
+			}
+			evidencePath := filepath.Join(directory, "sanitized-evidence.json")
+
+			var stdout bytes.Buffer
+			err = runWithIO([]string{"conformance", inputPath, "--evidence", evidencePath}, &stdout, &bytes.Buffer{})
+			if err == nil {
+				t.Fatal("conformance unexpectedly passed invalid lifecycle/state entries")
+			}
+			evidence := string(readTestFile(t, evidencePath))
+			sensitiveValues := append(append([]string{}, actionNames...), stateNames...)
+			sensitiveValues = append(sensitiveValues, inputPath, selectedSuffix, "LongSuffixSecret", "VersionSecret")
+			for label, text := range map[string]string{"stdout": stdout.String(), "error": err.Error(), "evidence": evidence} {
+				assertTextOmitsPath(t, text, inputPath)
+				for _, sensitive := range sensitiveValues {
+					for _, variant := range []string{sensitive, strings.ToLower(sensitive)} {
+						if variant != "" && strings.Contains(text, variant) {
+							t.Fatalf("%s leaks untrusted dynamic value %q: %q", label, variant, text)
+						}
+					}
+				}
+			}
+			var report ocsv3.ConformanceReport
+			if err := json.Unmarshal([]byte(evidence), &report); err != nil {
+				t.Fatalf("decode sanitized report: %v", err)
+			}
+			if report.PackageVersion != "redacted" {
+				t.Fatalf("packageVersion = %q, want redacted", report.PackageVersion)
+			}
+			joinedProblems, err := json.Marshal(report.Problems)
+			if err != nil {
+				t.Fatalf("encode sanitized problems: %v", err)
+			}
+			if !bytes.Contains(joinedProblems, []byte("custom-action")) || !bytes.Contains(joinedProblems, []byte("custom-state")) {
+				t.Fatalf("sanitized problem identities are missing: %s", joinedProblems)
+			}
+		})
+	}
+}
+
+func TestRunConformanceUsesDistinctStableOpaqueIdentitiesForMultipleInputs(t *testing.T) {
+	directory := privateEvidenceTestDirectory(t)
+	first := writeTestFileInDirectory(t, directory, []byte("{\n"))
+	second := writeTestFileInDirectory(t, directory, []byte("{\n"))
+
+	runOnce := func(evidenceName string) []ocsv3.ConformanceReport {
+		t.Helper()
+		evidencePath := filepath.Join(directory, evidenceName)
+		err := runWithIO([]string{"conformance", first, second, "--evidence", evidencePath}, &bytes.Buffer{}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatal("conformance unexpectedly passed malformed inputs")
+		}
+		var reports []ocsv3.ConformanceReport
+		if err := json.Unmarshal(readTestFile(t, evidencePath), &reports); err != nil {
+			t.Fatalf("decode multi-input evidence: %v", err)
+		}
+		return reports
+	}
+
+	firstRun := runOnce("first.json")
+	secondRun := runOnce("second.json")
+	if len(firstRun) != 2 || len(secondRun) != 2 {
+		t.Fatalf("report counts = %d and %d, want 2", len(firstRun), len(secondRun))
+	}
+	if firstRun[0].PackageName == firstRun[1].PackageName {
+		t.Fatalf("different selected inputs received the same identity %q", firstRun[0].PackageName)
+	}
+	for index := range firstRun {
+		if !strings.HasPrefix(firstRun[index].PackageName, "input-sha256:") {
+			t.Fatalf("report %d identity = %q, want opaque digest", index, firstRun[index].PackageName)
+		}
+		if firstRun[index].PackageName != secondRun[index].PackageName {
+			t.Fatalf("report %d identity changed between runs: %q != %q", index, firstRun[index].PackageName, secondRun[index].PackageName)
+		}
+	}
+}
+
+func TestRunConformanceRejectsEvidenceInputAliasesBeforePublication(t *testing.T) {
+	validBytes := readTestFile(t, validConnectorFixture(t))
+
+	t.Run("lexical canonical path", func(t *testing.T) {
+		directory := privateEvidenceTestDirectory(t)
+		inputPath := writeTestFileInDirectory(t, directory, validBytes)
+		before := append([]byte(nil), readTestFile(t, inputPath)...)
+		intermediate := filepath.Join(directory, "intermediate")
+		if err := os.Mkdir(intermediate, 0o700); err != nil {
+			t.Fatalf("create lexical alias component: %v", err)
+		}
+		evidenceAlias := directory + string(os.PathSeparator) + "intermediate" + string(os.PathSeparator) + ".." + string(os.PathSeparator) + filepath.Base(inputPath)
+
+		err := runWithIO([]string{"conformance", inputPath, "--evidence", evidenceAlias}, &bytes.Buffer{}, &bytes.Buffer{})
+		assertEvidenceAliasRejected(t, err)
+		if got := readTestFile(t, inputPath); !bytes.Equal(got, before) {
+			t.Fatal("input bytes changed after lexical evidence collision")
+		}
+		assertNoEvidenceTemporaryFiles(t, directory)
+	})
+
+	t.Run("symlink or reparse resolution", func(t *testing.T) {
+		directory := privateEvidenceTestDirectory(t)
+		inputPath := writeTestFileInDirectory(t, directory, validBytes)
+		before := append([]byte(nil), readTestFile(t, inputPath)...)
+		evidenceAlias := filepath.Join(directory, "evidence-link.json")
+		if err := os.Symlink(filepath.Base(inputPath), evidenceAlias); err != nil {
+			t.Skipf("symlink/reparse aliases are unavailable: %v", err)
+		}
+
+		err := runWithIO([]string{"conformance", inputPath, "--evidence", evidenceAlias}, &bytes.Buffer{}, &bytes.Buffer{})
+		assertEvidenceAliasRejected(t, err)
+		if got := readTestFile(t, inputPath); !bytes.Equal(got, before) {
+			t.Fatal("input bytes changed after symlink evidence collision")
+		}
+		info, statErr := os.Lstat(evidenceAlias)
+		if statErr != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("evidence alias was changed after rejection: info=%v err=%v", info, statErr)
+		}
+		assertNoEvidenceTemporaryFiles(t, directory)
+	})
+
+	t.Run("hardlink file identity", func(t *testing.T) {
+		directory := privateEvidenceTestDirectory(t)
+		inputPath := writeTestFileInDirectory(t, directory, validBytes)
+		before := append([]byte(nil), readTestFile(t, inputPath)...)
+		evidenceAlias := filepath.Join(directory, "evidence-hardlink.json")
+		if err := os.Link(inputPath, evidenceAlias); err != nil {
+			t.Skipf("hardlink aliases are unavailable: %v", err)
+		}
+
+		err := runWithIO([]string{"conformance", inputPath, "--evidence", evidenceAlias}, &bytes.Buffer{}, &bytes.Buffer{})
+		assertEvidenceAliasRejected(t, err)
+		if got := readTestFile(t, inputPath); !bytes.Equal(got, before) {
+			t.Fatal("input bytes changed after hardlink evidence collision")
+		}
+		if got := readTestFile(t, evidenceAlias); !bytes.Equal(got, before) {
+			t.Fatal("hardlink bytes changed after evidence collision")
+		}
+		assertNoEvidenceTemporaryFiles(t, directory)
+	})
+
+	t.Run("separate destination succeeds", func(t *testing.T) {
+		directory := privateEvidenceTestDirectory(t)
+		inputPath := writeTestFileInDirectory(t, directory, validBytes)
+		evidencePath := filepath.Join(directory, "evidence.json")
+		if err := runWithIO([]string{"conformance", inputPath, "--evidence", evidencePath}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("separate evidence destination failed: %v", err)
+		}
+		if got := readTestFile(t, inputPath); !bytes.Equal(got, validBytes) {
+			t.Fatal("successful evidence publication changed input bytes")
+		}
+		var report ocsv3.ConformanceReport
+		if err := json.Unmarshal(readTestFile(t, evidencePath), &report); err != nil {
+			t.Fatalf("decode separate evidence: %v", err)
+		}
+		if !report.Passed || !strings.HasPrefix(report.PackageName, "input-sha256:") {
+			t.Fatalf("unexpected successful report: %+v", report)
+		}
+	})
+}
+
+func TestEvidenceInputGuardRevalidatesLateHardlinkCollision(t *testing.T) {
+	directory := privateEvidenceTestDirectory(t)
+	inputPath := writeTestFileInDirectory(t, directory, readTestFile(t, validConnectorFixture(t)))
+	evidencePath := filepath.Join(directory, "late-hardlink.json")
+	input := openOperatorSelectedInput(inputPath)
+	defer func() {
+		if err := input.close(); err != nil {
+			t.Fatalf("close selected input: %v", err)
+		}
+	}()
+	guard, err := newEvidenceInputGuard(evidencePath, []*operatorSelectedInput{input})
+	if err != nil {
+		t.Fatalf("create evidence guard before collision: %v", err)
+	}
+	before := append([]byte(nil), input.data...)
+	if err := os.Link(inputPath, evidencePath); err != nil {
+		t.Skipf("hardlink aliases are unavailable: %v", err)
+	}
+
+	err = guard.verify()
+	assertEvidenceAliasRejected(t, err)
+	if got := readTestFile(t, inputPath); !bytes.Equal(got, before) {
+		t.Fatal("late collision verification changed input bytes")
+	}
 }
 
 func TestParseConformanceArgs(t *testing.T) {
@@ -139,6 +537,8 @@ func TestParseConformanceArgs(t *testing.T) {
 		{name: "package only", args: []string{"package.json"}, wantPaths: []string{"package.json"}},
 		{name: "separate evidence", args: []string{"a.json", "--evidence", "report.json", "b.json"}, wantPaths: []string{"a.json", "b.json"}, wantEvidence: "report.json"},
 		{name: "equals evidence", args: []string{"--evidence=report.json", "package.json"}, wantPaths: []string{"package.json"}, wantEvidence: "report.json"},
+		{name: "dash-prefixed operand after sentinel", args: []string{"--", "-package.json"}, wantPaths: []string{"-package.json"}},
+		{name: "flags stop at sentinel", args: []string{"--evidence", "report.json", "--", "-package.json", "--literal-file"}, wantPaths: []string{"-package.json", "--literal-file"}, wantEvidence: "report.json"},
 		{name: "no package", wantError: "usage: ocsctl conformance"},
 		{name: "missing evidence value", args: []string{"package.json", "--evidence"}, wantError: "usage: --evidence requires a path"},
 		{name: "empty separate evidence", args: []string{"package.json", "--evidence", ""}, wantError: "usage: --evidence requires a path"},
@@ -165,6 +565,49 @@ func TestParseConformanceArgs(t *testing.T) {
 				t.Fatalf("evidence = %q, want %q", evidence, test.wantEvidence)
 			}
 		})
+	}
+}
+
+func TestParseConformanceArgsDoesNotEchoUnknownFlag(t *testing.T) {
+	const sensitiveFlag = "--operator-secret=/private/selected/package.json"
+	_, _, err := parseConformanceArgs([]string{"package.json", sensitiveFlag})
+	if err == nil || err.Error() != "unknown conformance flag" {
+		t.Fatalf("unknown flag error = %v, want generic refusal", err)
+	}
+	if strings.Contains(err.Error(), sensitiveFlag) || strings.Contains(err.Error(), "/private/selected/package.json") {
+		t.Fatalf("unknown flag error leaks argv content: %q", err)
+	}
+}
+
+func TestRunConformanceAcceptsDashPrefixedOperandAfterSentinel(t *testing.T) {
+	validBytes := readTestFile(t, validConnectorFixture(t))
+	directory := privateEvidenceTestDirectory(t)
+	inputPath := filepath.Join(directory, "-package.json")
+	if err := writeTestFileWithinParent(inputPath, validBytes, 0o600); err != nil {
+		t.Fatalf("write dash-prefixed package: %v", err)
+	}
+	originalDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("read working directory: %v", err)
+	}
+	if err := os.Chdir(directory); err != nil {
+		t.Fatalf("enter dash-prefixed package directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalDirectory); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+	}()
+
+	var stdout bytes.Buffer
+	if err := runWithIO([]string{"conformance", "--", "-package.json"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run conformance with dash-prefixed operand: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ocs_conformance_passed input-sha256:") {
+		t.Fatalf("unexpected conformance output: %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "-package.json") || strings.Contains(stdout.String(), inputPath) {
+		t.Fatalf("dash-prefixed operand leaked to output: %q", stdout.String())
 	}
 }
 
@@ -428,6 +871,23 @@ func assertNoEvidenceTemporaryFiles(t *testing.T, directory string) {
 	}
 	if len(matches) != 0 {
 		t.Fatalf("evidence temporary files were not cleaned up: %v", matches)
+	}
+}
+
+func assertEvidenceAliasRejected(t *testing.T, err error) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), "evidence destination aliases a connector package input") {
+		t.Fatalf("evidence alias error = %v, want fail-closed collision refusal", err)
+	}
+}
+
+func assertTextOmitsPath(t *testing.T, text string, path string) {
+	t.Helper()
+	variants := []string{path, filepath.Clean(path), filepath.ToSlash(path)}
+	for _, variant := range variants {
+		if variant != "" && strings.Contains(text, variant) {
+			t.Fatalf("text leaks operator-selected path %q: %q", variant, text)
+		}
 	}
 }
 
