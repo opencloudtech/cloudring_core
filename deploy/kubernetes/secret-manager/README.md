@@ -110,6 +110,12 @@ service account, namespace, and backend path, wait for `SecretStore` and a
 synthetic canary `ExternalSecret` to become Ready, and verify rotation and
 revocation. None of those live gates is claimed by this profile.
 
+Use the source-only Go planner in
+`contracts/openbao-kubernetes-auth/README.md` to validate the typed auth-mount,
+policy, and role contract before any live mutation. Its sanitized report is not
+an executable plan and does not replace pre-state, rollback, API readback, or
+the positive and negative live gates above.
+
 The OpenBao, External Secrets, and trust-manager images are digest-pinned. Chart
 versions remain explicit so a provider can review chart templates and image
 changes independently.
