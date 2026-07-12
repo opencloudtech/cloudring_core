@@ -29,6 +29,18 @@ integration code outside this CloudRING public contract.
 - `fixtures/synthetic-module-registry.json` is the valid registry fixture.
 - `fixtures/invalid-*.json` fixtures prove fail-closed verifier behavior.
 
+Validate the contract through the public Go consumer:
+
+```bash
+go run ./cmd/cloudring-registry validate \
+  ./contracts/module-registry/fixtures/synthetic-module-registry.json
+```
+
+The validator checks the typed registry shape, source-safety flags, dependency
+graph, lifecycle operations, and idempotent plan references. It never loads or
+executes a service implementation and returns exit code `2` for a blocked
+registry.
+
 ## Non-Claims
 
 The fixtures do not prove a deployed marketplace, service installation, billing
