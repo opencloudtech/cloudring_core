@@ -45,6 +45,8 @@ full platform extraction or a production installation is complete.
 - Read `docs/public-boundary.md` before adding public material.
 - Follow `docs/developer-guide.md` for the developer path.
 - Use `docs/conformance.md` to validate OCSv3 module packages.
+- Use `docs/http-transport-security.md` for the provider-neutral public HTTP
+  transport and response-header audit.
 - Use `examples/synthetic-service-module/connector-package.json`
   as the smallest connector-package example.
 - Use `reference/synthetic-service/module-package.json` as the
@@ -70,6 +72,15 @@ go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.jso
 The example package is synthetic. It is intended for local validation and does
 not include live provider values, tenant records, credentials, or deployment
 receipts.
+
+## HTTP security audit
+
+`cloudring-httpcheck` checks a declared browser or API surface without
+following redirects, reading response bodies, or copying URLs and response
+values into its report. Canary and steady modes enforce different redirect and
+HSTS promotion rules. See `docs/http-transport-security.md` for the exact
+contract, command line, and exit codes. Deployment-specific targets and live
+evidence stay in downstream provider repositories.
 
 ## Contribution path
 
