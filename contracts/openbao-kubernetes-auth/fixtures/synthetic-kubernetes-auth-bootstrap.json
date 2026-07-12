@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "cloudring.openbao-kubernetes-auth-plan/v1",
+  "authMount": "kubernetes",
+  "kvV2Mount": "cloudring",
+  "dataPrefix": "services/cloudring-consumer-example",
+  "policyName": "cloudring-consumer-example-kv-read",
+  "roleName": "cloudring-consumer-example",
+  "workloadIdentity": {
+    "namespace": "cloudring-consumer-example",
+    "serviceAccount": "cloudring-openbao-reader"
+  },
+  "audience": "openbao",
+  "aliasNameSource": "serviceaccount_uid",
+  "tokenTTL": "10m",
+  "tokenMaxTTL": "30m",
+  "tokenNoDefaultPolicy": true
+}
