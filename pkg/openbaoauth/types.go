@@ -1,0 +1,160 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+// Package openbaoauth defines the source-only CloudRING contract for planning
+// least-privilege OpenBao Kubernetes authentication. It never performs network
+// requests or writes operator input to disk.
+package openbaoauth
+
+const (
+	// SchemaVersion identifies the first CloudRING OpenBao Kubernetes-auth plan.
+	SchemaVersion = "cloudring.openbao-kubernetes-auth-plan/v1"
+	// MaxInputBytes bounds stdin before decoding.
+	MaxInputBytes = 64 * 1024
+)
+
+// Contract is the complete non-secret input for one workload identity.
+type Contract struct {
+	SchemaVersion        string           `json:"schemaVersion"`
+	AuthMount            string           `json:"authMount"`
+	KVV2Mount            string           `json:"kvV2Mount"`
+	DataPrefix           string           `json:"dataPrefix"`
+	PolicyName           string           `json:"policyName"`
+	RoleName             string           `json:"roleName"`
+	WorkloadIdentity     WorkloadIdentity `json:"workloadIdentity"`
+	Audience             string           `json:"audience"`
+	AliasNameSource      string           `json:"aliasNameSource"`
+	TokenTTL             string           `json:"tokenTTL"`
+	TokenMaxTTL          string           `json:"tokenMaxTTL"`
+	TokenNoDefaultPolicy bool             `json:"tokenNoDefaultPolicy"`
+}
+
+// WorkloadIdentity binds an OpenBao role to exactly one Kubernetes identity.
+type WorkloadIdentity struct {
+	Namespace      string `json:"namespace"`
+	ServiceAccount string `json:"serviceAccount"`
+}
+
+// Problem is a stable, evidence-safe validation result. Message text and
+// operator-provided values are deliberately absent.
+type Problem struct {
+	Path string `json:"path"`
+	Code string `json:"code"`
+}
+
+// Plan is a typed desired-state plan. It is intentionally not serialized by
+// the CLI because it contains provider/site identifiers.
+type Plan struct {
+	AuthMount  AuthMountDesired
+	AuthConfig KubernetesConfigDesired
+	ACLPolicy  ACLPolicyDesired
+	Role       KubernetesRoleDesired
+	Actions    []Action
+}
+
+// AuthMountDesired describes the supported OpenBao auth mount type.
+type AuthMountDesired struct {
+	Type        string `json:"type"`
+	Description string `json:"description"`
+}
+
+// KubernetesConfigDesired uses only OpenBao's rotating pod-local reviewer
+// token and CA. No credential material is accepted by Contract.
+type KubernetesConfigDesired struct {
+	KubernetesHost       string   `json:"kubernetes_host"`
+	KubernetesCACert     string   `json:"kubernetes_ca_cert"`
+	TokenReviewerJWT     string   `json:"token_reviewer_jwt"`
+	PEMKeys              []string `json:"pem_keys"`
+	Issuer               string   `json:"issuer"`
+	DisableISSValidation bool     `json:"disable_iss_validation"`
+	DisableLocalCAJWT    bool     `json:"disable_local_ca_jwt"`
+}
+
+// ACLPolicyDesired is one read-only KV-v2 policy.
+type ACLPolicyDesired struct {
+	Policy      string `json:"policy"`
+	CAS         int    `json:"cas"`
+	CASRequired bool   `json:"cas_required"`
+}
+
+// KubernetesRoleDesired is an exact, non-wildcard workload role.
+type KubernetesRoleDesired struct {
+	BoundServiceAccountNames             []string `json:"bound_service_account_names"`
+	BoundServiceAccountNamespaces        []string `json:"bound_service_account_namespaces"`
+	BoundServiceAccountNamespaceSelector string   `json:"bound_service_account_namespace_selector"`
+	Audience                             string   `json:"audience"`
+	AliasNameSource                      string   `json:"alias_name_source"`
+	TokenPolicies                        []string `json:"token_policies"`
+	TokenNoDefaultPolicy                 bool     `json:"token_no_default_policy"`
+	TokenTTL                             string   `json:"token_ttl"`
+	TokenMaxTTL                          string   `json:"token_max_ttl"`
+	TokenExplicitMaxTTL                  string   `json:"token_explicit_max_ttl"`
+	TokenType                            string   `json:"token_type"`
+	TokenNumUses                         int      `json:"token_num_uses"`
+	TokenPeriod                          int      `json:"token_period"`
+	TokenBoundCIDRs                      []string `json:"token_bound_cidrs"`
+	TokenStrictlyBindIP                  bool     `json:"token_strictly_bind_ip"`
+}
+
+// Action is one preflight or conditional mutation in the ordered plan.
+type Action struct {
+	ID                     string
+	Method                 string
+	EndpointClass          string
+	Target                 string
+	Mutates                bool
+	Conditional            bool
+	PreStateRequired       bool
+	RollbackRequired       bool
+	CASMode                string
+	DesiredState           any
+	FailClosedPrecondition string
+	ChangeRequiresApproval bool
+}
+
+// Report is the only form emitted by the CLI. It contains hashes and fixed
+// policy facts, never raw identifiers, paths, HCL, endpoints, or input text.
+type Report struct {
+	SchemaVersion                 string          `json:"schemaVersion"`
+	Mode                          string          `json:"mode"`
+	Status                        string          `json:"status"`
+	MutationPerformed             bool            `json:"mutationPerformed"`
+	ApplyAuthorized               bool            `json:"applyAuthorized"`
+	ApplyApprovalNeeded           bool            `json:"applyApprovalNeeded"`
+	InputMaterialEchoed           bool            `json:"inputMaterialEchoed"`
+	IdentifierFingerprintsEmitted bool            `json:"identifierFingerprintsEmitted"`
+	Profile                       ProfileSummary  `json:"profile"`
+	Actions                       []ActionSummary `json:"actions,omitempty"`
+	Blockers                      []Problem       `json:"blockers,omitempty"`
+	RequiredLiveGates             []string        `json:"requiredLiveGates"`
+	NonClaims                     []string        `json:"nonClaims"`
+}
+
+// ProfileSummary contains only fixed CloudRING v1 policy values. It contains
+// no contract-provided identifiers.
+type ProfileSummary struct {
+	AuthType             string   `json:"authType"`
+	KubernetesHostMode   string   `json:"kubernetesHostMode"`
+	ReviewerSourceMode   string   `json:"reviewerSourceMode"`
+	Audience             string   `json:"audience"`
+	AliasNameSource      string   `json:"aliasNameSource"`
+	Capabilities         []string `json:"capabilities"`
+	BoundIdentityCount   int      `json:"boundIdentityCount"`
+	TokenTTL             string   `json:"tokenTtl"`
+	TokenMaxTTL          string   `json:"tokenMaxTtl"`
+	TokenNoDefaultPolicy bool     `json:"tokenNoDefaultPolicy"`
+}
+
+// ActionSummary is the evidence-safe projection of Action.
+type ActionSummary struct {
+	ID                     string `json:"id"`
+	Method                 string `json:"method"`
+	EndpointClass          string `json:"endpointClass"`
+	Mutates                bool   `json:"mutates"`
+	Conditional            bool   `json:"conditional"`
+	PreStateRequired       bool   `json:"preStateRequired"`
+	RollbackRequired       bool   `json:"rollbackRequired"`
+	CASMode                string `json:"casMode"`
+	FailClosedPrecondition string `json:"failClosedPrecondition,omitempty"`
+	ChangeApprovalRequired bool   `json:"changeApprovalRequired"`
+}
