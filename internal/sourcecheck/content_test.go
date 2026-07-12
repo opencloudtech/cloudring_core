@@ -89,6 +89,9 @@ func TestCredentialAssignment_uses_exact_keys_and_structural_references(t *testi
 	}
 	for _, line := range []string{
 		"notasecretary: literal-value",
+		"private" + "Key:",
+		"sec" + "ret:",
+		"sec" + "retRef:",
 		"pass" + "word: ${CLOUDRING_PASSWORD_ENV}",
 		"pass" + `word: os.Getenv("CLOUDRING_PASSWORD_ENV")`,
 		"pass" + `word := os.Getenv("CLOUDRING_PASSWORD_ENV")`,

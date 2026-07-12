@@ -425,7 +425,7 @@ jobs:
               eval -o=json -I=0 '.' "${workflow}")"
             case "${workflow}" in
               .github/workflows/ci.yml)
-                expected_jobs='["docscheck","go-build-module-integrity","go-test","go-test-race","go-vet","ocs-conformance","ocs-validate","source-safety","windows-go-test"]'
+                expected_jobs='["docscheck","go-build-module-integrity","go-test","go-test-race","go-vet","ocs-conformance","ocs-validate","platform-manifests","source-safety","windows-go-test"]'
                 ;;
               .github/workflows/cla-dco.yml)
                 expected_jobs='["cla","dco"]'

@@ -1,0 +1,187 @@
+{
+  "schemaVersion": "cloudring.module-registry/v1",
+  "registryId": "synthetic-core-modules",
+  "modelVersion": "2026.07.module-registry",
+  "sourceSafety": {
+    "syntheticFixture": true,
+    "containsServiceImplementationReferences": false,
+    "containsProviderEndpoints": false,
+    "containsSecrets": false,
+    "mutatesServices": false
+  },
+  "dependencyResolution": {
+    "strategy": "topological",
+    "cyclePolicy": "block",
+    "missingDependencyPolicy": "block",
+    "evidenceRef": "module-registry.dependency-resolution.receipt"
+  },
+  "modules": [
+    {
+      "id": "object-storage",
+      "displayName": "Object Storage",
+      "packageRef": "modules/object-storage/module-package.json",
+      "channel": "alpha3",
+      "version": "v0.1.0",
+      "state": "installed",
+      "lifecycleStates": [
+        "installable",
+        "installed",
+        "suspended",
+        "deprecated",
+        "not-installed"
+      ],
+      "dependencies": [],
+      "entitlementScope": "project",
+      "operations": {
+        "install": {
+          "action": "install",
+          "operationId": "object-storage.install.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+version",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.install",
+          "evidenceReceiptRef": "evidence.module.object-storage.install",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.install",
+          "nextAction": "record installation receipt"
+        },
+        "update": {
+          "action": "update",
+          "operationId": "object-storage.update.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+fromVersion+toVersion",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.update",
+          "evidenceReceiptRef": "evidence.module.object-storage.update",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.update",
+          "nextAction": "plan reviewed update with rollback receipt"
+        },
+        "remove": {
+          "action": "remove",
+          "operationId": "object-storage.remove.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+removalRequest",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.remove",
+          "evidenceReceiptRef": "evidence.module.object-storage.remove",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.remove",
+          "nextAction": "verify export evidence before removal plan"
+        },
+        "suspend": {
+          "action": "suspend",
+          "operationId": "object-storage.suspend.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+suspensionReason",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.suspend",
+          "evidenceReceiptRef": "evidence.module.object-storage.suspend",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.suspend",
+          "nextAction": "pause new operations and keep export path visible"
+        },
+        "deprecate": {
+          "action": "deprecate",
+          "operationId": "object-storage.deprecate.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+channel+deprecationNotice",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.deprecate",
+          "evidenceReceiptRef": "evidence.module.object-storage.deprecate",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.deprecate",
+          "nextAction": "block new installs and show update or exit guidance"
+        }
+      }
+    },
+    {
+      "id": "object-storage",
+      "displayName": "Duplicate Object Storage",
+      "packageRef": "modules/object-storage/module-package.json",
+      "channel": "alpha3",
+      "version": "v0.1.0",
+      "state": "installable",
+      "lifecycleStates": [
+        "installable",
+        "installed",
+        "suspended",
+        "deprecated",
+        "not-installed"
+      ],
+      "dependencies": [],
+      "entitlementScope": "project",
+      "operations": {
+        "install": {
+          "action": "install",
+          "operationId": "duplicate.install.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+version",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.duplicate.install",
+          "evidenceReceiptRef": "evidence.module.duplicate.install",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.duplicate.install",
+          "nextAction": "record installation receipt"
+        },
+        "update": {
+          "action": "update",
+          "operationId": "duplicate.update.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+fromVersion+toVersion",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.duplicate.update",
+          "evidenceReceiptRef": "evidence.module.duplicate.update",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.duplicate.update",
+          "nextAction": "plan reviewed update with rollback receipt"
+        },
+        "remove": {
+          "action": "remove",
+          "operationId": "duplicate.remove.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+removalRequest",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.duplicate.remove",
+          "evidenceReceiptRef": "evidence.module.duplicate.remove",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.duplicate.remove",
+          "nextAction": "verify export evidence before removal plan"
+        },
+        "suspend": {
+          "action": "suspend",
+          "operationId": "duplicate.suspend.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+suspensionReason",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.duplicate.suspend",
+          "evidenceReceiptRef": "evidence.module.duplicate.suspend",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.duplicate.suspend",
+          "nextAction": "pause new operations and keep export path visible"
+        },
+        "deprecate": {
+          "action": "deprecate",
+          "operationId": "duplicate.deprecate.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+channel+deprecationNotice",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.duplicate.deprecate",
+          "evidenceReceiptRef": "evidence.module.duplicate.deprecate",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.duplicate.deprecate",
+          "nextAction": "block new installs and show update or exit guidance"
+        }
+      }
+    }
+  ],
+  "planRequests": [
+    {
+      "name": "install-existing-object-storage",
+      "moduleId": "object-storage",
+      "action": "install",
+      "currentState": "installed",
+      "targetVersion": "v0.1.0"
+    }
+  ]
+}

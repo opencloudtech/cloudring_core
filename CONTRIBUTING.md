@@ -29,7 +29,7 @@ examples and portable capability names.
 
 ## Developer entry points
 
-Start with `cloudring_core/docs/public-boundary.md`, then add or update the
+Start with `docs/public-boundary.md`, then add or update the
 smallest complete public slice needed for the platform, service, or adapter.
 Include focused tests for behavior, failure modes, tenant boundaries, and
 portability; record only synthetic evidence for repository-level operational
@@ -52,8 +52,8 @@ git config core.hooksPath .githooks
 ```bash
 go test ./... -count=1
 go run ./cmd/cloudring-sourcecheck scan --scope changed
-go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./cloudring_core/reference/synthetic-service/module-package.json
+go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
+go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 ```
 
 4. Open a pull request with a concise summary, validation notes, and any

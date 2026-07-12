@@ -67,6 +67,23 @@ jobs:
           cache: true
       - run: go vet ./...
 
+  platform-manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Verify generic platform manifests
+        run: |
+          go test ./internal/platformmanifest -count=1
+          go run ./cmd/cloudring-manifestcheck --root .
+
   windows-go-test:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -122,7 +139,7 @@ jobs:
           go-version: 1.25.x
           check-latest: true
           cache: true
-      - run: go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json ./cloudring_core/reference/synthetic-service/module-package.json
+      - run: go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json ./reference/synthetic-service/module-package.json
 
   ocs-conformance:
     runs-on: ubuntu-latest
@@ -136,7 +153,7 @@ jobs:
           go-version: 1.25.x
           check-latest: true
           cache: true
-      - run: go run ./cmd/ocsctl conformance ./cloudring_core/reference/synthetic-service/module-package.json
+      - run: go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 
   docscheck:
     runs-on: ubuntu-latest
@@ -151,7 +168,8 @@ jobs:
           for file in README.md LICENSE NOTICE CONTRIBUTING.md SECURITY.md GOVERNANCE.md CLA.md DCO.md TRADEMARKS.md; do
             test -s "$file"
           done
-          test -s cloudring_core/docs/public-boundary.md
+          test -s docs/public-boundary.md
+          test -s deploy/kubernetes/secret-manager/README.md
 
   source-safety:
     runs-on: ubuntu-latest

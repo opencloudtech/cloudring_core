@@ -136,6 +136,13 @@ func credentialAssignment(line string) bool {
 		}
 		key := normalizeCredentialKey(line[match[2]:match[3]])
 		value := credentialScalar(line[valueStart:])
+		// An empty YAML sensitive-field mapping followed by indented structural
+		// fields contains no credential scalar. Nested lines are scanned
+		// independently, so treating the parent mapping as safe cannot hide an
+		// assigned credential value.
+		if value == "" {
+			continue
+		}
 		if referenceCredentialKey(key) {
 			if !validReferenceCredentialValue(key, value) {
 				return true

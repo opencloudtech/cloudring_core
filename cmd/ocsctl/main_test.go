@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/opencloudtech/CloudRING/cloudring_core/sdk/ocsv3"
+	"github.com/opencloudtech/CloudRING/sdk/ocsv3"
 )
 
 func TestRunValidateSuccessAndFailure(t *testing.T) {
@@ -371,7 +371,7 @@ func TestWriteConformanceEvidenceRejectsNonRegularDestination(t *testing.T) {
 
 func validConnectorFixture(t *testing.T) string {
 	t.Helper()
-	path, err := filepath.Abs(filepath.Join("..", "..", "cloudring_core", "reference", "synthetic-service", "module-package.json"))
+	path, err := filepath.Abs(filepath.Join("..", "..", "reference", "synthetic-service", "module-package.json"))
 	if err != nil {
 		t.Fatalf("resolve valid connector fixture: %v", err)
 	}

@@ -1,0 +1,429 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+package platformmanifest
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	profilePath  = "deploy/kubernetes/secret-manager"
+	maxFileBytes = 1 << 20
+)
+
+type Report struct {
+	Status    string   `json:"status"`
+	Profile   string   `json:"profile"`
+	Files     int      `json:"files"`
+	Documents int      `json:"documents"`
+	Checks    []string `json:"checks"`
+}
+
+type object struct {
+	Kind      string
+	Name      string
+	Namespace string
+	Data      map[string]any
+}
+
+type openBaoHCL struct {
+	UI                   bool                     `hcl:"ui"`
+	DisableMlock         bool                     `hcl:"disable_mlock"`
+	Listeners            []openBaoListener        `hcl:"listener,block"`
+	Storage              []openBaoStorage         `hcl:"storage,block"`
+	ServiceRegistrations []openBaoServiceRegistry `hcl:"service_registration,block"`
+}
+
+type openBaoListener struct {
+	Type            string `hcl:"type,label"`
+	Address         string `hcl:"address"`
+	ClusterAddress  string `hcl:"cluster_address"`
+	TLSDisable      int    `hcl:"tls_disable"`
+	TLSCertFile     string `hcl:"tls_cert_file"`
+	TLSKeyFile      string `hcl:"tls_key_file"`
+	TLSClientCAFile string `hcl:"tls_client_ca_file"`
+}
+
+type openBaoStorage struct {
+	Type      string             `hcl:"type,label"`
+	Path      string             `hcl:"path"`
+	RetryJoin []openBaoRetryJoin `hcl:"retry_join,block"`
+}
+
+type openBaoRetryJoin struct {
+	LeaderAPIAddress     string `hcl:"leader_api_addr"`
+	LeaderCACertFile     string `hcl:"leader_ca_cert_file"`
+	LeaderClientCertFile string `hcl:"leader_client_cert_file"`
+	LeaderClientKeyFile  string `hcl:"leader_client_key_file"`
+	LeaderTLSServerName  string `hcl:"leader_tls_servername"`
+}
+
+type openBaoServiceRegistry struct {
+	Type string `hcl:"type,label"`
+}
+
+// VerifySecretManager validates the source contract without contacting a
+// cluster or chart registry. It complements, but does not replace, Helm render
+// and live readiness checks.
+func VerifySecretManager(root string) (Report, error) {
+	root, err := canonicalRoot(root)
+	if err != nil {
+		return Report{}, err
+	}
+	report := Report{Status: "blocked", Profile: "cloudring-runtime-secret-manager/v1"}
+	var objects []object
+	for _, stage := range []string{"controllers", "runtime", "store"} {
+		stageObjects, files, readErr := readStage(root, stage)
+		if readErr != nil {
+			return report, readErr
+		}
+		report.Files += files
+		objects = append(objects, stageObjects...)
+	}
+	report.Documents = len(objects)
+	if len(objects) != 15 {
+		return report, fmt.Errorf("secret-manager document count is %d, want 15", len(objects))
+	}
+	if err := validateObjects(objects); err != nil {
+		return report, err
+	}
+	report.Status = "ready"
+	report.Checks = []string{
+		"source_stages_separated",
+		"yaml_duplicate_keys_absent",
+		"secret_material_absent",
+		"controller_versions_and_images_pinned",
+		"openbao_tls_ha_raft_retention_ready",
+		"external_secrets_workload_identity_ready",
+	}
+	return report, nil
+}
+
+func canonicalRoot(root string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		root = "."
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", errors.New("resolve repository root")
+	}
+	info, err := os.Lstat(abs)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", errors.New("repository root is not an exact directory")
+	}
+	return abs, nil
+}
+
+func readStage(root, stage string) ([]object, int, error) {
+	dir := filepath.Join(root, profilePath, stage)
+	kustomization, err := readRegular(filepath.Join(dir, "kustomization.yaml"))
+	if err != nil {
+		return nil, 0, err
+	}
+	var manifest struct {
+		APIVersion string   `yaml:"apiVersion"`
+		Kind       string   `yaml:"kind"`
+		Resources  []string `yaml:"resources"`
+	}
+	if err := decodeOne(kustomization, &manifest); err != nil || manifest.APIVersion != "kustomize.config.k8s.io/v1beta1" || manifest.Kind != "Kustomization" || len(manifest.Resources) == 0 {
+		return nil, 0, fmt.Errorf("%s stage has an invalid kustomization", stage)
+	}
+	seen := map[string]bool{}
+	var result []object
+	for _, resource := range manifest.Resources {
+		if resource == "" || filepath.Base(resource) != resource || filepath.Ext(resource) != ".yaml" || seen[resource] {
+			return nil, 0, fmt.Errorf("%s stage has an unsafe resource reference", stage)
+		}
+		seen[resource] = true
+		data, err := readRegular(filepath.Join(dir, resource))
+		if err != nil {
+			return nil, 0, err
+		}
+		if bytes.Contains(data, []byte("REPLACE_WITH")) || bytes.Contains(data, []byte("example.invalid")) || bytes.Contains(data, []byte(":latest")) {
+			return nil, 0, fmt.Errorf("%s contains an unresolved or mutable runtime reference", resource)
+		}
+		documents, err := decodeObjects(data)
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode %s: %w", resource, err)
+		}
+		result = append(result, documents...)
+	}
+	return result, len(manifest.Resources) + 1, nil
+}
+
+func readRegular(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxFileBytes {
+		return nil, errors.New("manifest input is not an exact bounded regular file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || int64(len(data)) != info.Size() {
+		return nil, errors.New("read exact manifest input")
+	}
+	after, err := os.Lstat(path)
+	if err != nil || !os.SameFile(info, after) || after.Size() != info.Size() || after.ModTime() != info.ModTime() {
+		return nil, errors.New("manifest input changed while reading")
+	}
+	return data, nil
+}
+
+func decodeOne(data []byte, target any) error {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var node yaml.Node
+	if err := decoder.Decode(&node); err != nil {
+		return err
+	}
+	if err := rejectDuplicateKeys(&node); err != nil {
+		return err
+	}
+	if err := node.Decode(target); err != nil {
+		return err
+	}
+	var trailing yaml.Node
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return errors.New("unexpected trailing YAML document")
+	}
+	return nil
+}
+
+func decodeObjects(data []byte) ([]object, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var result []object
+	for {
+		var node yaml.Node
+		err := decoder.Decode(&node)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(node.Content) == 0 {
+			continue
+		}
+		if err := rejectDuplicateKeys(&node); err != nil {
+			return nil, err
+		}
+		var value map[string]any
+		if err := node.Decode(&value); err != nil {
+			return nil, err
+		}
+		metadata, _ := value["metadata"].(map[string]any)
+		item := object{Kind: stringValue(value["kind"]), Name: stringValue(metadata["name"]), Namespace: stringValue(metadata["namespace"]), Data: value}
+		if item.Kind == "" || item.Name == "" {
+			return nil, errors.New("manifest object identity is incomplete")
+		}
+		if item.Kind == "Secret" {
+			return nil, errors.New("secret-manager source profile must not contain Secret objects")
+		}
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func rejectDuplicateKeys(node *yaml.Node) error {
+	if node.Kind == yaml.MappingNode {
+		seen := map[string]bool{}
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			key := node.Content[index].Value
+			if seen[key] {
+				return errors.New("duplicate YAML mapping key")
+			}
+			seen[key] = true
+		}
+	}
+	for _, child := range node.Content {
+		if err := rejectDuplicateKeys(child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateObjects(objects []object) error {
+	index := map[string]object{}
+	for _, item := range objects {
+		key := item.Kind + "/" + item.Namespace + "/" + item.Name
+		if _, duplicate := index[key]; duplicate {
+			return errors.New("duplicate manifest object identity")
+		}
+		index[key] = item
+	}
+	expected := []string{
+		"Bundle//openbao-client-ca",
+		"Certificate/cert-manager/openbao-root-ca",
+		"Certificate/openbao/openbao-server",
+		"ClusterIssuer//cloudring-openbao-ca",
+		"ClusterIssuer//cloudring-openbao-selfsigned-bootstrap",
+		"ClusterSecretStore//platform-secrets",
+		"HelmRelease/cert-manager/trust-manager",
+		"HelmRelease/external-secrets/external-secrets",
+		"HelmRelease/openbao/openbao",
+		"HelmRepository/cert-manager/jetstack",
+		"HelmRepository/external-secrets/external-secrets",
+		"HelmRepository/openbao/openbao",
+		"Namespace//external-secrets",
+		"Namespace//openbao",
+		"NetworkPolicy/openbao/openbao-ingress",
+	}
+	actual := make([]string, 0, len(index))
+	for key := range index {
+		actual = append(actual, key)
+	}
+	sort.Strings(actual)
+	if strings.Join(actual, "\n") != strings.Join(expected, "\n") {
+		return errors.New("secret-manager object inventory is not exact")
+	}
+	require := func(kind, namespace, name string) (object, error) {
+		item, found := index[kind+"/"+namespace+"/"+name]
+		if !found {
+			return object{}, fmt.Errorf("required %s/%s/%s is missing", kind, namespace, name)
+		}
+		return item, nil
+	}
+	trust, err := require("HelmRelease", "cert-manager", "trust-manager")
+	if err != nil || nestedString(trust.Data, "spec", "chart", "spec", "version") != "v0.24.0" || nestedString(trust.Data, "spec", "values", "image", "digest") != "sha256:a7c1d71cad37b404738192213e3801dbf89fe797e72664b0ff0d498db35cea74" {
+		return errors.New("trust-manager chart or image pin is invalid")
+	}
+	eso, err := require("HelmRelease", "external-secrets", "external-secrets")
+	if err != nil || nestedString(eso.Data, "spec", "chart", "spec", "version") != "2.7.0" || nestedNumber(eso.Data, "spec", "values", "replicaCount") != 3 || nestedBool(eso.Data, "spec", "values", "leaderElect") != true {
+		return errors.New("External Secrets HA controller contract is invalid")
+	}
+	for _, path := range [][]string{{"spec", "values", "image", "tag"}, {"spec", "values", "webhook", "image", "tag"}, {"spec", "values", "certController", "image", "tag"}} {
+		if !digestTagged(nestedString(eso.Data, path...)) {
+			return errors.New("External Secrets image is not digest-pinned")
+		}
+	}
+	bao, err := require("HelmRelease", "openbao", "openbao")
+	if err != nil || nestedString(bao.Data, "spec", "chart", "spec", "version") != "0.28.4" || !digestTagged(nestedString(bao.Data, "spec", "values", "server", "image", "tag")) {
+		return errors.New("OpenBao chart or image pin is invalid")
+	}
+	if nestedBool(bao.Data, "spec", "values", "global", "tlsDisable") || !nestedBool(bao.Data, "spec", "values", "server", "ha", "enabled") || nestedNumber(bao.Data, "spec", "values", "server", "ha", "replicas") != 3 || !nestedBool(bao.Data, "spec", "values", "server", "ha", "raft", "enabled") {
+		return errors.New("OpenBao TLS HA Raft contract is invalid")
+	}
+	if err := validateOpenBaoHCL(nestedString(bao.Data, "spec", "values", "server", "ha", "raft", "config")); err != nil {
+		return err
+	}
+	affinity := nestedString(bao.Data, "spec", "values", "server", "affinity")
+	if !strings.Contains(affinity, "requiredDuringSchedulingIgnoredDuringExecution") || !strings.Contains(affinity, "topologyKey: kubernetes.io/hostname") || !nestedBool(bao.Data, "spec", "values", "server", "ha", "disruptionBudget", "enabled") || nestedNumber(bao.Data, "spec", "values", "server", "ha", "disruptionBudget", "maxUnavailable") != 1 {
+		return errors.New("OpenBao anti-affinity or disruption budget is invalid")
+	}
+	if !nestedBool(bao.Data, "spec", "values", "server", "dataStorage", "enabled") || !nestedBool(bao.Data, "spec", "values", "server", "auditStorage", "enabled") || nestedString(bao.Data, "spec", "values", "server", "persistentVolumeClaimRetentionPolicy", "whenDeleted") != "Retain" {
+		return errors.New("OpenBao durable storage and retention contract is invalid")
+	}
+	store, err := require("ClusterSecretStore", "", "platform-secrets")
+	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" {
+		return errors.New("platform secret-store workload identity contract is invalid")
+	}
+	bootstrapIssuer, _ := require("ClusterIssuer", "", "cloudring-openbao-selfsigned-bootstrap")
+	if nested(bootstrapIssuer.Data, "spec", "selfSigned") == nil {
+		return errors.New("OpenBao bootstrap issuer is invalid")
+	}
+	caCertificate, _ := require("Certificate", "cert-manager", "openbao-root-ca")
+	if !nestedBool(caCertificate.Data, "spec", "isCA") || nestedString(caCertificate.Data, "spec", "secretName") != "openbao-root-ca" || nestedString(caCertificate.Data, "spec", "issuerRef", "name") != "cloudring-openbao-selfsigned-bootstrap" {
+		return errors.New("OpenBao root CA certificate is invalid")
+	}
+	caIssuer, _ := require("ClusterIssuer", "", "cloudring-openbao-ca")
+	if nestedString(caIssuer.Data, "spec", "ca", "secretName") != "openbao-root-ca" {
+		return errors.New("OpenBao CA issuer is invalid")
+	}
+	serverCertificate, _ := require("Certificate", "openbao", "openbao-server")
+	if nestedString(serverCertificate.Data, "spec", "secretName") != "openbao-server-tls" || nestedString(serverCertificate.Data, "spec", "issuerRef", "name") != "cloudring-openbao-ca" || nestedString(serverCertificate.Data, "spec", "issuerRef", "kind") != "ClusterIssuer" {
+		return errors.New("OpenBao serving certificate is invalid")
+	}
+	bundle, _ := require("Bundle", "", "openbao-client-ca")
+	if nestedString(bundle.Data, "spec", "target", "configMap", "key") != "ca.crt" || !strings.Contains(fmt.Sprint(nested(bundle.Data, "spec", "sources")), "openbao-root-ca") || !strings.Contains(fmt.Sprint(nested(bundle.Data, "spec", "sources")), "tls.crt") {
+		return errors.New("OpenBao CA bundle is invalid")
+	}
+	networkPolicy, _ := require("NetworkPolicy", "openbao", "openbao-ingress")
+	if nestedString(networkPolicy.Data, "spec", "podSelector", "matchLabels", "app.kubernetes.io/name") != "openbao" || !strings.Contains(fmt.Sprint(nested(networkPolicy.Data, "spec", "ingress")), "external-secrets") {
+		return errors.New("OpenBao NetworkPolicy is invalid")
+	}
+	return nil
+}
+
+func validateOpenBaoHCL(source string) error {
+	var config openBaoHCL
+	if source == "" {
+		return errors.New("OpenBao HCL configuration is invalid")
+	}
+	parsed, err := parseOpenBaoHCL(source)
+	if err != nil {
+		return errors.New("OpenBao HCL configuration is invalid")
+	}
+	config = parsed
+	if config.UI || !config.DisableMlock || len(config.Listeners) != 1 || len(config.Storage) != 1 || len(config.ServiceRegistrations) != 1 || config.ServiceRegistrations[0].Type != "kubernetes" {
+		return errors.New("OpenBao HCL block inventory is invalid")
+	}
+	listener := config.Listeners[0]
+	if listener.Type != "tcp" || listener.Address != "[::]:8200" || listener.ClusterAddress != "[::]:8201" || listener.TLSDisable != 0 || listener.TLSCertFile != "/openbao/tls/server/tls.crt" || listener.TLSKeyFile != "/openbao/tls/server/tls.key" || listener.TLSClientCAFile != "/openbao/tls/client/ca.crt" {
+		return errors.New("OpenBao listener TLS configuration is invalid")
+	}
+	storage := config.Storage[0]
+	if storage.Type != "raft" || storage.Path != "/openbao/data" || len(storage.RetryJoin) != 3 {
+		return errors.New("OpenBao Raft storage configuration is invalid")
+	}
+	expectedAddresses := map[string]bool{
+		"https://openbao-0.openbao-internal.openbao.svc:8200": true,
+		"https://openbao-1.openbao-internal.openbao.svc:8200": true,
+		"https://openbao-2.openbao-internal.openbao.svc:8200": true,
+	}
+	for _, join := range storage.RetryJoin {
+		if !expectedAddresses[join.LeaderAPIAddress] || join.LeaderCACertFile != "/openbao/tls/client/ca.crt" || join.LeaderClientCertFile != "/openbao/tls/server/tls.crt" || join.LeaderClientKeyFile != "/openbao/tls/server/tls.key" || join.LeaderTLSServerName != "openbao.openbao.svc" {
+			return errors.New("OpenBao Raft retry-join TLS configuration is invalid")
+		}
+		delete(expectedAddresses, join.LeaderAPIAddress)
+	}
+	if len(expectedAddresses) != 0 {
+		return errors.New("OpenBao Raft retry-join set is incomplete")
+	}
+	return nil
+}
+
+func nested(root map[string]any, path ...string) any {
+	var value any = root
+	for _, key := range path {
+		mapping, ok := value.(map[string]any)
+		if !ok {
+			return nil
+		}
+		value = mapping[key]
+	}
+	return value
+}
+
+func nestedString(root map[string]any, path ...string) string {
+	return stringValue(nested(root, path...))
+}
+func nestedBool(root map[string]any, path ...string) bool {
+	value, _ := nested(root, path...).(bool)
+	return value
+}
+func nestedNumber(root map[string]any, path ...string) int {
+	switch value := nested(root, path...).(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+func stringValue(value any) string {
+	text, _ := value.(string)
+	return text
+}
+func digestTagged(value string) bool {
+	parts := strings.Split(value, "@sha256:")
+	return len(parts) == 2 && parts[0] != "" && len(parts[1]) == 64
+}

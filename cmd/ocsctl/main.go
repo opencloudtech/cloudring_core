@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/opencloudtech/CloudRING/cloudring_core/sdk/ocsv3"
 	"github.com/opencloudtech/CloudRING/pkg/ocs"
+	"github.com/opencloudtech/CloudRING/sdk/ocsv3"
 )
 
 func main() {

@@ -11,7 +11,7 @@ import (
 )
 
 func Test_SyntheticConnectorPackageExample_validates(t *testing.T) {
-	raw, err := os.ReadFile("../../cloudring_core/examples/synthetic-service-module/connector-package.json")
+	raw, err := os.ReadFile("../../examples/synthetic-service-module/connector-package.json")
 	if err != nil {
 		t.Fatalf("read synthetic connector package example: %v", err)
 	}

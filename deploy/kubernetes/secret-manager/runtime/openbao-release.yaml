@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openbao
+  namespace: openbao
+spec:
+  interval: 15m
+  releaseName: openbao
+  chart:
+    spec:
+      chart: openbao
+      version: 0.28.4
+      sourceRef:
+        kind: HelmRepository
+        name: openbao
+        namespace: openbao
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    global:
+      tlsDisable: false
+    injector:
+      enabled: false
+    csi:
+      enabled: false
+    ui:
+      enabled: false
+    snapshotAgent:
+      enabled: false
+    server:
+      affinity: |
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: openbao
+                  component: server
+              topologyKey: kubernetes.io/hostname
+      image:
+        registry: quay.io
+        repository: openbao/openbao
+        tag: 2.5.5@sha256:6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452
+        pullPolicy: IfNotPresent
+      logLevel: info
+      logFormat: json
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "2"
+          memory: 2Gi
+      service:
+        ipFamilyPolicy: PreferDualStack
+        publishNotReadyAddresses: true
+      serviceAccount:
+        create: true
+        createSecret: false
+      statefulSet:
+        securityContext:
+          pod:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          container:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: openbao-server-tls
+          secret:
+            secretName: openbao-server-tls
+            defaultMode: 288
+        - name: openbao-client-ca
+          configMap:
+            name: openbao-client-ca
+            defaultMode: 292
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: openbao-server-tls
+          mountPath: /openbao/tls/server
+          readOnly: true
+        - name: openbao-client-ca
+          mountPath: /openbao/tls/client
+          readOnly: true
+      extraEnvironmentVars:
+        BAO_CACERT: /openbao/tls/client/ca.crt
+        VAULT_CACERT: /openbao/tls/client/ca.crt
+      dataStorage:
+        enabled: true
+        size: 20Gi
+        accessMode: ReadWriteOnce
+      auditStorage:
+        enabled: true
+        size: 20Gi
+        accessMode: ReadWriteOnce
+      persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Retain
+        whenScaled: Retain
+      standalone:
+        enabled: false
+      ha:
+        enabled: true
+        replicas: 3
+        disruptionBudget:
+          enabled: true
+          maxUnavailable: 1
+        raft:
+          enabled: true
+          setNodeId: true
+          config: |
+            ui = false
+            disable_mlock = true
+
+            listener "tcp" {
+              address            = "[::]:8200"
+              cluster_address    = "[::]:8201"
+              tls_disable        = 0
+              tls_cert_file      = "/openbao/tls/server/tls.crt"
+              tls_key_file       = "/openbao/tls/server/tls.key"
+              tls_client_ca_file = "/openbao/tls/client/ca.crt"
+            }
+
+            storage "raft" {
+              path = "/openbao/data"
+              retry_join {
+                leader_api_addr         = "https://openbao-0.openbao-internal.openbao.svc:8200"
+                leader_ca_cert_file     = "/openbao/tls/client/ca.crt"
+                leader_client_cert_file = "/openbao/tls/server/tls.crt"
+                leader_client_key_file  = "/openbao/tls/server/tls.key"
+                leader_tls_servername   = "openbao.openbao.svc"
+              }
+              retry_join {
+                leader_api_addr         = "https://openbao-1.openbao-internal.openbao.svc:8200"
+                leader_ca_cert_file     = "/openbao/tls/client/ca.crt"
+                leader_client_cert_file = "/openbao/tls/server/tls.crt"
+                leader_client_key_file  = "/openbao/tls/server/tls.key"
+                leader_tls_servername   = "openbao.openbao.svc"
+              }
+              retry_join {
+                leader_api_addr         = "https://openbao-2.openbao-internal.openbao.svc:8200"
+                leader_ca_cert_file     = "/openbao/tls/client/ca.crt"
+                leader_client_cert_file = "/openbao/tls/server/tls.crt"
+                leader_client_key_file  = "/openbao/tls/server/tls.key"
+                leader_tls_servername   = "openbao.openbao.svc"
+              }
+            }
+
+            service_registration "kubernetes" {}

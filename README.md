@@ -42,12 +42,12 @@ full platform extraction or a production installation is complete.
 
 ## Developer entry points
 
-- Read `cloudring_core/docs/public-boundary.md` before adding public material.
-- Follow `cloudring_core/docs/developer-guide.md` for the developer path.
-- Use `cloudring_core/docs/conformance.md` to validate OCSv3 module packages.
-- Use `cloudring_core/examples/synthetic-service-module/connector-package.json`
+- Read `docs/public-boundary.md` before adding public material.
+- Follow `docs/developer-guide.md` for the developer path.
+- Use `docs/conformance.md` to validate OCSv3 module packages.
+- Use `examples/synthetic-service-module/connector-package.json`
   as the smallest connector-package example.
-- Use `cloudring_core/reference/synthetic-service/module-package.json` as the
+- Use `reference/synthetic-service/module-package.json` as the
   reference module for conformance.
 - Use provider adapter interfaces for infrastructure integration.
 - Use portal shell contracts for user-interface extensions.
@@ -63,8 +63,8 @@ gh repo clone opencloudtech/CloudRING
 cd CloudRING
 go mod download
 go test ./... -count=1
-go run ./cmd/ocsctl validate ./cloudring_core/examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./cloudring_core/reference/synthetic-service/module-package.json
+go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
+go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 ```
 
 The example package is synthetic. It is intended for local validation and does

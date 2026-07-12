@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gitops-orchestration.schema.json",
+  "title": "CloudRING GitOps Orchestration Contract",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "syntheticOnly",
+    "bootstrapHandoff",
+    "reconciliationOwnership",
+    "receipts",
+    "moduleDeploymentHandoff",
+    "sourceSafety"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "cloudring.gitops-orchestration/v1"
+    },
+    "contractId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "syntheticOnly": {
+      "type": "boolean",
+      "const": true
+    },
+    "bootstrapHandoff": {
+      "type": "object",
+      "required": [
+        "mode",
+        "gitSourceRef",
+        "overlayRoot",
+        "preApplyGate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "dry-run-first"
+          ]
+        },
+        "gitSourceRef": {
+          "type": "string",
+          "pattern": "^synthetic-[a-z0-9-]+$"
+        },
+        "overlayRoot": {
+          "type": "string",
+          "pattern": "^fixtures/synthetic-[a-z0-9-]+$"
+        },
+        "preApplyGate": {
+          "type": "string",
+          "enum": [
+            "dry-run-receipt-required"
+          ]
+        }
+      }
+    },
+    "reconciliationOwnership": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "$ref": "#/$defs/ownership"
+      }
+    },
+    "receipts": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "$ref": "#/$defs/receipt"
+      }
+    },
+    "moduleDeploymentHandoff": {
+      "type": "object",
+      "required": [
+        "moduleId",
+        "packageRef",
+        "overlayRef",
+        "handoffState"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "moduleId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "packageRef": {
+          "type": "string",
+          "pattern": "^modules/[a-z0-9-]+/module-package.json$"
+        },
+        "overlayRef": {
+          "type": "string",
+          "pattern": "^fixtures/synthetic-[a-z0-9-]+$"
+        },
+        "handoffState": {
+          "type": "string",
+          "enum": [
+            "ready-for-dry-run"
+          ]
+        }
+      }
+    },
+    "sourceSafety": {
+      "type": "object",
+      "required": [
+        "syntheticOverlay",
+        "containsLiveOverlayPath",
+        "containsProviderValues",
+        "containsCredentials",
+        "containsPrivateEndpoints"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "syntheticOverlay": {
+          "type": "boolean",
+          "const": true
+        },
+        "containsLiveOverlayPath": {
+          "type": "boolean",
+          "const": false
+        },
+        "containsProviderValues": {
+          "type": "boolean",
+          "const": false
+        },
+        "containsCredentials": {
+          "type": "boolean",
+          "const": false
+        },
+        "containsPrivateEndpoints": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ownership": {
+      "type": "object",
+      "required": [
+        "objectClass",
+        "owner",
+        "driftPolicy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "objectClass": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "owner": {
+          "type": "string",
+          "enum": [
+            "gitops-controller",
+            "platform-controller",
+            "module-controller"
+          ]
+        },
+        "driftPolicy": {
+          "type": "string",
+          "enum": [
+            "gitops-reconciles",
+            "controller-reconciles",
+            "observe-only"
+          ]
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "required": [
+        "type",
+        "requiredBefore",
+        "artifactRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "dry-run",
+            "apply",
+            "rollback"
+          ]
+        },
+        "requiredBefore": {
+          "type": "string",
+          "enum": [
+            "apply",
+            "ready-claim",
+            "retry"
+          ]
+        },
+        "artifactRef": {
+          "type": "string",
+          "pattern": "^artifact://synthetic/[a-z0-9-]+$"
+        }
+      }
+    }
+  }
+}
