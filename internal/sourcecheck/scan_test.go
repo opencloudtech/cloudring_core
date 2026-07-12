@@ -114,6 +114,374 @@ func TestScan_pre_push_checks_intermediate_commits(t *testing.T) {
 	}
 }
 
+func TestScan_pre_push_checks_commit_message_metadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		rule    string
+	}{
+		{
+			name:    "subject local path",
+			message: "Document " + "/Us" + "ers/synthetic/private/config",
+			rule:    "local_user_path",
+		},
+		{
+			name:    "body private endpoint",
+			message: "Document endpoint\n\nUse https://control." + "internal/api.",
+			rule:    "private_endpoint",
+		},
+		{
+			name:    "trailer proprietary attribution",
+			message: "Document origin\n\nOrigin: copied " + "from proprietary " + "source",
+			rule:    "private_source_attribution",
+		},
+		{
+			name:    "body credential",
+			message: "Document rotation\n\nPrevious value g" + "hp_" + strings.Repeat("q", 24),
+			rule:    "github_classic_token",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := newRepository(t)
+			writeRepositoryFile(t, root, "safe.txt", "safe base\n")
+			commitAll(t, root, "base")
+			base := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+			runGit(t, root, "commit", "--quiet", "--allow-empty", "-m", test.message)
+			head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+
+			report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: base, Head: head})
+			if err != nil {
+				t.Fatalf("pre-push metadata scan: %v", err)
+			}
+			if report.Passed || !containsFinding(report.Findings, test.rule, "commit-metadata") {
+				t.Fatalf("pre-push scan missed unsafe commit metadata rule %q: %+v", test.rule, report.Findings)
+			}
+		})
+	}
+}
+
+func TestScan_pre_push_checks_commit_author_and_committer(t *testing.T) {
+	t.Run("author", func(t *testing.T) {
+		root := newRepository(t)
+		writeRepositoryFile(t, root, "safe.txt", "safe base\n")
+		commitAll(t, root, "base")
+		base := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+		author := "/Us" + "ers/synthetic/Contributor <contributor@example.test>"
+		runGit(t, root, "commit", "--quiet", "--allow-empty", "--author", author, "-m", "Document author metadata")
+		head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+
+		report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: base, Head: head})
+		if err != nil {
+			t.Fatalf("pre-push author scan: %v", err)
+		}
+		if report.Passed || !containsFinding(report.Findings, "local_user_path", "commit-metadata") {
+			t.Fatalf("pre-push scan missed unsafe author metadata: %+v", report.Findings)
+		}
+	})
+
+	t.Run("committer", func(t *testing.T) {
+		root := newRepository(t)
+		writeRepositoryFile(t, root, "safe.txt", "safe base\n")
+		commitAll(t, root, "base")
+		base := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+		runGit(t, root, "config", "user.name", "copied "+"from proprietary "+"source")
+		runGit(t, root, "commit", "--quiet", "--allow-empty", "--author", "Synthetic Author <author@example.test>", "-m", "Document committer metadata")
+		head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+
+		report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: base, Head: head})
+		if err != nil {
+			t.Fatalf("pre-push committer scan: %v", err)
+		}
+		if report.Passed || !containsFinding(report.Findings, "private_source_attribution", "commit-metadata") {
+			t.Fatalf("pre-push scan missed unsafe committer metadata: %+v", report.Findings)
+		}
+	})
+}
+
+func TestScan_pre_push_accepts_safe_commit_metadata_without_file_changes(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe base\n")
+	commitAll(t, root, "base")
+	base := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	message := "Document bounded metadata scan\n\nCovers commit identity and message surfaces.\n\nReviewed-by: Synthetic Reviewer <reviewer@example.test>"
+	runGit(t, root, "commit", "--quiet", "--allow-empty", "-m", message)
+	head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+
+	report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: base, Head: head})
+	if err != nil {
+		t.Fatalf("pre-push safe metadata scan: %v", err)
+	}
+	expectedPath := identifyPath("commit-metadata/" + sha256Hex([]byte(head))).Display
+	if !report.Passed || !containsInputVariant(report.ScannedInputs, expectedPath, "commit-metadata") {
+		t.Fatalf("safe empty-commit metadata was not scanned and accepted: %+v", report)
+	}
+}
+
+func TestCommitMetadataInput_resource_budgets_fail_closed(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe base\n")
+	commitAll(t, root, "base")
+	base := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	sensitiveValue := "g" + "hp_" + strings.Repeat("r", 24)
+	runGit(t, root, "commit", "--quiet", "--allow-empty", "-m", "Rotate "+sensitiveValue)
+	head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+
+	_, err := commitMetadataInput(root, head, newScanBudget(&resourceLimits{metadataBytes: 1}))
+	if err == nil {
+		t.Fatal("commit metadata escaped the aggregate metadata budget")
+	}
+	if strings.Contains(err.Error(), sensitiveValue) {
+		t.Fatal("metadata budget error exposed raw commit metadata")
+	}
+	_, err = Scan(Options{
+		Root: root, Scope: ScopePrePush, Base: base, Head: head,
+		limits: &resourceLimits{capturedBytes: 1, commitCount: 10, metadataBytes: 1 << 20},
+	})
+	if err == nil {
+		t.Fatal("commit metadata escaped the aggregate captured-input budget")
+	}
+	if strings.Contains(err.Error(), sensitiveValue) {
+		t.Fatal("captured-input budget error exposed raw commit metadata")
+	}
+}
+
+func TestScan_pre_push_commit_metadata_report_never_contains_matched_secret(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe base\n")
+	commitAll(t, root, "base")
+	base := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	sensitiveValue := "g" + "hp_" + strings.Repeat("s", 24)
+	runGit(t, root, "commit", "--quiet", "--allow-empty", "-m", "Rotate "+sensitiveValue)
+	head := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+
+	report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: base, Head: head})
+	if err != nil {
+		t.Fatalf("pre-push metadata scan: %v", err)
+	}
+	if report.Passed || !containsFinding(report.Findings, "github_classic_token", "commit-metadata") {
+		t.Fatalf("pre-push scan missed sensitive commit metadata: %+v", report.Findings)
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("encode metadata report: %v", err)
+	}
+	if bytes.Contains(encoded, []byte(sensitiveValue)) {
+		t.Fatal("source-safety report exposed matched commit metadata")
+	}
+}
+
+func TestScan_pre_push_checks_annotated_tag_metadata_on_published_commit(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe published content\n")
+	commitAll(t, root, "published base")
+	published := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	bare := filepath.Join(t.TempDir(), "published.git")
+	runGit(t, filepath.Dir(bare), "init", "--quiet", "--bare", bare)
+	runGit(t, root, "remote", "add", "published-remote", bare)
+	runGit(t, root, "push", "--quiet", "published-remote", published+":refs/heads/main")
+	sensitiveValue := "g" + "hp_" + strings.Repeat("t", 24)
+	annotation := "Document tag metadata " + sensitiveValue
+	runGit(t, root, "tag", "-a", "unsafe-metadata", "-m", annotation, published)
+	tagOID := strings.TrimSpace(runGit(t, root, "rev-parse", "refs/tags/unsafe-metadata"))
+
+	report, err := Scan(Options{
+		Root: root, Scope: ScopePrePush, RemoteName: "published-remote", RemoteURLSHA256: sha256Hex([]byte(bare)),
+		RemoteRefs: []string{"refs/heads/main"},
+		PushUpdates: []PushUpdate{{
+			LocalRef: "refs/tags/unsafe-metadata", LocalOID: tagOID,
+			RemoteRef: "refs/tags/unsafe-metadata", RemoteOID: strings.Repeat("0", 40),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("pre-push annotated tag scan: %v", err)
+	}
+	if report.Passed || !containsFinding(report.Findings, "github_classic_token", "tag-metadata") {
+		t.Fatalf("annotated tag metadata on a published commit was not blocked: %+v", report.Findings)
+	}
+	if countInputVariant(report.ScannedInputs, "tag-metadata") != 1 || countInputVariant(report.ScannedInputs, "commit-metadata") != 0 {
+		t.Fatalf("annotated tag scan did not preserve the published-commit boundary: %+v", report.ScannedInputs)
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("encode annotated tag report: %v", err)
+	}
+	if bytes.Contains(encoded, []byte(annotation)) || bytes.Contains(encoded, []byte(sensitiveValue)) {
+		t.Fatal("source-safety report exposed raw annotated tag metadata")
+	}
+}
+
+func TestScan_pre_push_walks_every_annotated_tag_in_a_chain(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe published content\n")
+	commitAll(t, root, "published base")
+	published := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	sensitiveValue := "g" + "hp_" + strings.Repeat("u", 24)
+	runGit(t, root, "tag", "-a", "inner-metadata", "-m", "Inner annotation "+sensitiveValue, published)
+	runGit(t, root, "tag", "-a", "outer-metadata", "-m", "Safe outer annotation", "refs/tags/inner-metadata")
+	outerOID := strings.TrimSpace(runGit(t, root, "rev-parse", "refs/tags/outer-metadata"))
+	outerRaw := []byte(runGit(t, root, "cat-file", "tag", outerOID))
+	_, outerTargetType, err := annotatedTagTarget(outerRaw)
+	if err != nil || outerTargetType != "tag" {
+		t.Fatalf("nested annotated-tag fixture does not target a tag: type=%q err=%v", outerTargetType, err)
+	}
+
+	report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: published, Head: outerOID})
+	if err != nil {
+		t.Fatalf("pre-push annotated tag-chain scan: %v", err)
+	}
+	if report.Passed || !containsFinding(report.Findings, "github_classic_token", "tag-metadata") || countInputVariant(report.ScannedInputs, "tag-metadata") != 2 {
+		t.Fatalf("nested annotated tag metadata was not fully scanned: %+v", report)
+	}
+}
+
+func TestScan_pre_push_accepts_safe_annotated_tag_metadata(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe published content\n")
+	commitAll(t, root, "published base")
+	published := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	annotation := "Document annotated tag validation\n\nReviewed-by: Synthetic Reviewer <reviewer@example.test>"
+	runGit(t, root, "tag", "-a", "safe-metadata", "-m", annotation, published)
+	tagOID := strings.TrimSpace(runGit(t, root, "rev-parse", "refs/tags/safe-metadata"))
+
+	report, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: published, Head: tagOID})
+	if err != nil {
+		t.Fatalf("pre-push safe annotated tag scan: %v", err)
+	}
+	if !report.Passed || countInputVariant(report.ScannedInputs, "tag-metadata") != 1 {
+		t.Fatalf("safe annotated tag metadata was not scanned and accepted: %+v", report)
+	}
+}
+
+func TestAnnotatedTagMetadata_resource_budgets_fail_closed(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe published content\n")
+	commitAll(t, root, "published base")
+	published := strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD"))
+	sensitiveValue := "g" + "hp_" + strings.Repeat("v", 24)
+	annotation := "Document tag metadata " + sensitiveValue
+	runGit(t, root, "tag", "-a", "bounded-metadata", "-m", annotation, published)
+	tagOID := strings.TrimSpace(runGit(t, root, "rev-parse", "refs/tags/bounded-metadata"))
+
+	_, err := inspectPublishedObject(root, tagOID, newScanBudget(&resourceLimits{metadataBytes: 4}), map[string]publishedObject{})
+	if err == nil {
+		t.Fatal("annotated tag escaped the aggregate Git metadata budget")
+	}
+	if strings.Contains(err.Error(), annotation) || strings.Contains(err.Error(), sensitiveValue) {
+		t.Fatal("Git metadata budget error exposed an annotated tag message")
+	}
+	_, err = Scan(Options{
+		Root: root, Scope: ScopePrePush, Base: published, Head: tagOID,
+		limits: &resourceLimits{capturedBytes: 1, inputCount: 10, commitCount: 10, metadataBytes: 1 << 20},
+	})
+	if err == nil {
+		t.Fatal("annotated tag escaped the aggregate captured-input budget")
+	}
+	if strings.Contains(err.Error(), annotation) || strings.Contains(err.Error(), sensitiveValue) {
+		t.Fatal("captured-input budget error exposed an annotated tag message")
+	}
+}
+
+func TestAnnotatedTagTarget_rejects_oversized_header_lines(t *testing.T) {
+	target := strings.Repeat("a", 40)
+	metadata := []byte("object " + target + "\ntype commit\ntag " + strings.Repeat("x", maxAnnotatedTagHeaderLineBytes+1) + "\n\nsafe annotation\n")
+	if _, _, err := annotatedTagTarget(metadata); err == nil {
+		t.Fatal("annotated tag parser accepted an oversized header line")
+	}
+}
+
+func TestScan_pre_push_rejects_unsupported_published_object_types(t *testing.T) {
+	root := newRepository(t)
+	writeRepositoryFile(t, root, "safe.txt", "safe content\n")
+	commitAll(t, root, "base")
+	objects := map[string]string{
+		"blob": strings.TrimSpace(runGit(t, root, "hash-object", "-w", "safe.txt")),
+		"tree": strings.TrimSpace(runGit(t, root, "rev-parse", "HEAD^{tree}")),
+	}
+	for objectType, oid := range objects {
+		t.Run(objectType, func(t *testing.T) {
+			_, err := Scan(Options{Root: root, Scope: ScopePrePush, Base: strings.Repeat("0", 40), Head: oid})
+			if err == nil {
+				t.Fatalf("pre-push scan accepted a published %s object", objectType)
+			}
+		})
+	}
+}
+
+func TestWalkPublishedObject_rejects_cycles_and_type_mismatch(t *testing.T) {
+	oidA := strings.Repeat("a", 40)
+	oidB := strings.Repeat("b", 40)
+	sensitiveAnnotation := "g" + "hp_" + strings.Repeat("w", 24)
+	cycle := map[string]publishedObject{
+		oidA: {objectType: "tag", data: syntheticAnnotatedTag(oidB, "tag", sensitiveAnnotation)},
+		oidB: {objectType: "tag", data: syntheticAnnotatedTag(oidA, "tag", "safe annotation")},
+	}
+	inspectCycle := func(oid string) (publishedObject, error) { return cycle[oid], nil }
+	_, err := walkPublishedObject(oidA, inspectCycle, func(string, []byte) error { return nil })
+	if err == nil {
+		t.Fatal("annotated tag cycle was accepted")
+	}
+	if strings.Contains(err.Error(), sensitiveAnnotation) {
+		t.Fatal("annotated tag cycle error exposed raw metadata")
+	}
+
+	mismatch := map[string]publishedObject{
+		oidA: {objectType: "tag", data: syntheticAnnotatedTag(oidB, "commit", "safe annotation")},
+		oidB: {objectType: "tag", data: syntheticAnnotatedTag(oidA, "tag", "safe annotation")},
+	}
+	inspectMismatch := func(oid string) (publishedObject, error) { return mismatch[oid], nil }
+	if _, err := walkPublishedObject(oidA, inspectMismatch, nil); err == nil {
+		t.Fatal("annotated tag target-type mismatch was accepted")
+	}
+}
+
+func TestWalkPublishedObject_enforces_tag_depth_limit(t *testing.T) {
+	makeChain := func(tagCount int) (string, map[string]publishedObject) {
+		objects := make(map[string]publishedObject, tagCount+1)
+		tags := make([]string, tagCount)
+		for index := range tags {
+			tags[index] = fmt.Sprintf("%040x", index+1)
+		}
+		commit := fmt.Sprintf("%040x", tagCount+1)
+		objects[commit] = publishedObject{objectType: "commit"}
+		for index, tag := range tags {
+			target := commit
+			targetType := "commit"
+			if index+1 < len(tags) {
+				target = tags[index+1]
+				targetType = "tag"
+			}
+			objects[tag] = publishedObject{objectType: "tag", data: syntheticAnnotatedTag(target, targetType, "safe annotation")}
+		}
+		return tags[0], objects
+	}
+
+	for _, test := range []struct {
+		name      string
+		tagCount  int
+		wantError bool
+	}{
+		{name: "at limit", tagCount: maxAnnotatedTagDepth},
+		{name: "above limit", tagCount: maxAnnotatedTagDepth + 1, wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			start, objects := makeChain(test.tagCount)
+			inspectedTags := 0
+			inspect := func(oid string) (publishedObject, error) { return objects[oid], nil }
+			_, err := walkPublishedObject(start, inspect, func(string, []byte) error {
+				inspectedTags++
+				return nil
+			})
+			if test.wantError && err == nil {
+				t.Fatal("annotated tag chain above the depth limit was accepted")
+			}
+			if !test.wantError && (err != nil || inspectedTags != test.tagCount) {
+				t.Fatalf("annotated tag chain at the depth limit was rejected: tags=%d err=%v", inspectedTags, err)
+			}
+		})
+	}
+}
+
 func TestScan_pre_push_checks_two_parent_and_octopus_merge_resolutions(t *testing.T) {
 	for _, parentCount := range []int{2, 3} {
 		t.Run(fmt.Sprintf("%d-parents", parentCount), func(t *testing.T) {
@@ -662,4 +1030,18 @@ func containsNestedVariant(inputs []ScannedInput) bool {
 		}
 	}
 	return false
+}
+
+func countInputVariant(inputs []ScannedInput, variant string) int {
+	count := 0
+	for _, input := range inputs {
+		if input.SourceVariant == variant {
+			count++
+		}
+	}
+	return count
+}
+
+func syntheticAnnotatedTag(target string, targetType string, annotation string) []byte {
+	return []byte("object " + target + "\ntype " + targetType + "\ntag synthetic\ntagger Synthetic Contributor <contributor@example.test> 1700000000 +0000\n\n" + annotation + "\n")
 }

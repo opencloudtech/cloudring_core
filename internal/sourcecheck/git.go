@@ -32,10 +32,17 @@ type treeEntry struct {
 	path       string
 }
 
+type publishedObject struct {
+	objectType string
+	data       []byte
+}
+
 const maxGitMetadataBytes = 32 * 1024 * 1024
 const maxCapturedInputBytes = 64 * 1024 * 1024
 const maxSourceInputs = 100_000
 const maxHistoryCommits = 10_000
+const maxAnnotatedTagDepth = 64
+const maxAnnotatedTagHeaderLineBytes = 4 * 1024
 const maxAggregateMetadataBytes = 128 * 1024 * 1024
 const maxSourceFindings = 10_000
 const maxReadinessClauses = 100_000
@@ -685,6 +692,9 @@ func prePushInputs(root string, options Options, budget *scanBudget) ([]scanInpu
 		updates = []PushUpdate{{LocalOID: options.Head, RemoteOID: options.Base}}
 	}
 	commitSet := map[string]bool{}
+	collector := inputCollector{budget: budget}
+	objectCache := map[string]publishedObject{}
+	scannedTags := map[string]bool{}
 	var targetRemoteExclusions []string
 	remoteLoaded := false
 	for _, update := range updates {
@@ -695,9 +705,9 @@ func prePushInputs(root string, options Options, budget *scanBudget) ([]scanInpu
 		if isZeroOID(headRevision) {
 			continue // Remote ref deletion publishes no new object.
 		}
-		head, err := resolveCommit(root, headRevision)
+		head, err := resolvePublishedHead(root, headRevision, budget, &collector, objectCache, scannedTags)
 		if err != nil {
-			return nil, errors.New("resolve pre-push head failed")
+			return nil, err
 		}
 		baseRevision := strings.TrimSpace(update.RemoteOID)
 		if baseRevision == "" {
@@ -752,8 +762,14 @@ func prePushInputs(root string, options Options, budget *scanBudget) ([]scanInpu
 	}
 
 	commits := sortedBoolMapKeys(commitSet)
-	collector := inputCollector{budget: budget}
 	for _, commit := range commits {
+		metadata, metadataErr := commitMetadataInput(root, commit, budget)
+		if metadataErr != nil {
+			return nil, metadataErr
+		}
+		if addErr := collector.add(metadata); addErr != nil {
+			return nil, addErr
+		}
 		pathsOutput, err := gitBytes(root, "enumerate commit changes", "diff-tree", "--no-ext-diff", "-m", "--root", "--no-commit-id", "--name-only", "-z", "-r", "--diff-filter=ACMRTUXB", commit)
 		if err != nil {
 			return nil, err
@@ -785,6 +801,185 @@ func prePushInputs(root string, options Options, budget *scanBudget) ([]scanInpu
 		}
 	}
 	return collector.inputs, nil
+}
+
+func resolvePublishedHead(root string, revision string, budget *scanBudget, collector *inputCollector, cache map[string]publishedObject, scannedTags map[string]bool) (string, error) {
+	start, err := resolveObject(root, revision, budget)
+	if err != nil {
+		return "", errors.New("resolve pre-push object failed")
+	}
+	inspect := func(oid string) (publishedObject, error) {
+		return inspectPublishedObject(root, oid, budget, cache)
+	}
+	consumeTag := func(oid string, metadata []byte) error {
+		if scannedTags[oid] {
+			return nil
+		}
+		input := scanInput{
+			path:    "tag-metadata/" + sha256Hex([]byte(strings.ToLower(oid))),
+			variant: "tag-metadata",
+			data:    metadata,
+		}
+		if err := collector.add(input); err != nil {
+			return err
+		}
+		scannedTags[oid] = true
+		return nil
+	}
+	return walkPublishedObject(start, inspect, consumeTag)
+}
+
+func resolveObject(root string, revision string, budget *scanBudget) (string, error) {
+	revision = strings.TrimSpace(revision)
+	if revision == "" || strings.IndexByte(revision, 0) >= 0 || strings.HasPrefix(revision, "-") {
+		return "", errors.New("invalid revision")
+	}
+	if validObjectID(revision) && !allZero(revision) {
+		return strings.ToLower(revision), nil
+	}
+	out, err := gitBytes(root, "resolve object", "rev-parse", "--verify", "--end-of-options", revision)
+	if err != nil {
+		return "", err
+	}
+	if metadataErr := budget.consumeMetadata(len(out)); metadataErr != nil {
+		return "", metadataErr
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 1 || !validObjectID(fields[0]) || allZero(fields[0]) {
+		return "", errors.New("Git returned an invalid object identity")
+	}
+	return strings.ToLower(fields[0]), nil
+}
+
+func inspectPublishedObject(root string, oid string, budget *scanBudget, cache map[string]publishedObject) (publishedObject, error) {
+	if !validObjectID(oid) || allZero(oid) {
+		return publishedObject{}, errors.New("invalid published object identity")
+	}
+	oid = strings.ToLower(oid)
+	if cached, ok := cache[oid]; ok {
+		return cached, nil
+	}
+	typeOutput, err := gitBytes(root, "inspect published object type", "cat-file", "-t", oid)
+	if err != nil {
+		return publishedObject{}, err
+	}
+	if metadataErr := budget.consumeMetadata(len(typeOutput)); metadataErr != nil {
+		return publishedObject{}, metadataErr
+	}
+	fields := strings.Fields(string(typeOutput))
+	if len(fields) != 1 {
+		return publishedObject{}, errors.New("Git returned an invalid object type")
+	}
+	object := publishedObject{objectType: fields[0]}
+	if object.objectType == "tag" {
+		object.data, err = gitBytes(root, "read annotated tag metadata", "cat-file", "tag", oid)
+		if err != nil {
+			return publishedObject{}, err
+		}
+		if metadataErr := budget.consumeMetadata(len(object.data)); metadataErr != nil {
+			return publishedObject{}, metadataErr
+		}
+	}
+	cache[oid] = object
+	return object, nil
+}
+
+func walkPublishedObject(start string, inspect func(string) (publishedObject, error), consumeTag func(string, []byte) error) (string, error) {
+	current := strings.ToLower(start)
+	expectedType := ""
+	visited := map[string]bool{}
+	tagDepth := 0
+	for {
+		if !validObjectID(current) || allZero(current) {
+			return "", errors.New("annotated tag contains an invalid target identity")
+		}
+		if visited[current] {
+			return "", errors.New("annotated tag chain contains a cycle")
+		}
+		visited[current] = true
+		object, err := inspect(current)
+		if err != nil {
+			return "", err
+		}
+		if expectedType != "" && object.objectType != expectedType {
+			return "", errors.New("annotated tag target type does not match the target object")
+		}
+		switch object.objectType {
+		case "commit":
+			return current, nil
+		case "tag":
+			if tagDepth >= maxAnnotatedTagDepth {
+				return "", errors.New("annotated tag chain exceeds the source-safety depth limit")
+			}
+			target, targetType, parseErr := annotatedTagTarget(object.data)
+			if parseErr != nil {
+				return "", parseErr
+			}
+			if consumeTag != nil {
+				if consumeErr := consumeTag(current, object.data); consumeErr != nil {
+					return "", consumeErr
+				}
+			}
+			tagDepth++
+			current = target
+			expectedType = targetType
+		default:
+			return "", errors.New("pre-push update references an unsupported Git object type")
+		}
+	}
+}
+
+func annotatedTagTarget(metadata []byte) (string, string, error) {
+	headerEnd := bytes.Index(metadata, []byte("\n\n"))
+	if headerEnd <= 0 {
+		return "", "", errors.New("annotated tag contains invalid metadata")
+	}
+	objectLine, remainder, ok := bytes.Cut(metadata[:headerEnd], []byte{'\n'})
+	if !ok {
+		return "", "", errors.New("annotated tag contains invalid metadata")
+	}
+	typeLine, remainder, ok := bytes.Cut(remainder, []byte{'\n'})
+	if !ok {
+		return "", "", errors.New("annotated tag contains invalid metadata")
+	}
+	tagLine := remainder
+	if line, _, found := bytes.Cut(remainder, []byte{'\n'}); found {
+		tagLine = line
+	}
+	if len(objectLine) > maxAnnotatedTagHeaderLineBytes || len(typeLine) > maxAnnotatedTagHeaderLineBytes || len(tagLine) > maxAnnotatedTagHeaderLineBytes {
+		return "", "", errors.New("annotated tag header exceeds the source-safety limit")
+	}
+	objectFields := strings.Fields(string(objectLine))
+	typeFields := strings.Fields(string(typeLine))
+	tagFields := strings.Fields(string(tagLine))
+	if len(objectFields) != 2 || objectFields[0] != "object" || !validObjectID(objectFields[1]) || allZero(objectFields[1]) ||
+		len(typeFields) != 2 || typeFields[0] != "type" || len(tagFields) < 2 || tagFields[0] != "tag" {
+		return "", "", errors.New("annotated tag contains invalid metadata")
+	}
+	switch typeFields[1] {
+	case "commit", "tag", "tree", "blob":
+	default:
+		return "", "", errors.New("annotated tag contains an unsupported target type")
+	}
+	return strings.ToLower(objectFields[1]), typeFields[1], nil
+}
+
+func commitMetadataInput(root string, commit string, budget *scanBudget) (scanInput, error) {
+	if !validObjectID(commit) || allZero(commit) {
+		return scanInput{}, errors.New("invalid commit object identity")
+	}
+	metadata, err := gitBytes(root, "read commit metadata", "cat-file", "commit", commit)
+	if err != nil {
+		return scanInput{}, err
+	}
+	if metadataErr := budget.consumeMetadata(len(metadata)); metadataErr != nil {
+		return scanInput{}, metadataErr
+	}
+	return scanInput{
+		path:    "commit-metadata/" + sha256Hex([]byte(strings.ToLower(commit))),
+		variant: "commit-metadata",
+		data:    metadata,
+	}, nil
 }
 
 func commitTreeEntries(root string, commit string, budget *scanBudget) (map[string]treeEntry, error) {
