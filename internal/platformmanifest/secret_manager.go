@@ -421,7 +421,7 @@ func platformStoreNamespaceBoundary(store map[string]any) bool {
 		return false
 	}
 	condition, ok := conditions[0].(map[string]any)
-	return ok && len(condition) == 1 && exactStringSequence(condition["namespaces"], "external-secrets")
+	return ok && len(condition) == 1 && exactStringSequence(condition["namespaces"], "external-secrets", "velero")
 }
 
 func exactStringSequence(value any, expected ...string) bool {

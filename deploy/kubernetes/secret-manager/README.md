@@ -15,8 +15,8 @@ The profile is intentionally split into three reconciliation stages:
    operator has initialized and unsealed OpenBao, enabled Kubernetes auth,
    created the least-privilege `cloudring-external-secrets` role, and loaded the
    first versioned secret paths. The store is usable only by `ExternalSecret`
-   objects in the privileged `external-secrets` namespace; it is not a tenant
-   credential gateway.
+   objects in the privileged `external-secrets` and `velero` platform
+   namespaces; it is not a tenant credential gateway.
 
 Reconcile the stages as separate Flux `Kustomization` objects with explicit
 `dependsOn` ordering. Do not collapse them into one apply: `Bundle`,

@@ -153,7 +153,7 @@ func TestSecretManagerProfileRejectsClusterStoreOutsidePrivilegedNamespace(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	data = replaceOnce(t, data, []byte("    - namespaces:\n        - external-secrets"), []byte("    - namespaces:\n        - tenant-workload"))
+	data = replaceOnce(t, data, []byte("    - namespaces:\n        - external-secrets\n        - velero"), []byte("    - namespaces:\n        - external-secrets\n        - tenant-workload"))
 	if err := writeProfileFile(root, filepath.Join("store", "platform-secrets.yaml"), data); err != nil {
 		t.Fatal(err)
 	}
