@@ -37,6 +37,10 @@ certificate Secret because it also contains the server private key.
   them in Git, Kubernetes manifests, command arguments, or evidence.
 - Join and unseal all three Raft members, enable an audit device, and verify one
   active plus two healthy standby members on different nodes.
+- Keep StatefulSet pod management `Parallel` so all three sealed members can be
+  bootstrapped without an `OrderedReady` deadlock. Keep the advertised HA API
+  address on the TLS-covered `openbao-active.openbao.svc` service so standby
+  redirects never expose an unverifiable Pod IP.
 - Configure Kubernetes auth with a bounded audience and a role restricted to
   the External Secrets service account. Do not use a static OpenBao token.
 - Give every tenant or service its own namespaced `SecretStore`, dedicated

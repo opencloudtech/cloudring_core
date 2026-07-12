@@ -321,7 +321,7 @@ func validateObjects(objects []object) error {
 	if err != nil || nestedString(bao.Data, "spec", "chart", "spec", "version") != "0.28.4" || !digestTagged(nestedString(bao.Data, "spec", "values", "server", "image", "tag")) {
 		return errors.New("OpenBao chart or image pin is invalid")
 	}
-	if nestedBool(bao.Data, "spec", "values", "global", "tlsDisable") || !nestedBool(bao.Data, "spec", "values", "server", "ha", "enabled") || nestedNumber(bao.Data, "spec", "values", "server", "ha", "replicas") != 3 || !nestedBool(bao.Data, "spec", "values", "server", "ha", "raft", "enabled") {
+	if nestedBool(bao.Data, "spec", "values", "global", "tlsDisable") || nestedString(bao.Data, "spec", "values", "server", "podManagementPolicy") != "Parallel" || !nestedBool(bao.Data, "spec", "values", "server", "ha", "enabled") || nestedNumber(bao.Data, "spec", "values", "server", "ha", "replicas") != 3 || nestedString(bao.Data, "spec", "values", "server", "ha", "apiAddr") != "https://openbao-active.openbao.svc:8200" || !nestedBool(bao.Data, "spec", "values", "server", "ha", "raft", "enabled") {
 		return errors.New("OpenBao TLS HA Raft contract is invalid")
 	}
 	if _, err := openBaoReadinessPostRenderCommand(bao.Data); err != nil {
