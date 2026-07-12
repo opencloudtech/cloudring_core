@@ -13,6 +13,21 @@ OpenCloudTech decides which contributions are accepted. Platform code should
 depend on portable capabilities and OCSv3 interfaces rather than private module
 internals.
 
+## Review and acceptance authority
+
+The project founder and lead maintainer, `@trukhinyuri`, has final review and
+acceptance authority for CloudRING, including founder-authored changes. Such a
+change does not require a separate independent approver, but it must retain a
+reviewable pull request, an exact-head owner review, all required SafePush
+checks, resolved conversations, and post-merge verification. Codex may assist
+with review, testing, and evidence, while the founder remains accountable for
+the acceptance decision.
+
+Changes from every other contributor require founder approval, or approval by
+a reviewer explicitly delegated under a future documented governance change,
+in addition to the same required checks. Maintainer or administrator access is
+not itself permission to bypass this process.
+
 ## Service ownership
 
 CloudRING maintainers govern modules distributed in this repository.

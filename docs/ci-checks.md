@@ -53,10 +53,22 @@ review.
 
 This repository check is defense in depth, not a self-authenticating policy: a
 pull request controls the workflow revision that evaluates that pull request.
-The server-side trust control is protected `main` with an up-to-date branch,
-one independent approving review, stale-review dismissal, required
-conversations and checks, and administrator enforcement. The repository has no
-available organization required-workflow ruleset, so a pull request without an
-eligible independent approval remains blocked and must not be merged by an
-administrator bypass. `CODEOWNERS` routes review; it does not currently require
-the repository author's personal approval.
+The server-side trust control for external contributors is protected `main`
+with an up-to-date branch, one approving owner review, stale-review dismissal,
+last-push approval, required conversations and checks, and no force-push or
+branch deletion. The project founder and lead maintainer, `@trukhinyuri`, is
+the final acceptance authority. Contributor-authored changes require that
+owner review; automated or AI-assisted review does not replace the founder's
+decision.
+
+GitHub does not let a pull-request author submit the approval required by the
+same branch rule. While the repository has a single founder/administrator, a
+founder-authored pull request may therefore use the administrator merge path
+after a recorded founder review of the exact head SHA. This narrow owner path
+still requires every configured status check to succeed on the current head,
+an up-to-date base, resolved conversations, source-safety approval, and a
+post-merge `main` verification. It does not authorize direct pushes, skipped
+checks, force-pushes, branch deletion, or bypasses for other contributors.
+Adding another administrator changes this trust assumption and requires an
+explicit governance and branch-protection review before that access is
+granted.

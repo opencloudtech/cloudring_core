@@ -44,9 +44,11 @@ claims.
 git config core.hooksPath .githooks
 ```
 
-   The hook scans every commit introduced by each pushed ref. It is an early
-   local check; protected-branch CI remains authoritative and cannot be
-   replaced or bypassed by changing local hook configuration.
+   The hook scans every commit introduced by each pushed ref and the raw
+   metadata of every introduced annotated tag in a bounded, validated tag
+   chain. Unsupported publication objects fail closed. It is an early local
+   check; protected-branch CI remains authoritative and cannot be replaced or
+   bypassed by changing local hook configuration.
 3. Run:
 
 ```bash
@@ -59,6 +61,10 @@ go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.jso
 4. Open a pull request with a concise summary, validation notes, and any
    public-safe evidence paths created inside your working tree.
 5. Complete the CLA/DCO checks described in `CLA.md` and `DCO.md`.
+6. Obtain the project founder's owner review. The founder may review
+   founder-authored changes under the exact-head SafePush process documented in
+   `GOVERNANCE.md` and `docs/ci-checks.md`; this exception does not extend to
+   other contributors.
 
 Do not paste private repository paths, local user paths, live provider data,
 tenant records, secrets, cookies, kubeconfigs, or customer support material into
