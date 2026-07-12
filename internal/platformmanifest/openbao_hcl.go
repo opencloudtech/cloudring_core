@@ -32,7 +32,7 @@ func parseOpenBaoHCL(source string) (openBaoHCL, error) {
 		if err != nil {
 			return openBaoHCL{}, err
 		}
-		if seen[name] && name != "listener" && name != "storage" && name != "service_registration" {
+		if seen[name] && name != "listener" && name != "storage" && name != "audit" && name != "service_registration" {
 			return openBaoHCL{}, errors.New("duplicate top-level HCL attribute")
 		}
 		seen[name] = true
@@ -49,6 +49,10 @@ func parseOpenBaoHCL(source string) (openBaoHCL, error) {
 			var storage openBaoStorage
 			storage, err = parser.storageBlock()
 			result.Storage = append(result.Storage, storage)
+		case "audit":
+			var audit openBaoAudit
+			audit, err = parser.auditBlock()
+			result.Audits = append(result.Audits, audit)
 		case "service_registration":
 			var registry openBaoServiceRegistry
 			registry, err = parser.serviceRegistryBlock()
@@ -251,6 +255,75 @@ func (parser *hclParser) serviceRegistryBlock() (openBaoServiceRegistry, error) 
 		return openBaoServiceRegistry{}, errors.New("invalid service-registration block")
 	}
 	return openBaoServiceRegistry{Type: label}, nil
+}
+
+func (parser *hclParser) auditBlock() (openBaoAudit, error) {
+	auditType, err := parser.stringToken()
+	if err != nil {
+		return openBaoAudit{}, errors.New("invalid audit block")
+	}
+	name, err := parser.stringToken()
+	if err != nil || parser.consume('{') != nil {
+		return openBaoAudit{}, errors.New("invalid audit block")
+	}
+	result := openBaoAudit{Type: auditType, Name: name}
+	seen := map[string]bool{}
+	for !parser.peek('}') {
+		attribute, err := parser.uniqueIdentifier(seen)
+		if err != nil {
+			return openBaoAudit{}, err
+		}
+		switch attribute {
+		case "description":
+			result.Description, err = parser.stringAssignment()
+		case "options":
+			result.Options, err = parser.auditOptionsBlock()
+		default:
+			return openBaoAudit{}, errors.New("unknown audit attribute")
+		}
+		if err != nil {
+			return openBaoAudit{}, err
+		}
+	}
+	if !seen["description"] || !seen["options"] {
+		return openBaoAudit{}, errors.New("required audit attribute is missing")
+	}
+	return result, parser.consume('}')
+}
+
+func (parser *hclParser) auditOptionsBlock() (openBaoAuditOptions, error) {
+	if err := parser.consume('{'); err != nil {
+		return openBaoAuditOptions{}, errors.New("invalid audit options block")
+	}
+	result := openBaoAuditOptions{}
+	seen := map[string]bool{}
+	for !parser.peek('}') {
+		name, err := parser.uniqueIdentifier(seen)
+		if err != nil {
+			return openBaoAuditOptions{}, err
+		}
+		var target *string
+		switch name {
+		case "file_path":
+			target = &result.FilePath
+		case "mode":
+			target = &result.Mode
+		case "log_raw":
+			target = &result.LogRaw
+		default:
+			return openBaoAuditOptions{}, errors.New("unknown audit option")
+		}
+		*target, err = parser.stringAssignment()
+		if err != nil {
+			return openBaoAuditOptions{}, err
+		}
+	}
+	for _, required := range []string{"file_path", "mode", "log_raw"} {
+		if !seen[required] {
+			return openBaoAuditOptions{}, errors.New("required audit option is missing")
+		}
+	}
+	return result, parser.consume('}')
 }
 
 func (parser *hclParser) uniqueIdentifier(seen map[string]bool) (string, error) {

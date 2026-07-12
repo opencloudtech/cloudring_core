@@ -49,6 +49,7 @@ type openBaoHCL struct {
 	DisableMlock         bool                     `hcl:"disable_mlock"`
 	Listeners            []openBaoListener        `hcl:"listener,block"`
 	Storage              []openBaoStorage         `hcl:"storage,block"`
+	Audits               []openBaoAudit           `hcl:"audit,block"`
 	ServiceRegistrations []openBaoServiceRegistry `hcl:"service_registration,block"`
 }
 
@@ -78,6 +79,19 @@ type openBaoRetryJoin struct {
 
 type openBaoServiceRegistry struct {
 	Type string `hcl:"type,label"`
+}
+
+type openBaoAudit struct {
+	Type        string              `hcl:"type,label"`
+	Name        string              `hcl:"name,label"`
+	Description string              `hcl:"description"`
+	Options     openBaoAuditOptions `hcl:"options,block"`
+}
+
+type openBaoAuditOptions struct {
+	FilePath string `hcl:"file_path"`
+	Mode     string `hcl:"mode"`
+	LogRaw   string `hcl:"log_raw"`
 }
 
 // VerifySecretManager validates the source contract without contacting a
@@ -324,6 +338,9 @@ func validateObjects(objects []object) error {
 	if nestedBool(bao.Data, "spec", "values", "global", "tlsDisable") || nestedString(bao.Data, "spec", "values", "server", "podManagementPolicy") != "Parallel" || !nestedBool(bao.Data, "spec", "values", "server", "ha", "enabled") || nestedNumber(bao.Data, "spec", "values", "server", "ha", "replicas") != 3 || nestedString(bao.Data, "spec", "values", "server", "ha", "apiAddr") != "https://openbao-active.openbao.svc:8200" || !nestedBool(bao.Data, "spec", "values", "server", "ha", "raft", "enabled") {
 		return errors.New("OpenBao TLS HA Raft contract is invalid")
 	}
+	if !nestedBool(bao.Data, "spec", "values", "server", "authDelegator", "enabled") {
+		return errors.New("OpenBao auth-delegator contract is invalid")
+	}
 	if _, err := openBaoReadinessPostRenderCommand(bao.Data); err != nil {
 		return err
 	}
@@ -338,7 +355,7 @@ func validateObjects(objects []object) error {
 		return errors.New("OpenBao durable storage and retention contract is invalid")
 	}
 	store, err := require("ClusterSecretStore", "", "platform-secrets")
-	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "name") != "external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "namespace") != "external-secrets" || !exactStringSequence(nested(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "audiences"), "openbao") {
+	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao-active.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "name") != "external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "namespace") != "external-secrets" || !exactStringSequence(nested(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "audiences"), "openbao") {
 		return errors.New("platform secret-store workload identity contract is invalid")
 	}
 	if !platformStoreNamespaceBoundary(store.Data) {
@@ -365,7 +382,7 @@ func validateObjects(objects []object) error {
 		return errors.New("OpenBao CA bundle is invalid")
 	}
 	networkPolicy, _ := require("NetworkPolicy", "openbao", "openbao-ingress")
-	if nestedString(networkPolicy.Data, "spec", "podSelector", "matchLabels", "app.kubernetes.io/name") != "openbao" || !strings.Contains(fmt.Sprint(nested(networkPolicy.Data, "spec", "ingress")), "external-secrets") {
+	if !openBaoNetworkPolicyBoundary(networkPolicy.Data) {
 		return errors.New("OpenBao NetworkPolicy is invalid")
 	}
 	return nil
@@ -436,6 +453,81 @@ func exactStringSequence(value any, expected ...string) bool {
 	return slices.Equal(actual, expected)
 }
 
+func openBaoNetworkPolicyBoundary(policy map[string]any) bool {
+	if !exactSelector(nested(policy, "spec", "podSelector"), map[string]string{
+		"app.kubernetes.io/name": "openbao",
+		"component":              "server",
+	}) || !exactStringSequence(nested(policy, "spec", "policyTypes"), "Ingress") {
+		return false
+	}
+	ingress, ok := nested(policy, "spec", "ingress").([]any)
+	if !ok || len(ingress) != 2 {
+		return false
+	}
+	serverRule, ok := ingress[0].(map[string]any)
+	if !ok || len(serverRule) != 2 || !exactNetworkPolicyPorts(serverRule["ports"], 8200, 8201) {
+		return false
+	}
+	serverPeers, ok := serverRule["from"].([]any)
+	if !ok || len(serverPeers) != 1 {
+		return false
+	}
+	serverPeer, ok := serverPeers[0].(map[string]any)
+	if !ok || len(serverPeer) != 1 || !exactSelector(serverPeer["podSelector"], map[string]string{
+		"app.kubernetes.io/name": "openbao",
+		"component":              "server",
+	}) {
+		return false
+	}
+	externalRule, ok := ingress[1].(map[string]any)
+	if !ok || len(externalRule) != 2 || !exactNetworkPolicyPorts(externalRule["ports"], 8200) {
+		return false
+	}
+	externalPeers, ok := externalRule["from"].([]any)
+	if !ok || len(externalPeers) != 1 {
+		return false
+	}
+	externalPeer, ok := externalPeers[0].(map[string]any)
+	return ok && len(externalPeer) == 2 &&
+		exactSelector(externalPeer["namespaceSelector"], map[string]string{
+			"kubernetes.io/metadata.name": "external-secrets",
+		}) && exactSelector(externalPeer["podSelector"], map[string]string{
+		"app.kubernetes.io/name":     "external-secrets",
+		"app.kubernetes.io/instance": "external-secrets",
+	})
+}
+
+func exactSelector(value any, expected map[string]string) bool {
+	selector, ok := value.(map[string]any)
+	if !ok || len(selector) != 1 {
+		return false
+	}
+	labels, ok := selector["matchLabels"].(map[string]any)
+	if !ok || len(labels) != len(expected) {
+		return false
+	}
+	for key, expectedValue := range expected {
+		if stringValue(labels[key]) != expectedValue {
+			return false
+		}
+	}
+	return true
+}
+
+func exactNetworkPolicyPorts(value any, expected ...int) bool {
+	ports, ok := value.([]any)
+	if !ok || len(ports) != len(expected) {
+		return false
+	}
+	for index, expectedPort := range expected {
+		port, ok := ports[index].(map[string]any)
+		if !ok || len(port) != 2 || stringValue(port["protocol"]) != "TCP" || nestedNumber(port, "port") != expectedPort {
+			return false
+		}
+	}
+	return true
+}
+
 func validateOpenBaoHCL(source string) error {
 	var config openBaoHCL
 	if source == "" {
@@ -448,6 +540,13 @@ func validateOpenBaoHCL(source string) error {
 	config = parsed
 	if config.UI || !config.DisableMlock || len(config.Listeners) != 1 || len(config.Storage) != 1 || len(config.ServiceRegistrations) != 1 || config.ServiceRegistrations[0].Type != "kubernetes" {
 		return errors.New("OpenBao HCL block inventory is invalid")
+	}
+	if len(config.Audits) != 1 {
+		return errors.New("OpenBao persistent audit configuration is invalid")
+	}
+	audit := config.Audits[0]
+	if audit.Type != "file" || audit.Name != "persistent" || audit.Description != "CloudRING persistent audit" || audit.Options.FilePath != "/openbao/audit/audit.log" || audit.Options.Mode != "0600" || audit.Options.LogRaw != "false" {
+		return errors.New("OpenBao persistent audit configuration is invalid")
 	}
 	listener := config.Listeners[0]
 	if listener.Type != "tcp" || listener.Address != "[::]:8200" || listener.ClusterAddress != "[::]:8201" || listener.TLSDisable != 0 || listener.TLSCertFile != "/openbao/tls/server/tls.crt" || listener.TLSKeyFile != "/openbao/tls/server/tls.key" || listener.TLSClientCAFile != "/openbao/tls/client/ca.crt" {
