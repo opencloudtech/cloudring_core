@@ -46,7 +46,6 @@ type object struct {
 
 type openBaoHCL struct {
 	UI                   bool                     `hcl:"ui"`
-	DisableMlock         bool                     `hcl:"disable_mlock"`
 	Listeners            []openBaoListener        `hcl:"listener,block"`
 	Storage              []openBaoStorage         `hcl:"storage,block"`
 	Audits               []openBaoAudit           `hcl:"audit,block"`
@@ -538,7 +537,7 @@ func validateOpenBaoHCL(source string) error {
 		return errors.New("OpenBao HCL configuration is invalid")
 	}
 	config = parsed
-	if config.UI || !config.DisableMlock || len(config.Listeners) != 1 || len(config.Storage) != 1 || len(config.ServiceRegistrations) != 1 || config.ServiceRegistrations[0].Type != "kubernetes" {
+	if config.UI || len(config.Listeners) != 1 || len(config.Storage) != 1 || len(config.ServiceRegistrations) != 1 || config.ServiceRegistrations[0].Type != "kubernetes" {
 		return errors.New("OpenBao HCL block inventory is invalid")
 	}
 	if len(config.Audits) != 1 {

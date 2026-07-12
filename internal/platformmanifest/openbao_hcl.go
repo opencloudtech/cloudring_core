@@ -39,8 +39,6 @@ func parseOpenBaoHCL(source string) (openBaoHCL, error) {
 		switch name {
 		case "ui":
 			result.UI, err = parser.booleanAssignment()
-		case "disable_mlock":
-			result.DisableMlock, err = parser.booleanAssignment()
 		case "listener":
 			var listener openBaoListener
 			listener, err = parser.listenerBlock()
@@ -64,7 +62,7 @@ func parseOpenBaoHCL(source string) (openBaoHCL, error) {
 			return openBaoHCL{}, err
 		}
 	}
-	if !seen["ui"] || !seen["disable_mlock"] {
+	if !seen["ui"] {
 		return openBaoHCL{}, errors.New("required top-level HCL attribute is missing")
 	}
 	return result, nil
