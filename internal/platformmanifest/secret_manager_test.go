@@ -74,6 +74,21 @@ func TestSecretManagerProfileRejectsDisabledListenerTLS(t *testing.T) {
 	}
 }
 
+func TestSecretManagerProfileRejectsObsoleteDisableMlock(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("            ui = false\n"), []byte("            ui = false\n            disable_mlock = true\n"))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil {
+		t.Fatal("obsolete OpenBao disable_mlock setting was accepted")
+	}
+}
+
 func TestSecretManagerProfileRejectsCommentMaskedListenerTLS(t *testing.T) {
 	root := copyProfile(t)
 	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
