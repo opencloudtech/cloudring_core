@@ -81,9 +81,14 @@ func VerifySecretManager(root string) (Report, error) {
 		return Report{}, err
 	}
 	report := Report{Status: "blocked", Profile: "cloudring-runtime-secret-manager/v1"}
+	repository, err := os.OpenRoot(root)
+	if err != nil {
+		return report, errors.New("open confined repository root")
+	}
+	defer repository.Close()
 	var objects []object
 	for _, stage := range []string{"controllers", "runtime", "store"} {
-		stageObjects, files, readErr := readStage(root, stage)
+		stageObjects, files, readErr := readStage(repository, stage)
 		if readErr != nil {
 			return report, readErr
 		}
@@ -124,9 +129,9 @@ func canonicalRoot(root string) (string, error) {
 	return abs, nil
 }
 
-func readStage(root, stage string) ([]object, int, error) {
-	dir := filepath.Join(root, profilePath, stage)
-	kustomization, err := readRegular(filepath.Join(dir, "kustomization.yaml"))
+func readStage(root *os.Root, stage string) ([]object, int, error) {
+	dir := filepath.Join(profilePath, stage)
+	kustomization, err := readRegular(root, filepath.Join(dir, "kustomization.yaml"))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -145,7 +150,7 @@ func readStage(root, stage string) ([]object, int, error) {
 			return nil, 0, fmt.Errorf("%s stage has an unsafe resource reference", stage)
 		}
 		seen[resource] = true
-		data, err := readRegular(filepath.Join(dir, resource))
+		data, err := readRegular(root, filepath.Join(dir, resource))
 		if err != nil {
 			return nil, 0, err
 		}
@@ -161,16 +166,16 @@ func readStage(root, stage string) ([]object, int, error) {
 	return result, len(manifest.Resources) + 1, nil
 }
 
-func readRegular(path string) ([]byte, error) {
-	info, err := os.Lstat(path)
+func readRegular(root *os.Root, path string) ([]byte, error) {
+	info, err := root.Lstat(path)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxFileBytes {
 		return nil, errors.New("manifest input is not an exact bounded regular file")
 	}
-	data, err := os.ReadFile(path)
+	data, err := root.ReadFile(path)
 	if err != nil || int64(len(data)) != info.Size() {
 		return nil, errors.New("read exact manifest input")
 	}
-	after, err := os.Lstat(path)
+	after, err := root.Lstat(path)
 	if err != nil || !os.SameFile(info, after) || after.Size() != info.Size() || after.ModTime() != info.ModTime() {
 		return nil, errors.New("manifest input changed while reading")
 	}

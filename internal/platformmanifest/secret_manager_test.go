@@ -4,6 +4,7 @@
 package platformmanifest
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,13 +23,12 @@ func TestSecretManagerProfileIsStructurallyReady(t *testing.T) {
 
 func TestSecretManagerProfileRejectsMutableImage(t *testing.T) {
 	root := copyProfile(t)
-	path := filepath.Join(root, profilePath, "runtime", "openbao-release.yaml")
-	data, err := os.ReadFile(path)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data = replaceOnce(t, data, []byte("2.5.5@sha256:6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452"), []byte("2.5.5"))
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := VerifySecretManager(root); err == nil {
@@ -38,8 +38,12 @@ func TestSecretManagerProfileRejectsMutableImage(t *testing.T) {
 
 func TestSecretManagerProfileRejectsDuplicateYAMLKeys(t *testing.T) {
 	root := copyProfile(t)
-	path := filepath.Join(root, profilePath, "store", "platform-secrets.yaml")
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	profile, err := os.OpenRoot(filepath.Join(root, profilePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer profile.Close()
+	file, err := profile.OpenFile(filepath.Join("store", "platform-secrets.yaml"), os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,13 +60,12 @@ func TestSecretManagerProfileRejectsDuplicateYAMLKeys(t *testing.T) {
 
 func TestSecretManagerProfileRejectsDisabledListenerTLS(t *testing.T) {
 	root := copyProfile(t)
-	path := filepath.Join(root, profilePath, "runtime", "openbao-release.yaml")
-	data, err := os.ReadFile(path)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data = replaceOnce(t, data, []byte("tls_disable        = 0"), []byte("tls_disable        = 1"))
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := VerifySecretManager(root); err == nil {
@@ -72,13 +75,12 @@ func TestSecretManagerProfileRejectsDisabledListenerTLS(t *testing.T) {
 
 func TestSecretManagerProfileRejectsCommentMaskedListenerTLS(t *testing.T) {
 	root := copyProfile(t)
-	path := filepath.Join(root, profilePath, "runtime", "openbao-release.yaml")
-	data, err := os.ReadFile(path)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data = replaceOnce(t, data, []byte("tls_disable        = 0"), []byte("# tls_disable        = 0\n              tls_disable        = 1"))
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := VerifySecretManager(root); err == nil {
@@ -88,13 +90,12 @@ func TestSecretManagerProfileRejectsCommentMaskedListenerTLS(t *testing.T) {
 
 func TestSecretManagerProfileRejectsMissingListenerTLSSetting(t *testing.T) {
 	root := copyProfile(t)
-	path := filepath.Join(root, profilePath, "runtime", "openbao-release.yaml")
-	data, err := os.ReadFile(path)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data = replaceOnce(t, data, []byte("              tls_disable        = 0\n"), nil)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := VerifySecretManager(root); err == nil {
@@ -104,13 +105,12 @@ func TestSecretManagerProfileRejectsMissingListenerTLSSetting(t *testing.T) {
 
 func TestSecretManagerProfileRejectsMissingServingCertificate(t *testing.T) {
 	root := copyProfile(t)
-	path := filepath.Join(root, profilePath, "runtime", "tls.yaml")
-	data, err := os.ReadFile(path)
+	data, err := readProfileFile(root, filepath.Join("runtime", "tls.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data = replaceOnce(t, data, []byte("kind: Certificate\nmetadata:\n  name: openbao-server"), []byte("kind: ConfigMap\nmetadata:\n  name: openbao-server"))
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := writeProfileFile(root, filepath.Join("runtime", "tls.yaml"), data); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := VerifySecretManager(root); err == nil {
@@ -131,32 +131,60 @@ func copyProfile(t *testing.T) string {
 	t.Helper()
 	source := filepath.Join(repositoryRoot(t), profilePath)
 	root := t.TempDir()
-	destination := filepath.Join(root, profilePath)
-	if err := filepath.WalkDir(source, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		relative, err := filepath.Rel(source, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(destination, relative)
-		if entry.IsDir() {
-			return os.MkdirAll(target, 0o700)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o600)
-	}); err != nil {
+	sourceRoot, err := os.OpenRoot(source)
+	if err != nil {
 		t.Fatal(err)
+	}
+	defer sourceRoot.Close()
+	destination := filepath.Join(root, profilePath)
+	if err := os.MkdirAll(destination, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	destinationRoot, err := os.OpenRoot(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destinationRoot.Close()
+	for _, relative := range []string{
+		"controllers/kustomization.yaml", "controllers/namespaces.yaml", "controllers/releases.yaml", "controllers/repositories.yaml",
+		"runtime/kustomization.yaml", "runtime/network-policy.yaml", "runtime/openbao-release.yaml", "runtime/tls.yaml",
+		"store/kustomization.yaml", "store/platform-secrets.yaml",
+	} {
+		data, err := sourceRoot.ReadFile(relative)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := destinationRoot.MkdirAll(filepath.Dir(relative), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := destinationRoot.WriteFile(relative, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return root
 }
 
+func readProfileFile(root, relative string) ([]byte, error) {
+	profile, err := os.OpenRoot(filepath.Join(root, profilePath))
+	if err != nil {
+		return nil, err
+	}
+	defer profile.Close()
+	return profile.ReadFile(relative)
+}
+
+func writeProfileFile(root, relative string, data []byte) error {
+	profile, err := os.OpenRoot(filepath.Join(root, profilePath))
+	if err != nil {
+		return err
+	}
+	defer profile.Close()
+	return profile.WriteFile(relative, data, 0o600)
+}
+
 func replaceOnce(t *testing.T, data, old, replacement []byte) []byte {
 	t.Helper()
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 	position := -1
 	for index := 0; index+len(old) <= len(data); index++ {
 		match := true
