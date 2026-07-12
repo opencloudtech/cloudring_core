@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: external-secrets-token-request
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    resourceNames:
+      - external-secrets
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: external-secrets-token-request
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-secrets-token-request
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets

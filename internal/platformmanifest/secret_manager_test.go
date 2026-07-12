@@ -17,7 +17,7 @@ func TestSecretManagerProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify secret-manager profile: %v", err)
 	}
-	if report.Status != "ready" || report.Documents != 15 || len(report.Checks) != 6 {
+	if report.Status != "ready" || report.Documents != 22 || len(report.Checks) != 8 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -56,6 +56,30 @@ func TestSecretManagerProfileRejectsDuplicateYAMLKeys(t *testing.T) {
 	}
 	if _, err := VerifySecretManager(root); err == nil {
 		t.Fatal("duplicate YAML key was accepted")
+	}
+}
+
+func TestSecretManagerProfileRejectsKustomizeTransformations(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "kustomization.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("resources:\n"), []byte(`patches:
+  - target:
+      kind: Role
+      name: cloudring-openbao-reader-token-request
+    patch: |-
+      - op: replace
+        path: /rules/0/resourceNames/0
+        value: privileged-service
+resources:
+`))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "kustomization.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "invalid kustomization") {
+		t.Fatalf("Kustomize RBAC transformation was accepted: %v", err)
 	}
 }
 
@@ -251,6 +275,267 @@ func TestSecretManagerProfileRejectsDisabledAuthDelegator(t *testing.T) {
 	}
 }
 
+func TestSecretManagerProfileRejectsBlanketServiceAccountTokenCreation(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("controllers", "releases.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("      serviceAccountTokenCreate: false"), []byte("      serviceAccountTokenCreate: true"))
+	if err := writeProfileFile(root, filepath.Join("controllers", "releases.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "blanket service-account token creation") {
+		t.Fatalf("blanket service-account token creation was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsExternalSecretsAuthDelegator(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("controllers", "releases.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    systemAuthDelegator: false"), []byte("    systemAuthDelegator: true"))
+	if err := writeProfileFile(root, filepath.Join("controllers", "releases.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "optional privileged surfaces") {
+		t.Fatalf("External Secrets auth-delegator permission was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsExternalSecretsExtraObjects(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("controllers", "releases.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    rbac:\n      serviceAccountTokenCreate: false\n"), []byte(`    rbac:
+      serviceAccountTokenCreate: false
+    extraObjects:
+      - apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: unsafe-controller-access
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: cluster-admin
+        subjects:
+          - kind: ServiceAccount
+            name: external-secrets
+            namespace: external-secrets
+`))
+	if err := writeProfileFile(root, filepath.Join("controllers", "releases.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "render-time extensions") {
+		t.Fatalf("External Secrets extraObjects RBAC injection was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsExternalSecretsPostRenderer(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("controllers", "releases.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("  releaseName: external-secrets\n"), []byte(`  releaseName: external-secrets
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ClusterRole
+            patch: |-
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups:
+                    - "*"
+                  resources:
+                    - "*"
+                  verbs:
+                    - "*"
+`))
+	if err := writeProfileFile(root, filepath.Join("controllers", "releases.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "render-time extensions") {
+		t.Fatalf("External Secrets post-rendered RBAC injection was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsExternalSecretsValuesFrom(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("controllers", "releases.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("  releaseName: external-secrets\n"), []byte(`  releaseName: external-secrets
+  valuesFrom:
+    - kind: ConfigMap
+      name: unverified-values
+      valuesKey: values.yaml
+`))
+	if err := writeProfileFile(root, filepath.Join("controllers", "releases.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "render-time extensions") {
+		t.Fatalf("External Secrets valuesFrom injection was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsWidenedPlatformTokenRequestRBAC(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("controllers", "token-request-rbac.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    resourceNames:\n      - external-secrets"), []byte("    resourceNames:\n      - external-secrets\n      - privileged-service"))
+	if err := writeProfileFile(root, filepath.Join("controllers", "token-request-rbac.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "platform token-request Role") {
+		t.Fatalf("widened platform token-request RBAC was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerClusterSecretStore(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("kind: SecretStore\nmetadata:\n  name: cloudring-openbao"), []byte("kind: ClusterSecretStore\nmetadata:\n  name: cloudring-openbao"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil {
+		t.Fatal("consumer ClusterSecretStore was accepted")
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerCrossNamespaceServiceAccount(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("            name: cloudring-openbao-reader\n            audiences:"), []byte("            name: cloudring-openbao-reader\n            namespace: external-secrets\n            audiences:"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "namespaced SecretStore") {
+		t.Fatalf("cross-namespace consumer service account was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerWithoutOpenBaoAudience(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("            audiences:\n              - openbao\n"), nil)
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "namespaced SecretStore") {
+		t.Fatalf("consumer SecretStore without an audience was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsWidenedConsumerTokenRequestRBAC(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    resourceNames:\n      - cloudring-openbao-reader"), []byte("    resourceNames:\n      - cloudring-openbao-reader\n      - second-reader"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "consumer example token-request Role") {
+		t.Fatalf("widened consumer token-request RBAC was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsWrongExternalSecretsRoleBindingSubject(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("subjects:\n  - kind: ServiceAccount\n    name: external-secrets\n    namespace: external-secrets"), []byte("subjects:\n  - kind: ServiceAccount\n    name: openbao\n    namespace: openbao"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "consumer example token-request RoleBinding") {
+		t.Fatalf("wrong External Secrets RoleBinding subject was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerWithoutNonClaim(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    cloudring.org/non-claim: requires-openbao-policy-role-and-live-sync-proof"), []byte("    cloudring.org/status: source-only"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "namespaced SecretStore") {
+		t.Fatalf("consumer SecretStore without a non-claim was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerTokenAutomount(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("automountServiceAccountToken: false"), []byte("automountServiceAccountToken: true"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "service-account identity") {
+		t.Fatalf("consumer service-account token automount was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerLegacyTokenReference(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("automountServiceAccountToken: false\n"), []byte("automountServiceAccountToken: false\nsecrets:\n  - name: legacy-token\n"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "service-account identity") {
+		t.Fatalf("consumer legacy service-account token reference was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsConsumerWithoutTrustLabel(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    cloudring.org/openbao-client: \"true\"\n"), nil)
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "namespace security boundary") {
+		t.Fatalf("consumer namespace without the OpenBao trust label was accepted: %v", err)
+	}
+}
+
 func TestSecretManagerProfileRejectsWidenedExternalSecretsIngress(t *testing.T) {
 	root := copyProfile(t)
 	data, err := readProfileFile(root, filepath.Join("runtime", "network-policy.yaml"))
@@ -373,9 +658,10 @@ func copyProfile(t *testing.T) string {
 	}
 	defer destinationRoot.Close()
 	for _, relative := range []string{
-		"controllers/kustomization.yaml", "controllers/namespaces.yaml", "controllers/releases.yaml", "controllers/repositories.yaml",
+		"controllers/kustomization.yaml", "controllers/namespaces.yaml", "controllers/releases.yaml", "controllers/repositories.yaml", "controllers/token-request-rbac.yaml",
 		"runtime/kustomization.yaml", "runtime/network-policy.yaml", "runtime/openbao-release.yaml", "runtime/tls.yaml",
 		"store/kustomization.yaml", "store/platform-secrets.yaml",
+		"consumer-example/kustomization.yaml", "consumer-example/service-store.yaml",
 	} {
 		data, err := sourceRoot.ReadFile(relative)
 		if err != nil {

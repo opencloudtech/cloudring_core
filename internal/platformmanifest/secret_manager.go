@@ -108,7 +108,7 @@ func VerifySecretManager(root string) (Report, error) {
 	}
 	defer repository.Close()
 	var objects []object
-	for _, stage := range []string{"controllers", "runtime", "store"} {
+	for _, stage := range []string{"controllers", "runtime", "store", "consumer-example"} {
 		stageObjects, files, readErr := readStage(repository, stage)
 		if readErr != nil {
 			return report, readErr
@@ -117,8 +117,8 @@ func VerifySecretManager(root string) (Report, error) {
 		objects = append(objects, stageObjects...)
 	}
 	report.Documents = len(objects)
-	if len(objects) != 15 {
-		return report, fmt.Errorf("secret-manager document count is %d, want 15", len(objects))
+	if len(objects) != 22 {
+		return report, fmt.Errorf("secret-manager document count is %d, want 22", len(objects))
 	}
 	if err := validateObjects(objects); err != nil {
 		return report, err
@@ -131,6 +131,8 @@ func VerifySecretManager(root string) (Report, error) {
 		"controller_versions_and_images_pinned",
 		"openbao_tls_ha_raft_retention_and_probe_ready",
 		"external_secrets_workload_identity_ready",
+		"external_secrets_token_request_rbac_least_privilege",
+		"namespaced_consumer_identity_example_ready",
 	}
 	return report, nil
 }
@@ -156,17 +158,18 @@ func readStage(root *os.Root, stage string) ([]object, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	var manifest struct {
-		APIVersion string   `yaml:"apiVersion"`
-		Kind       string   `yaml:"kind"`
-		Resources  []string `yaml:"resources"`
+	var manifest map[string]any
+	if err := decodeOne(kustomization, &manifest); err != nil || len(manifest) != 3 || stringValue(manifest["apiVersion"]) != "kustomize.config.k8s.io/v1beta1" || stringValue(manifest["kind"]) != "Kustomization" {
+		return nil, 0, fmt.Errorf("%s stage has an invalid kustomization", stage)
 	}
-	if err := decodeOne(kustomization, &manifest); err != nil || manifest.APIVersion != "kustomize.config.k8s.io/v1beta1" || manifest.Kind != "Kustomization" || len(manifest.Resources) == 0 {
+	resources, ok := manifest["resources"].([]any)
+	if !ok || len(resources) == 0 {
 		return nil, 0, fmt.Errorf("%s stage has an invalid kustomization", stage)
 	}
 	seen := map[string]bool{}
 	var result []object
-	for _, resource := range manifest.Resources {
+	for _, rawResource := range resources {
+		resource := stringValue(rawResource)
 		if resource == "" || filepath.Base(resource) != resource || filepath.Ext(resource) != ".yaml" || seen[resource] {
 			return nil, 0, fmt.Errorf("%s stage has an unsafe resource reference", stage)
 		}
@@ -184,7 +187,7 @@ func readStage(root *os.Root, stage string) ([]object, int, error) {
 		}
 		result = append(result, documents...)
 	}
-	return result, len(manifest.Resources) + 1, nil
+	return result, len(resources) + 1, nil
 }
 
 func readRegular(root *os.Root, path string) ([]byte, error) {
@@ -298,9 +301,16 @@ func validateObjects(objects []object) error {
 		"HelmRepository/cert-manager/jetstack",
 		"HelmRepository/external-secrets/external-secrets",
 		"HelmRepository/openbao/openbao",
+		"Namespace//cloudring-consumer-example",
 		"Namespace//external-secrets",
 		"Namespace//openbao",
 		"NetworkPolicy/openbao/openbao-ingress",
+		"Role/cloudring-consumer-example/cloudring-openbao-reader-token-request",
+		"Role/external-secrets/external-secrets-token-request",
+		"RoleBinding/cloudring-consumer-example/cloudring-openbao-reader-token-request",
+		"RoleBinding/external-secrets/external-secrets-token-request",
+		"SecretStore/cloudring-consumer-example/cloudring-openbao",
+		"ServiceAccount/cloudring-consumer-example/cloudring-openbao-reader",
 	}
 	actual := make([]string, 0, len(index))
 	for key := range index {
@@ -324,6 +334,27 @@ func validateObjects(objects []object) error {
 	eso, err := require("HelmRelease", "external-secrets", "external-secrets")
 	if err != nil || nestedString(eso.Data, "spec", "chart", "spec", "version") != "2.7.0" || nestedNumber(eso.Data, "spec", "values", "replicaCount") != 3 || nestedBool(eso.Data, "spec", "values", "leaderElect") != true {
 		return errors.New("External Secrets HA controller contract is invalid")
+	}
+	serviceAccountTokenCreate, explicit := nested(eso.Data, "spec", "values", "rbac", "serviceAccountTokenCreate").(bool)
+	if !explicit || serviceAccountTokenCreate {
+		return errors.New("External Secrets blanket service-account token creation must be explicitly disabled")
+	}
+	if nested(eso.Data, "spec", "values", "extraObjects") != nil || nested(eso.Data, "spec", "valuesFrom") != nil || nested(eso.Data, "spec", "postRenderers") != nil {
+		return errors.New("External Secrets render-time extensions are forbidden")
+	}
+	if !exactMappingKeys(nested(eso.Data, "spec", "values"), "installCRDs", "replicaCount", "leaderElect", "systemAuthDelegator", "rbac", "image", "webhook", "certController", "podDisruptionBudget", "resources", "concurrent", "vault", "genericTargets", "bitwarden-sdk-server") ||
+		!exactMappingKeys(nested(eso.Data, "spec", "values", "rbac"), "serviceAccountTokenCreate") ||
+		!exactMappingKeys(nested(eso.Data, "spec", "values", "vault"), "enableTokenCache") ||
+		!exactMappingKeys(nested(eso.Data, "spec", "values", "genericTargets"), "enabled") ||
+		!exactMappingKeys(nested(eso.Data, "spec", "values", "bitwarden-sdk-server"), "enabled") {
+		return errors.New("External Secrets chart values inventory is not exact")
+	}
+	systemAuthDelegator, systemAuthDelegatorExplicit := nested(eso.Data, "spec", "values", "systemAuthDelegator").(bool)
+	genericTargets, genericTargetsExplicit := nested(eso.Data, "spec", "values", "genericTargets", "enabled").(bool)
+	bitwardenServer, bitwardenServerExplicit := nested(eso.Data, "spec", "values", "bitwarden-sdk-server", "enabled").(bool)
+	tokenCache, tokenCacheExplicit := nested(eso.Data, "spec", "values", "vault", "enableTokenCache").(bool)
+	if !systemAuthDelegatorExplicit || systemAuthDelegator || !genericTargetsExplicit || genericTargets || !bitwardenServerExplicit || bitwardenServer || !tokenCacheExplicit || tokenCache {
+		return errors.New("External Secrets optional privileged surfaces must be explicitly disabled")
 	}
 	for _, path := range [][]string{{"spec", "values", "image", "tag"}, {"spec", "values", "webhook", "image", "tag"}, {"spec", "values", "certController", "image", "tag"}} {
 		if !digestTagged(nestedString(eso.Data, path...)) {
@@ -359,6 +390,41 @@ func validateObjects(objects []object) error {
 	}
 	if !platformStoreNamespaceBoundary(store.Data) {
 		return errors.New("platform secret-store privileged namespace boundary is invalid")
+	}
+	platformRole, _ := require("Role", "external-secrets", "external-secrets-token-request")
+	if !exactTokenRequestRole(platformRole.Data, "external-secrets") {
+		return errors.New("platform token-request Role is not least privilege")
+	}
+	platformBinding, _ := require("RoleBinding", "external-secrets", "external-secrets-token-request")
+	if !exactTokenRequestRoleBinding(platformBinding.Data, "external-secrets-token-request", "external-secrets", "external-secrets") {
+		return errors.New("platform token-request RoleBinding is not least privilege")
+	}
+	consumerNamespace, _ := require("Namespace", "", "cloudring-consumer-example")
+	if nestedString(consumerNamespace.Data, "apiVersion") != "v1" || !exactStringMap(nested(consumerNamespace.Data, "metadata", "labels"), map[string]string{
+		"app.kubernetes.io/part-of":          "cloudring-secret-manager",
+		"cloudring.org/openbao-client":       "true",
+		"pod-security.kubernetes.io/enforce": "restricted",
+		"pod-security.kubernetes.io/audit":   "restricted",
+		"pod-security.kubernetes.io/warn":    "restricted",
+	}) {
+		return errors.New("consumer example namespace security boundary is invalid")
+	}
+	consumerServiceAccount, _ := require("ServiceAccount", "cloudring-consumer-example", "cloudring-openbao-reader")
+	automount, explicit := nested(consumerServiceAccount.Data, "automountServiceAccountToken").(bool)
+	if nestedString(consumerServiceAccount.Data, "apiVersion") != "v1" || !explicit || automount || nested(consumerServiceAccount.Data, "secrets") != nil {
+		return errors.New("consumer example service-account identity is invalid")
+	}
+	consumerRole, _ := require("Role", "cloudring-consumer-example", "cloudring-openbao-reader-token-request")
+	if !exactTokenRequestRole(consumerRole.Data, "cloudring-openbao-reader") {
+		return errors.New("consumer example token-request Role is not least privilege")
+	}
+	consumerBinding, _ := require("RoleBinding", "cloudring-consumer-example", "cloudring-openbao-reader-token-request")
+	if !exactTokenRequestRoleBinding(consumerBinding.Data, "cloudring-openbao-reader-token-request", "external-secrets", "external-secrets") {
+		return errors.New("consumer example token-request RoleBinding is not least privilege")
+	}
+	consumerStore, _ := require("SecretStore", "cloudring-consumer-example", "cloudring-openbao")
+	if !exactConsumerSecretStore(consumerStore.Data) {
+		return errors.New("consumer example namespaced SecretStore contract is invalid")
 	}
 	bootstrapIssuer, _ := require("ClusterIssuer", "", "cloudring-openbao-selfsigned-bootstrap")
 	if nested(bootstrapIssuer.Data, "spec", "selfSigned") == nil {
@@ -450,6 +516,92 @@ func exactStringSequence(value any, expected ...string) bool {
 		actual = append(actual, stringValue(item))
 	}
 	return slices.Equal(actual, expected)
+}
+
+func exactStringMap(value any, expected map[string]string) bool {
+	mapping, ok := value.(map[string]any)
+	if !ok || len(mapping) != len(expected) {
+		return false
+	}
+	for key, expectedValue := range expected {
+		if stringValue(mapping[key]) != expectedValue {
+			return false
+		}
+	}
+	return true
+}
+
+func exactMappingKeys(value any, expected ...string) bool {
+	mapping, ok := value.(map[string]any)
+	if !ok || len(mapping) != len(expected) {
+		return false
+	}
+	for _, key := range expected {
+		if _, found := mapping[key]; !found {
+			return false
+		}
+	}
+	return true
+}
+
+func exactTokenRequestRole(role map[string]any, serviceAccount string) bool {
+	if nestedString(role, "apiVersion") != "rbac.authorization.k8s.io/v1" {
+		return false
+	}
+	rules, ok := nested(role, "rules").([]any)
+	if !ok || len(rules) != 1 {
+		return false
+	}
+	rule, ok := rules[0].(map[string]any)
+	return ok && len(rule) == 4 &&
+		exactStringSequence(rule["apiGroups"], "") &&
+		exactStringSequence(rule["resources"], "serviceaccounts/token") &&
+		exactStringSequence(rule["resourceNames"], serviceAccount) &&
+		exactStringSequence(rule["verbs"], "create")
+}
+
+func exactTokenRequestRoleBinding(binding map[string]any, role, subjectNamespace, subjectName string) bool {
+	if nestedString(binding, "apiVersion") != "rbac.authorization.k8s.io/v1" {
+		return false
+	}
+	roleRef, ok := nested(binding, "roleRef").(map[string]any)
+	if !ok || len(roleRef) != 3 || stringValue(roleRef["apiGroup"]) != "rbac.authorization.k8s.io" || stringValue(roleRef["kind"]) != "Role" || stringValue(roleRef["name"]) != role {
+		return false
+	}
+	subjects, ok := nested(binding, "subjects").([]any)
+	if !ok || len(subjects) != 1 {
+		return false
+	}
+	subject, ok := subjects[0].(map[string]any)
+	return ok && len(subject) == 3 && stringValue(subject["kind"]) == "ServiceAccount" && stringValue(subject["namespace"]) == subjectNamespace && stringValue(subject["name"]) == subjectName
+}
+
+func exactConsumerSecretStore(store map[string]any) bool {
+	if nestedString(store, "apiVersion") != "external-secrets.io/v1" || nestedString(store, "metadata", "annotations", "cloudring.org/non-claim") != "requires-openbao-policy-role-and-live-sync-proof" {
+		return false
+	}
+	provider, ok := nested(store, "spec", "provider").(map[string]any)
+	if !ok || len(provider) != 1 {
+		return false
+	}
+	vault, ok := provider["vault"].(map[string]any)
+	if !ok || len(vault) != 5 || stringValue(vault["server"]) != "https://openbao-active.openbao.svc:8200" || stringValue(vault["path"]) != "cloudring" || stringValue(vault["version"]) != "v2" {
+		return false
+	}
+	caProvider, ok := vault["caProvider"].(map[string]any)
+	if !ok || len(caProvider) != 3 || stringValue(caProvider["type"]) != "ConfigMap" || stringValue(caProvider["name"]) != "openbao-client-ca" || stringValue(caProvider["key"]) != "ca.crt" {
+		return false
+	}
+	auth, ok := vault["auth"].(map[string]any)
+	if !ok || len(auth) != 1 {
+		return false
+	}
+	kubernetes, ok := auth["kubernetes"].(map[string]any)
+	if !ok || len(kubernetes) != 3 || stringValue(kubernetes["mountPath"]) != "kubernetes" || stringValue(kubernetes["role"]) != "cloudring-consumer-example" {
+		return false
+	}
+	serviceAccountRef, ok := kubernetes["serviceAccountRef"].(map[string]any)
+	return ok && len(serviceAccountRef) == 2 && stringValue(serviceAccountRef["name"]) == "cloudring-openbao-reader" && exactStringSequence(serviceAccountRef["audiences"], "openbao")
 }
 
 func openBaoNetworkPolicyBoundary(policy map[string]any) bool {

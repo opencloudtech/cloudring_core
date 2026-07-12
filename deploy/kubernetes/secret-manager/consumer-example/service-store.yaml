@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+    cloudring.org/openbao-client: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-openbao-reader
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudring-openbao-reader-token-request
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    resourceNames:
+      - cloudring-openbao-reader
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudring-openbao-reader-token-request
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudring-openbao-reader-token-request
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: cloudring-openbao
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+  annotations:
+    cloudring.org/non-claim: requires-openbao-policy-role-and-live-sync-proof
+spec:
+  provider:
+    vault:
+      server: https://openbao-active.openbao.svc:8200
+      path: cloudring
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: openbao-client-ca
+        key: ca.crt
+      auth:
+        kubernetes:
+          mountPath: kubernetes
+          role: cloudring-consumer-example
+          serviceAccountRef:
+            name: cloudring-openbao-reader
+            audiences:
+              - openbao
