@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cloudring-openbao-selfsigned-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-root-ca
+  namespace: cert-manager
+spec:
+  secretName: openbao-root-ca
+  commonName: CloudRING OpenBao Root CA
+  isCA: true
+  duration: 87600h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+    rotationPolicy: Always
+  issuerRef:
+    name: cloudring-openbao-selfsigned-bootstrap
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: cloudring-openbao-ca
+spec:
+  ca:
+    secretName: openbao-root-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-server
+  namespace: openbao
+spec:
+  secretName: openbao-server-tls
+  duration: 2160h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - openbao
+    - openbao.openbao
+    - openbao.openbao.svc
+    - openbao.openbao.svc.cluster.local
+    - openbao-active
+    - openbao-active.openbao
+    - openbao-active.openbao.svc
+    - openbao-standby
+    - openbao-standby.openbao
+    - openbao-standby.openbao.svc
+    - openbao-internal
+    - openbao-internal.openbao
+    - openbao-internal.openbao.svc
+    - openbao-0.openbao-internal
+    - openbao-0.openbao-internal.openbao.svc
+    - openbao-1.openbao-internal
+    - openbao-1.openbao-internal.openbao.svc
+    - openbao-2.openbao-internal
+    - openbao-2.openbao-internal.openbao.svc
+  issuerRef:
+    name: cloudring-openbao-ca
+    kind: ClusterIssuer
+---
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: openbao-client-ca
+spec:
+  sources:
+    - secret:
+        name: openbao-root-ca
+        key: tls.crt
+  target:
+    configMap:
+      key: ca.crt
+      metadata:
+        labels:
+          app.kubernetes.io/part-of: cloudring-secret-manager
+    namespaceSelector:
+      matchLabels:
+        cloudring.org/openbao-client: "true"

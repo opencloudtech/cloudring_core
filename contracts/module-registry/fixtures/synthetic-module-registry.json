@@ -1,0 +1,199 @@
+{
+  "schemaVersion": "cloudring.module-registry/v1",
+  "registryId": "synthetic-core-modules",
+  "modelVersion": "2026.07.module-registry",
+  "sourceSafety": {
+    "syntheticFixture": true,
+    "containsServiceImplementationReferences": false,
+    "containsProviderEndpoints": false,
+    "containsSecrets": false,
+    "mutatesServices": false
+  },
+  "dependencyResolution": {
+    "strategy": "topological",
+    "cyclePolicy": "block",
+    "missingDependencyPolicy": "block",
+    "evidenceRef": "module-registry.dependency-resolution.receipt"
+  },
+  "modules": [
+    {
+      "id": "network-foundation",
+      "displayName": "Network Foundation",
+      "packageRef": "modules/network/module-package.json",
+      "channel": "alpha3",
+      "version": "v0.1.0",
+      "state": "installed",
+      "lifecycleStates": [
+        "installable",
+        "installed",
+        "suspended",
+        "deprecated",
+        "not-installed"
+      ],
+      "dependencies": [],
+      "entitlementScope": "foundation",
+      "operations": {
+        "install": {
+          "action": "install",
+          "operationId": "network-foundation.install.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+version",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.network-foundation.install",
+          "evidenceReceiptRef": "evidence.module.network-foundation.install",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.network-foundation.install",
+          "nextAction": "record dependency installation receipt"
+        },
+        "update": {
+          "action": "update",
+          "operationId": "network-foundation.update.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+fromVersion+toVersion",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.network-foundation.update",
+          "evidenceReceiptRef": "evidence.module.network-foundation.update",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.network-foundation.update",
+          "nextAction": "plan reviewed dependency update"
+        },
+        "remove": {
+          "action": "remove",
+          "operationId": "network-foundation.remove.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+removalRequest",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.network-foundation.remove",
+          "evidenceReceiptRef": "evidence.module.network-foundation.remove",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.network-foundation.remove",
+          "nextAction": "block dependent removals until registry confirms safe order"
+        },
+        "suspend": {
+          "action": "suspend",
+          "operationId": "network-foundation.suspend.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+suspensionReason",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.network-foundation.suspend",
+          "evidenceReceiptRef": "evidence.module.network-foundation.suspend",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.network-foundation.suspend",
+          "nextAction": "mark dependency suspended with operator remediation"
+        },
+        "deprecate": {
+          "action": "deprecate",
+          "operationId": "network-foundation.deprecate.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+channel+deprecationNotice",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.network-foundation.deprecate",
+          "evidenceReceiptRef": "evidence.module.network-foundation.deprecate",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.network-foundation.deprecate",
+          "nextAction": "block new installs and keep existing receipts visible"
+        }
+      }
+    },
+    {
+      "id": "object-storage",
+      "displayName": "Object Storage",
+      "packageRef": "modules/object-storage/module-package.json",
+      "channel": "alpha3",
+      "version": "v0.1.0",
+      "state": "installed",
+      "lifecycleStates": [
+        "installable",
+        "installed",
+        "suspended",
+        "deprecated",
+        "not-installed"
+      ],
+      "dependencies": [
+        {
+          "moduleId": "network-foundation",
+          "state": "installed"
+        }
+      ],
+      "entitlementScope": "project",
+      "operations": {
+        "install": {
+          "action": "install",
+          "operationId": "object-storage.install.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+version",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.install",
+          "evidenceReceiptRef": "evidence.module.object-storage.install",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.install",
+          "nextAction": "record installation receipt"
+        },
+        "update": {
+          "action": "update",
+          "operationId": "object-storage.update.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+fromVersion+toVersion",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.update",
+          "evidenceReceiptRef": "evidence.module.object-storage.update",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.update",
+          "nextAction": "plan reviewed update with rollback receipt"
+        },
+        "remove": {
+          "action": "remove",
+          "operationId": "object-storage.remove.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+removalRequest",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.remove",
+          "evidenceReceiptRef": "evidence.module.object-storage.remove",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.remove",
+          "nextAction": "verify export evidence before removal plan"
+        },
+        "suspend": {
+          "action": "suspend",
+          "operationId": "object-storage.suspend.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+target.profile+suspensionReason",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.suspend",
+          "evidenceReceiptRef": "evidence.module.object-storage.suspend",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.suspend",
+          "nextAction": "pause new operations and keep export path visible"
+        },
+        "deprecate": {
+          "action": "deprecate",
+          "operationId": "object-storage.deprecate.v0.1.0",
+          "idempotent": true,
+          "idempotencyKey": "module.id+channel+deprecationNotice",
+          "policyAware": true,
+          "auditReceiptRef": "audit.module.object-storage.deprecate",
+          "evidenceReceiptRef": "evidence.module.object-storage.deprecate",
+          "rollbackRequired": true,
+          "rollbackHookRef": "rollback.module.object-storage.deprecate",
+          "nextAction": "block new installs and show update or exit guidance"
+        }
+      }
+    }
+  ],
+  "planRequests": [
+    {
+      "name": "install-existing-object-storage",
+      "moduleId": "object-storage",
+      "action": "install",
+      "currentState": "installed",
+      "targetVersion": "v0.1.0"
+    },
+    {
+      "name": "update-object-storage",
+      "moduleId": "object-storage",
+      "action": "update",
+      "currentState": "installed",
+      "targetVersion": "v0.1.0"
+    }
+  ]
+}

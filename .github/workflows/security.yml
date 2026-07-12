@@ -6,43 +6,113 @@ on:
     branches:
       - main
   merge_group:
+    types:
+      - checks_requested
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   codeql:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           languages: go
           config-file: ./.github/codeql/codeql-config.yml
-      - uses: github/codeql-action/autobuild@v3
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/autobuild@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+      - uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
 
   govulncheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
           cache: true
-      - uses: golang/govulncheck-action@v1
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  gosec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-package: ./...
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - run: go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -quiet -fmt=golint -tests -nosec-require-justification -nosec-require-rules ./...
 
   secret-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          go-version-file: go.mod
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
           cache: true
-      - run: go run github.com/zricethezav/gitleaks/v8@latest detect --source . --no-git --redact --exit-code 1
+      - name: Scan current tree and pushed history
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --no-banner --redact=100 --exit-code 1 .
+
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              base_sha="$(jq -r '.pull_request.base.sha // empty' "${GITHUB_EVENT_PATH}")"
+              head_sha="$(jq -r '.pull_request.head.sha // empty' "${GITHUB_EVENT_PATH}")"
+              ;;
+            merge_group)
+              base_sha="$(jq -r '.merge_group.base_sha // empty' "${GITHUB_EVENT_PATH}")"
+              head_sha="$(jq -r '.merge_group.head_sha // empty' "${GITHUB_EVENT_PATH}")"
+              ;;
+            push)
+              base_sha="$(jq -r '.before // empty' "${GITHUB_EVENT_PATH}")"
+              head_sha="$(jq -r '.after // empty' "${GITHUB_EVENT_PATH}")"
+              ;;
+            *)
+              echo "unsupported GitHub event for secret history scan: ${GITHUB_EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          head_sha="${head_sha:-${GITHUB_SHA}}"
+          test -n "${head_sha}"
+          git cat-file -e "${head_sha}^{commit}"
+          if [[ -n "${base_sha}" && ! "${base_sha}" =~ ^0+$ ]]; then
+            git cat-file -e "${base_sha}^{commit}"
+            history_spec="${base_sha}..${head_sha}"
+          else
+            history_spec="${head_sha}"
+          fi
+          go run github.com/zricethezav/gitleaks/v8@v8.30.1 git --no-banner --redact=100 --exit-code 1 --platform github \
+            --log-opts="--full-history --diff-merges=separate ${history_spec}" .

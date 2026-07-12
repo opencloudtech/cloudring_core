@@ -1,0 +1,473 @@
+name: supply-chain
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  supply-chain-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Validate workflow syntax
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Verify CycloneDX SBOM generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sbom="${RUNNER_TEMP}/cloudring-sbom.cdx.json"
+          go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0 \
+            mod -json -test -licenses -output "${sbom}" .
+          jq -e '.bomFormat == "CycloneDX" and .specVersion == "1.6" and (.components | length) >= 1' "${sbom}"
+          rm -f "${sbom}"
+      - name: Enforce pull request workflow policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob dotglob
+          workflow_files=(.github/workflows/*.yml .github/workflows/*.yaml)
+          shopt -u nullglob dotglob
+          if (( ${#workflow_files[@]} == 0 )); then
+            echo "no workflows found for policy validation" >&2
+            exit 1
+          fi
+          expected_workflow_files=(
+            .github/workflows/ci.yml
+            .github/workflows/cla-dco.yml
+            .github/workflows/license.yml
+            .github/workflows/security.yml
+            .github/workflows/supply-chain.yml
+          )
+          if (( ${#workflow_files[@]} != ${#expected_workflow_files[@]} )) ||
+            ! diff -u \
+              <(printf '%s\n' "${expected_workflow_files[@]}" | sort) \
+              <(printf '%s\n' "${workflow_files[@]}" | sort) >/dev/null; then
+            echo "workflow file set differs from the exact reviewed allowlist" >&2
+            exit 1
+          fi
+          for workflow in "${workflow_files[@]}"; do
+            workflow_index_entry="$(git ls-files --stage -- "${workflow}")"
+            if [[ "${workflow_index_entry}" != 100644\ *$'\t'"${workflow}" ]]; then
+              echo "workflow is not one exact regular tracked file: ${workflow}" >&2
+              exit 1
+            fi
+          done
+          policy_manifest='.github/workflow-policy.json'
+          if [[ ! -f "${policy_manifest}" || -L "${policy_manifest}" ]]; then
+            echo "workflow policy manifest is not one exact regular file" >&2
+            exit 1
+          fi
+          policy_manifest_json="$(jq -cS '.' "${policy_manifest}")"
+          if ! printf '%s\n' "${policy_manifest_json}" | jq -e \
+            --argjson expected_paths "$(printf '%s\n' "${expected_workflow_files[@]}" | jq -Rsc 'split("\n")[:-1] | sort')" '
+              type == "object" and
+              .schemaVersion == 1 and
+              .canonicalization == "yq-json+jq-cS" and
+              (.workflows | type) == "object" and
+              ((.workflows | keys | sort) == $expected_paths) and
+              all(.workflows[]; type == "string" and test("^[0-9a-f]{64}$"))
+            ' >/dev/null; then
+            echo "workflow policy manifest has an invalid or incomplete schema" >&2
+            exit 1
+          fi
+
+          # Split the restricted context name so this policy does not reject its
+          # own implementation string while still checking the complete AST.
+          restricted_context='sec''rets'
+          github_context='git''hub'
+          expression_open='$'
+          expression_open+='{{'
+          # shellcheck disable=SC2016 # jq variables intentionally remain literal.
+          workflow_policy='
+            def safe_root_permissions:
+              type == "object" and
+              all(to_entries[]; .value == "read" or .value == "none");
+            def safe_job_permissions($job_key; $workflow_path):
+              if has("permissions") | not then true
+              elif (.permissions | type) != "object" then false
+              else all(.permissions | to_entries[];
+                .value == "read" or .value == "none" or
+                (.value == "write" and .key == "security-events" and
+                 $job_key == "codeql" and
+                 $workflow_path == ".github/workflows/security.yml"))
+              end;
+            def no_pull_request_target:
+              .on as $events |
+              if ($events | type) == "string" then
+                $events != "pull_request_target"
+              elif ($events | type) == "array" then
+                all($events[]; type == "string" and . != "pull_request_target")
+              elif ($events | type) == "object" then
+                ($events | has("pull_request_target") | not)
+              else false
+              end;
+            def reviewed_use:
+              type == "string" and
+              (. == "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" or
+               . == "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16" or
+               test("^github/codeql-action/(init|autobuild|analyze)@99df26d4f13ea111d4ec1a7dddef6063f76b97e9$") or
+               test("^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$"));
+            def safe_image:
+              type == "string" and
+              test("^[^@[:space:]]+@sha256:[0-9a-f]{64}$");
+            def safe_runtime($job):
+              (($job | has("container") | not) or
+                (($job.container | type) == "string" and ($job.container | safe_image)) or
+                (($job.container | type) == "object" and
+                 ($job.container | has("image")) and
+                 ($job.container.image | safe_image))) and
+              (($job | has("services") | not) or
+                (($job.services | type) == "object" and
+                 all($job.services | to_entries[];
+                   (.value | type) == "object" and
+                   (.value | has("image")) and
+                   (.value.image | safe_image))));
+            def no_restricted_context($name):
+              ([.. | objects | keys[]] |
+                all(.[]; ascii_downcase != ($name | ascii_downcase))) and
+              ([.. | strings] |
+                all(.[];
+                  (test("(^|[^A-Za-z0-9_])" + $name + "([^A-Za-z0-9_]|$)"; "i") | not)));
+            def no_unsafe_github_expressions($github_name; $open):
+              ($github_name + "[[:space:]]*\\.[[:space:]]*(" +
+                "workflow|ref|event_name|" +
+                "event[[:space:]]*\\.[[:space:]]*pull_request[[:space:]]*\\.[[:space:]]*(" +
+                  "number|base[[:space:]]*\\.[[:space:]]*sha|" +
+                  "head[[:space:]]*\\.[[:space:]]*sha))") as $safe_reference |
+              (([.. | strings | select(contains($open))] +
+                [.. | objects | .if? | select(type == "string")]) |
+                all(.[];
+                  (test($safe_reference + "[[:space:]]*(\\.|\\[|[A-Za-z0-9_])") | not) and
+                  ((gsub($safe_reference; "") |
+                    test("(^|[^A-Za-z0-9_])" + $github_name +
+                      "([^A-Za-z0-9_]|$)"; "i")) | not)));
+            type == "object" and
+            has("on") and no_pull_request_target and
+            has("permissions") and (.permissions | safe_root_permissions) and
+            (.jobs | type == "object" and length > 0) and
+            (all(.jobs | to_entries[];
+              . as $job |
+              ($job.value | safe_job_permissions($job.key; $workflow_path)) and
+              ($job.value | has("if") | not) and
+              ($job.value | has("continue-on-error") | not) and
+              (all($job.value.steps[]?; has("continue-on-error") | not)) and
+              ($job.value | safe_runtime(.)) and
+              (([$job.value.uses?, $job.value.steps[]?.uses?] |
+                map(select(. != null))) |
+                all(.[]; reviewed_use)))) and
+            no_restricted_context($restricted_context) and
+            no_unsafe_github_expressions($github_context; $expression_open)
+          '
+          policy_accepts() {
+            local workflow_path="${2:-.github/workflows/fixture.yml}"
+            printf '%s' "$1" \
+              | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+              | jq -se --arg restricted_context "${restricted_context}" \
+                  --arg workflow_path "${workflow_path}" \
+                  --arg github_context "${github_context}" \
+                  --arg expression_open "${expression_open}" \
+                  "length == 1 and (.[0] | ${workflow_policy})" >/dev/null
+          }
+          canonical_workflow_digest() {
+            printf '%s' "$1" \
+              | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+              | jq -scS 'if length == 1 then .[0] else error("multiple documents") end' \
+              | sha256sum \
+              | cut -d ' ' -f 1
+          }
+          workflow_surface_accepts() {
+            local candidate="$1"
+            local workflow_path="$2"
+            policy_accepts "${candidate}" "${workflow_path}" || return 1
+            local candidate_digest
+            local reviewed_digest
+            candidate_digest="$(canonical_workflow_digest "${candidate}")"
+            reviewed_digest="$(printf '%s\n' "${policy_manifest_json}" \
+              | jq -er --arg workflow_path "${workflow_path}" '.workflows[$workflow_path]')"
+            [[ "${candidate_digest}" == "${reviewed_digest}" ]]
+          }
+          expect_rejected() {
+            if policy_accepts "$2"; then
+              echo "workflow policy accepted unsafe fixture: $1" >&2
+              exit 1
+            fi
+          }
+          expect_surface_rejected() {
+            if workflow_surface_accepts "$2" "$3"; then
+              echo "reviewed workflow surface accepted unsafe fixture: $1" >&2
+              exit 1
+            fi
+          }
+
+          valid_fixture=$'"on": [pull_request]\npermissions:\n  contents: read\njobs:\n  build:\n    runs-on: ubuntu-latest\n    container:\n      image: registry.example/build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    services:\n      database:\n        image: registry.example/database@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n    steps:\n      - "uses": actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0\n      - uses : docker://registry.example/tool@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n'
+          policy_accepts "${valid_fixture}"
+
+          multi_document_fixture=$'"on": pull_request_target\npermissions: {contents: read}\njobs:\n  unsafe:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n---\n'
+          multi_document_fixture+="${valid_fixture}"
+          expect_rejected first-unsafe-last-safe "${multi_document_fixture}"
+
+          hidden_fixture_dir="$(mktemp -d)"
+          hidden_fixture="${hidden_fixture_dir}/.unsafe.yml"
+          hidden_fixture_content=$'"on": pull_request_target\npermissions: {contents: write}\njobs:\n  unsafe:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@main\n'
+          printf '%s' "${hidden_fixture_content}" >"${hidden_fixture}"
+          shopt -s nullglob dotglob
+          hidden_fixture_files=("${hidden_fixture_dir}"/*.yml)
+          shopt -u nullglob dotglob
+          if (( ${#hidden_fixture_files[@]} != 1 )) || [[ "${hidden_fixture_files[0]}" != "${hidden_fixture}" ]]; then
+            echo "dot-prefixed workflow discovery regression" >&2
+            rm -rf -- "${hidden_fixture_dir}"
+            exit 1
+          fi
+          expect_rejected hidden-unsafe-workflow "$(<"${hidden_fixture}")"
+          rm -rf -- "${hidden_fixture_dir}"
+
+          expect_rejected mutable-action $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@main\n'
+          expect_rejected local-action $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - uses : ./local-action\n'
+          expect_rejected mutable-container $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    container: registry.example/build:latest\n    steps:\n      - run: true\n'
+          expect_rejected mutable-service $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    services:\n      database:\n        image: registry.example/database:latest\n    steps:\n      - run: true\n'
+          expect_rejected scalar-target-event $'"on": pull_request_target\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected array-target-event $'"on": [pull_request, pull_request_target]\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected mapping-target-event $'"on":\n  "pull_request_target": {}\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected missing-permissions $'"on": pull_request\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected root-write $'"on": pull_request\npermissions: {contents: write}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected job-write $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    permissions: {contents: write}\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          github_token_context='git''hub.to''ken'
+          token_property='to''ken'
+          github_token_expression='$'
+          github_token_expression+="{{ ${github_token_context} }}"
+          unrelated_codeql_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  codeql:' \
+            '    permissions: {contents: read, security-events: write}' \
+            '    runs-on: ubuntu-latest' \
+            '    steps:' \
+            "      - run: echo ${github_token_expression}")"
+          expect_rejected unrelated-codeql-write "${unrelated_codeql_fixture}"
+
+          grouped_direct_expression='$'
+          grouped_direct_expression+="{{ (${github_context}).${token_property} }}"
+          nested_grouped_expression='$'
+          nested_grouped_expression+="{{ ((${github_context})).${token_property} }}"
+          logical_grouped_expression='$'
+          logical_grouped_expression+="{{ (true && ${github_context}).${token_property} }}"
+          for unsafe_expression in \
+            "${grouped_direct_expression}" \
+            "${nested_grouped_expression}" \
+            "${logical_grouped_expression}"; do
+            grouped_github_fixture="$(printf '%s\n' \
+              '"on": pull_request' \
+              'permissions: {contents: read}' \
+              'jobs:' \
+              '  build:' \
+              '    runs-on: ubuntu-latest' \
+              '    steps:' \
+              "      - run: echo ${unsafe_expression}")"
+            expect_rejected grouped-github-context "${grouped_github_fixture}"
+          done
+
+          whole_github_expression='$'
+          whole_github_expression+="{{ toJSON(${github_context}) }}"
+          whole_github_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  build:' \
+            '    runs-on: ubuntu-latest' \
+            '    steps:' \
+            "      - run: echo ${whole_github_expression}")"
+          expect_rejected whole-github-context "${whole_github_fixture}"
+          parenthesized_github_expression='$'
+          parenthesized_github_expression+="{{ toJSON((${github_context})) }}"
+          logical_github_expression='$'
+          logical_github_expression+="{{ toJSON(${github_context} || ${github_context}) }}"
+          wildcard_github_expression='$'
+          wildcard_github_expression+="{{ toJSON(${github_context}.*) }}"
+          for unsafe_expression in \
+            "${parenthesized_github_expression}" \
+            "${logical_github_expression}" \
+            "${wildcard_github_expression}"; do
+            unsafe_github_fixture="$(printf '%s\n' \
+              '"on": pull_request' \
+              'permissions: {contents: read}' \
+              'jobs:' \
+              '  build:' \
+              '    runs-on: ubuntu-latest' \
+              '    steps:' \
+              "      - run: echo ${unsafe_expression}")"
+            expect_rejected unsafe-whole-github-context "${unsafe_github_fixture}"
+          done
+          dynamic_token_expression='$'
+          dynamic_token_expression+="{{ ${github_context}[format('{0}{1}','to','ken')] }}"
+          dynamic_token_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  build:' \
+            '    runs-on: ubuntu-latest' \
+            '    steps:' \
+            "      - run: echo ${dynamic_token_expression}")"
+          expect_rejected dynamic-github-bracket "${dynamic_token_fixture}"
+
+          security_fixture="$(go run github.com/mikefarah/yq/v4@v4.53.3 \
+            eval -o=json -I=0 '.' .github/workflows/security.yml)"
+          workflow_surface_accepts "${security_fixture}" '.github/workflows/security.yml'
+          injected_root_env_fixture="$(printf '%s' "${security_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+            | jq -c --arg token_expression "${github_token_expression}" \
+                '.env = {TOKEN_ALIAS: $token_expression,
+                  NODE_OPTIONS: "--import=data:text/javascript,export default 0"}')"
+          if workflow_surface_accepts "${injected_root_env_fixture}" '.github/workflows/security.yml'; then
+            echo "privileged workflow accepted an injected root environment" >&2
+            exit 1
+          fi
+
+          ci_fixture="$(go run github.com/mikefarah/yq/v4@v4.53.3 \
+            eval -o=json -I=0 '.' .github/workflows/ci.yml)"
+          scheduled_event_fixture="$(printf '%s' "${ci_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+            | jq -c '.on.schedule = [{cron: "0 * * * *"}]')"
+          expect_surface_rejected unexpected-event "${scheduled_event_fixture}" '.github/workflows/ci.yml'
+          step_if_fixture="$(printf '%s' "${ci_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+            | jq -c '.jobs["go-test"].steps[2].if = "false"')"
+          expect_surface_rejected unexpected-step-if "${step_if_fixture}" '.github/workflows/ci.yml'
+          removed_test_fixture="$(printf '%s' "${ci_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+            | jq -c '.jobs["go-test"].steps = [{run: "true"}]')"
+          expect_surface_rejected removed-test-step "${removed_test_fixture}" '.github/workflows/ci.yml'
+          allowed_github_expression='$'
+          allowed_github_expression+="{{ ${github_context}.workflow }}"
+          shell_interpolation_fixture="$(printf '%s' "${ci_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+            | jq -c --arg expression "${allowed_github_expression}" \
+                '.jobs["go-test"].steps[2].run = ("echo " + $expression)')"
+          expect_surface_rejected github-context-in-shell "${shell_interpolation_fixture}" '.github/workflows/ci.yml'
+          supply_chain_fixture="$(go run github.com/mikefarah/yq/v4@v4.53.3 \
+            eval -o=json -I=0 '.' .github/workflows/supply-chain.yml)"
+          self_noop_fixture="$(printf '%s' "${supply_chain_fixture}" \
+            | go run github.com/mikefarah/yq/v4@v4.53.3 eval -o=json -I=0 '.' - \
+            | jq -c '.jobs["supply-chain-policy"].steps = [{run: "true"}]')"
+          expect_surface_rejected self-policy-noop "${self_noop_fixture}" '.github/workflows/supply-chain.yml'
+          expect_rejected job-if $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    if: false\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected job-continue-on-error $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    continue-on-error: true\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected step-continue-on-error $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n        continue-on-error: true\n'
+
+          credential_expression='$'
+          credential_expression+="{{ ${restricted_context}['TOKEN'] }}"
+          restricted_value_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  build:' \
+            '    runs-on: ubuntu-latest' \
+            '    steps:' \
+            "      - run: ${credential_expression}")"
+          expect_rejected restricted-expression "${restricted_value_fixture}"
+          restricted_function="toJSON(${restricted_context})"
+          restricted_function_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  build:' \
+            '    runs-on: ubuntu-latest' \
+            '    steps:' \
+            "      - run: ${restricted_function}")"
+          expect_rejected restricted-function "${restricted_function_fixture}"
+          restricted_expression_open='$'
+          restricted_expression_open+='{{'
+          restricted_multiline_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  build:' \
+            '    runs-on: ubuntu-latest' \
+            '    steps:' \
+            '      - run: |' \
+            "          ${restricted_expression_open}" \
+            "            ${restricted_context}.TOKEN" \
+            '          }}')"
+          expect_rejected restricted-multiline "${restricted_multiline_fixture}"
+          restricted_key_fixture="$(printf '%s\n' \
+            '"on": pull_request' \
+            'permissions: {contents: read}' \
+            'jobs:' \
+            '  reused:' \
+            '    uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0' \
+            "    ${restricted_context}: inherit")"
+          expect_rejected restricted-key "${restricted_key_fixture}"
+
+          violations=0
+          for workflow in "${workflow_files[@]}"; do
+            workflow_json="$(go run github.com/mikefarah/yq/v4@v4.53.3 \
+              eval -o=json -I=0 '.' "${workflow}")"
+            case "${workflow}" in
+              .github/workflows/ci.yml)
+                expected_jobs='["docscheck","go-build-module-integrity","go-test","go-test-race","go-vet","ocs-conformance","ocs-validate","platform-manifests","source-safety","windows-go-test"]'
+                ;;
+              .github/workflows/cla-dco.yml)
+                expected_jobs='["cla","dco"]'
+                ;;
+              .github/workflows/license.yml)
+                expected_jobs='["license-check"]'
+                ;;
+              .github/workflows/security.yml)
+                expected_jobs='["codeql","gosec","govulncheck","secret-scan"]'
+                ;;
+              .github/workflows/supply-chain.yml)
+                expected_jobs='["supply-chain-policy"]'
+                ;;
+              *)
+                echo "workflow escaped the exact file allowlist: ${workflow}" >&2
+                violations=1
+                continue
+                ;;
+            esac
+            actual_jobs="$(printf '%s\n' "${workflow_json}" | jq -c '.jobs | keys | sort')"
+            if [[ "${actual_jobs}" != "${expected_jobs}" ]]; then
+              echo "workflow job set differs from the exact reviewed allowlist: ${workflow}" >&2
+              violations=1
+            fi
+            workflow_digest="$(printf '%s\n' "${workflow_json}" \
+              | jq -cS '.' \
+              | sha256sum \
+              | cut -d ' ' -f 1)"
+            reviewed_workflow_digest="$(printf '%s\n' "${policy_manifest_json}" \
+              | jq -er --arg workflow_path "${workflow}" '.workflows[$workflow_path]')"
+            if [[ "${workflow_digest}" != "${reviewed_workflow_digest}" ]]; then
+              echo "workflow differs from the exact reviewed semantic surface: ${workflow}" >&2
+              violations=1
+            fi
+            if ! printf '%s\n' "${workflow_json}" \
+              | jq -se --arg restricted_context "${restricted_context}" \
+                  --arg workflow_path "${workflow}" \
+                  --arg github_context "${github_context}" \
+                  --arg expression_open "${expression_open}" \
+                  "length == 1 and (.[0] | ${workflow_policy})" >/dev/null; then
+              echo "workflow violates the semantic policy: ${workflow}" >&2
+              violations=1
+            fi
+          done
+          exit "${violations}"

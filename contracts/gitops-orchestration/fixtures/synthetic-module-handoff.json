@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "cloudring.gitops-orchestration/v1",
+  "contractId": "synthetic-module-handoff",
+  "syntheticOnly": true,
+  "bootstrapHandoff": {
+    "mode": "dry-run-first",
+    "gitSourceRef": "synthetic-core-source",
+    "overlayRoot": "fixtures/synthetic-overlay",
+    "preApplyGate": "dry-run-receipt-required"
+  },
+  "reconciliationOwnership": [
+    {
+      "objectClass": "git-source",
+      "owner": "gitops-controller",
+      "driftPolicy": "gitops-reconciles"
+    },
+    {
+      "objectClass": "tenant-guardrail",
+      "owner": "platform-controller",
+      "driftPolicy": "controller-reconciles"
+    },
+    {
+      "objectClass": "module-runtime",
+      "owner": "module-controller",
+      "driftPolicy": "controller-reconciles"
+    }
+  ],
+  "receipts": [
+    {
+      "type": "dry-run",
+      "requiredBefore": "apply",
+      "artifactRef": "artifact://synthetic/dry-run"
+    },
+    {
+      "type": "apply",
+      "requiredBefore": "ready-claim",
+      "artifactRef": "artifact://synthetic/apply"
+    },
+    {
+      "type": "rollback",
+      "requiredBefore": "retry",
+      "artifactRef": "artifact://synthetic/rollback"
+    }
+  ],
+  "moduleDeploymentHandoff": {
+    "moduleId": "object-storage",
+    "packageRef": "modules/object-storage/module-package.json",
+    "overlayRef": "fixtures/synthetic-overlay",
+    "handoffState": "ready-for-dry-run"
+  },
+  "sourceSafety": {
+    "syntheticOverlay": true,
+    "containsLiveOverlayPath": false,
+    "containsProviderValues": false,
+    "containsCredentials": false,
+    "containsPrivateEndpoints": false
+  }
+}
