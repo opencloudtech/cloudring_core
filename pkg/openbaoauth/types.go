@@ -135,7 +135,7 @@ type Report struct {
 type ProfileSummary struct {
 	AuthType             string   `json:"authType"`
 	KubernetesHostMode   string   `json:"kubernetesHostMode"`
-	ReviewerCredential   string   `json:"reviewerCredential"`
+	ReviewerSourceMode   string   `json:"reviewerSourceMode"`
 	Audience             string   `json:"audience"`
 	AliasNameSource      string   `json:"aliasNameSource"`
 	Capabilities         []string `json:"capabilities"`

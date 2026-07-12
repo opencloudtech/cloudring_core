@@ -34,7 +34,7 @@ func TestEvaluateBuildsDeterministicSanitizedPlan(t *testing.T) {
 		t.Fatalf("plan made an unsafe claim: %#v", first)
 	}
 	if first.Profile.AuthType != "kubernetes" || first.Profile.KubernetesHostMode != "in-cluster-service-dns" ||
-		first.Profile.ReviewerCredential != "rotating-pod-local-service-account-token" ||
+		first.Profile.ReviewerSourceMode != "pod-local-rotating-service-account" ||
 		first.Profile.Audience != "openbao" || first.Profile.AliasNameSource != "serviceaccount_uid" ||
 		!reflect.DeepEqual(first.Profile.Capabilities, []string{"read"}) || first.Profile.BoundIdentityCount != 1 ||
 		first.Profile.TokenTTL != "10m" || first.Profile.TokenMaxTTL != "30m" ||

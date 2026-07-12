@@ -35,7 +35,7 @@ var nonClaims = []string{
 
 var fixedProfile = ProfileSummary{
 	AuthType: "kubernetes", KubernetesHostMode: "in-cluster-service-dns",
-	ReviewerCredential: "rotating-pod-local-service-account-token",
+	ReviewerSourceMode: "pod-local-rotating-service-account",
 	Audience:           "openbao", AliasNameSource: "serviceaccount_uid",
 	Capabilities: []string{"read"}, BoundIdentityCount: 1,
 	TokenTTL: "10m", TokenMaxTTL: "30m", TokenNoDefaultPolicy: true,
