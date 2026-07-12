@@ -9,8 +9,8 @@ The profile is intentionally split into three reconciliation stages:
 1. `controllers` installs pinned trust-manager and External Secrets Operator
    controllers and their CRDs.
 2. `runtime` creates a private CA/trust bundle and a three-member OpenBao Raft
-   service with TLS, anti-affinity, retained data volumes, audit storage, and a
-   disruption budget.
+   service with TLS, anti-affinity, retained data volumes, a declarative local
+   audit device backed by audit storage, and a disruption budget.
 3. `store` publishes the `platform-secrets` `ClusterSecretStore` only after an
    operator has initialized and unsealed OpenBao, enabled Kubernetes auth,
    created the least-privilege `cloudring-external-secrets` role, and loaded the
@@ -35,8 +35,12 @@ certificate Secret because it also contains the server private key.
 - Initialize exactly one OpenBao member through a non-logging operator channel;
   distribute unseal/recovery shares to independent custodians and never store
   them in Git, Kubernetes manifests, command arguments, or evidence.
-- Join and unseal all three Raft members, enable an audit device, and verify one
-  active plus two healthy standby members on different nodes.
+- Join and unseal all three Raft members, then verify one active plus two healthy
+  standby members on different nodes.
+- Verify that the declarative `audit "file" "persistent"` device writes to the
+  retained audit volume before enabling clients. This local device is only the
+  bootstrap audit baseline; a second independent sink, log rotation proof, and
+  fail-closed audit failure proof remain production promotion gates.
 - Keep StatefulSet pod management `Parallel` so all three sealed members can be
   bootstrapped without an `OrderedReady` deadlock. Keep the advertised HA API
   address on the TLS-covered `openbao-active.openbao.svc` service so standby

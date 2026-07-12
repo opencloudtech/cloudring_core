@@ -104,6 +104,50 @@ func TestSecretManagerProfileRejectsMissingListenerTLSSetting(t *testing.T) {
 	}
 }
 
+func TestSecretManagerProfileRejectsMissingPersistentAudit(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte(persistentAuditHCL), nil)
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "persistent audit") {
+		t.Fatalf("missing OpenBao persistent audit was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsUnsafePersistentAudit(t *testing.T) {
+	tests := []struct {
+		name        string
+		old         string
+		replacement string
+	}{
+		{name: "description", old: `description = "CloudRING persistent audit"`, replacement: `description = "Unreviewed audit"`},
+		{name: "path", old: `file_path = "/openbao/audit/audit.log"`, replacement: `file_path = "/tmp/audit.log"`},
+		{name: "mode", old: `mode      = "0600"`, replacement: `mode      = "0666"`},
+		{name: "raw payloads", old: `log_raw   = "false"`, replacement: `log_raw   = "true"`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := copyProfile(t)
+			data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			data = replaceOnce(t, data, []byte(test.old), []byte(test.replacement))
+			if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "persistent audit") {
+				t.Fatalf("unsafe OpenBao persistent audit was accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestSecretManagerProfileRejectsMissingServingCertificate(t *testing.T) {
 	root := copyProfile(t)
 	data, err := readProfileFile(root, filepath.Join("runtime", "tls.yaml"))
@@ -159,6 +203,55 @@ func TestSecretManagerProfileRejectsClusterStoreOutsidePrivilegedNamespace(t *te
 	}
 	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "privileged namespace boundary") {
 		t.Fatalf("unsafe ClusterSecretStore namespace boundary was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsNonActiveClusterStoreService(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("store", "platform-secrets.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("server: https://openbao-active.openbao.svc:8200"), []byte("server: https://openbao.openbao.svc:8200"))
+	if err := writeProfileFile(root, filepath.Join("store", "platform-secrets.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "workload identity contract") {
+		t.Fatalf("non-active ClusterSecretStore service was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsDisabledAuthDelegator(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("      authDelegator:\n        enabled: true"), []byte("      authDelegator:\n        enabled: false"))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "auth-delegator") {
+		t.Fatalf("disabled OpenBao auth delegator was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsWidenedExternalSecretsIngress(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "network-policy.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte(`          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: external-secrets
+              app.kubernetes.io/instance: external-secrets
+`), nil)
+	if err := writeProfileFile(root, filepath.Join("runtime", "network-policy.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "NetworkPolicy") {
+		t.Fatalf("namespace-wide External Secrets ingress was accepted: %v", err)
 	}
 }
 
@@ -327,3 +420,14 @@ func replaceOnce(t *testing.T, data, old, replacement []byte) []byte {
 	result = append(result, data[position+len(old):]...)
 	return result
 }
+
+const persistentAuditHCL = `            audit "file" "persistent" {
+              description = "CloudRING persistent audit"
+              options {
+                file_path = "/openbao/audit/audit.log"
+                mode      = "0600"
+                log_raw   = "false"
+              }
+            }
+
+`

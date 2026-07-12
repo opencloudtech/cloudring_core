@@ -87,6 +87,8 @@ spec:
       serviceAccount:
         create: true
         createSecret: false
+      authDelegator:
+        enabled: true
       statefulSet:
         securityContext:
           pod:
@@ -184,6 +186,15 @@ spec:
                 leader_client_cert_file = "/openbao/tls/server/tls.crt"
                 leader_client_key_file  = "/openbao/tls/server/tls.key"
                 leader_tls_servername   = "openbao.openbao.svc"
+              }
+            }
+
+            audit "file" "persistent" {
+              description = "CloudRING persistent audit"
+              options {
+                file_path = "/openbao/audit/audit.log"
+                mode      = "0600"
+                log_raw   = "false"
               }
             }
 
