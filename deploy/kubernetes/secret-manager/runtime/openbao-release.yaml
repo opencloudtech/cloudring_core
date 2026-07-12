@@ -25,6 +25,27 @@ spec:
     remediation:
       retries: 3
       remediateLastFailure: true
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              group: apps
+              version: v1
+              kind: StatefulSet
+              name: openbao
+            patch: |-
+              - op: replace
+                path: /spec/template/spec/containers/0/readinessProbe/exec/command
+                value:
+                  - /bin/sh
+                  - -ec
+                  - |-
+                    pod_dns="${BAO_K8S_POD_NAME:?}.openbao-internal"
+                    pod_dns="${pod_dns}.${BAO_K8S_NAMESPACE:?}.svc"
+                    export BAO_ADDR="https://${pod_dns}:8200"
+                    export BAO_CACERT="/openbao/tls/client/ca.crt"
+                    export BAO_TLS_SERVER_NAME="${pod_dns}"
+                    exec bao status
   values:
     global:
       tlsDisable: false

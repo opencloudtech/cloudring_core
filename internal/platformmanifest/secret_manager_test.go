@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -115,6 +116,94 @@ func TestSecretManagerProfileRejectsMissingServingCertificate(t *testing.T) {
 	}
 	if _, err := VerifySecretManager(root); err == nil {
 		t.Fatal("missing OpenBao serving Certificate was accepted")
+	}
+}
+
+func TestOpenBaoReadinessPostRendererProducesExactVerifiedTLSCommand(t *testing.T) {
+	data, err := readProfileFile(repositoryRoot(t), filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects, err := decodeObjects(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var release map[string]any
+	for _, item := range objects {
+		if item.Kind == "HelmRelease" && item.Name == "openbao" {
+			release = item.Data
+		}
+	}
+	command, err := openBaoReadinessPostRenderCommand(release)
+	if err != nil {
+		t.Fatalf("validate OpenBao readiness post-renderer: %v", err)
+	}
+	want := []string{"/bin/sh", "-ec", openBaoReadinessShellCommand}
+	if strings.Join(command, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("unexpected rendered readiness command: %#v", command)
+	}
+	if strings.Contains(strings.Join(command, " "), "tls-skip-verify") {
+		t.Fatalf("rendered readiness command disables TLS verification: %#v", command)
+	}
+}
+
+func TestSecretManagerProfileRejectsClusterStoreOutsidePrivilegedNamespace(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("store", "platform-secrets.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("    - namespaces:\n        - external-secrets"), []byte("    - namespaces:\n        - tenant-workload"))
+	if err := writeProfileFile(root, filepath.Join("store", "platform-secrets.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "privileged namespace boundary") {
+		t.Fatalf("unsafe ClusterSecretStore namespace boundary was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsReadinessTLSSkipVerify(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("                    exec bao status\n"), []byte("                    exec bao status -tls-skip-verify\n"))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "TLS verification") {
+		t.Fatalf("insecure OpenBao readiness probe was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsReadinessWithoutCA(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte(`BAO_CACERT="/openbao/tls/client/ca.crt"`), []byte(`BAO_CACERT=""`))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "CA and pod DNS verification") {
+		t.Fatalf("OpenBao readiness probe without CA was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsReadinessWithoutPodSpecificServerName(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte(`export BAO_TLS_SERVER_NAME="${pod_dns}"`), []byte(`export BAO_TLS_SERVER_NAME="openbao.openbao.svc"`))
+	if err := writeProfileFile(root, filepath.Join("runtime", "openbao-release.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "CA and pod DNS verification") {
+		t.Fatalf("OpenBao readiness probe without pod-specific server name was accepted: %v", err)
 	}
 }
 

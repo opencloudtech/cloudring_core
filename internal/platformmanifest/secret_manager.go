@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -17,8 +18,15 @@ import (
 )
 
 const (
-	profilePath  = "deploy/kubernetes/secret-manager"
-	maxFileBytes = 1 << 20
+	profilePath                  = "deploy/kubernetes/secret-manager"
+	maxFileBytes                 = 1 << 20
+	openBaoReadinessPatchPath    = "/spec/template/spec/containers/0/readinessProbe/exec/command"
+	openBaoReadinessShellCommand = `pod_dns="${BAO_K8S_POD_NAME:?}.openbao-internal"
+pod_dns="${pod_dns}.${BAO_K8S_NAMESPACE:?}.svc"
+export BAO_ADDR="https://${pod_dns}:8200"
+export BAO_CACERT="/openbao/tls/client/ca.crt"
+export BAO_TLS_SERVER_NAME="${pod_dns}"
+exec bao status`
 )
 
 type Report struct {
@@ -108,7 +116,7 @@ func VerifySecretManager(root string) (Report, error) {
 		"yaml_duplicate_keys_absent",
 		"secret_material_absent",
 		"controller_versions_and_images_pinned",
-		"openbao_tls_ha_raft_retention_ready",
+		"openbao_tls_ha_raft_retention_and_probe_ready",
 		"external_secrets_workload_identity_ready",
 	}
 	return report, nil
@@ -316,6 +324,9 @@ func validateObjects(objects []object) error {
 	if nestedBool(bao.Data, "spec", "values", "global", "tlsDisable") || !nestedBool(bao.Data, "spec", "values", "server", "ha", "enabled") || nestedNumber(bao.Data, "spec", "values", "server", "ha", "replicas") != 3 || !nestedBool(bao.Data, "spec", "values", "server", "ha", "raft", "enabled") {
 		return errors.New("OpenBao TLS HA Raft contract is invalid")
 	}
+	if _, err := openBaoReadinessPostRenderCommand(bao.Data); err != nil {
+		return err
+	}
 	if err := validateOpenBaoHCL(nestedString(bao.Data, "spec", "values", "server", "ha", "raft", "config")); err != nil {
 		return err
 	}
@@ -327,8 +338,11 @@ func validateObjects(objects []object) error {
 		return errors.New("OpenBao durable storage and retention contract is invalid")
 	}
 	store, err := require("ClusterSecretStore", "", "platform-secrets")
-	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" {
+	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "name") != "external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "namespace") != "external-secrets" || !exactStringSequence(nested(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "audiences"), "openbao") {
 		return errors.New("platform secret-store workload identity contract is invalid")
+	}
+	if !platformStoreNamespaceBoundary(store.Data) {
+		return errors.New("platform secret-store privileged namespace boundary is invalid")
 	}
 	bootstrapIssuer, _ := require("ClusterIssuer", "", "cloudring-openbao-selfsigned-bootstrap")
 	if nested(bootstrapIssuer.Data, "spec", "selfSigned") == nil {
@@ -355,6 +369,71 @@ func validateObjects(objects []object) error {
 		return errors.New("OpenBao NetworkPolicy is invalid")
 	}
 	return nil
+}
+
+func openBaoReadinessPostRenderCommand(release map[string]any) ([]string, error) {
+	renderers, ok := nested(release, "spec", "postRenderers").([]any)
+	if !ok || len(renderers) != 1 {
+		return nil, errors.New("OpenBao readiness post-renderer is invalid")
+	}
+	renderer, ok := renderers[0].(map[string]any)
+	if !ok || len(renderer) != 1 {
+		return nil, errors.New("OpenBao readiness post-renderer is invalid")
+	}
+	kustomize, ok := renderer["kustomize"].(map[string]any)
+	if !ok || len(kustomize) != 1 {
+		return nil, errors.New("OpenBao readiness post-renderer is invalid")
+	}
+	patches, ok := kustomize["patches"].([]any)
+	if !ok || len(patches) != 1 {
+		return nil, errors.New("OpenBao readiness post-renderer is invalid")
+	}
+	patch, ok := patches[0].(map[string]any)
+	if !ok || len(patch) != 2 {
+		return nil, errors.New("OpenBao readiness post-renderer is invalid")
+	}
+	target, ok := patch["target"].(map[string]any)
+	if !ok || len(target) != 4 || stringValue(target["group"]) != "apps" || stringValue(target["version"]) != "v1" || stringValue(target["kind"]) != "StatefulSet" || stringValue(target["name"]) != "openbao" {
+		return nil, errors.New("OpenBao readiness post-render target is invalid")
+	}
+	var operations []struct {
+		Operation string   `yaml:"op"`
+		Path      string   `yaml:"path"`
+		Value     []string `yaml:"value"`
+	}
+	patchSource := stringValue(patch["patch"])
+	if patchSource == "" || strings.Contains(patchSource, "tls-skip-verify") || strings.Contains(patchSource, "BAO_SKIP_VERIFY") || strings.Contains(patchSource, "VAULT_SKIP_VERIFY") {
+		return nil, errors.New("OpenBao readiness TLS verification is invalid")
+	}
+	if err := decodeOne([]byte(patchSource), &operations); err != nil || len(operations) != 1 || operations[0].Operation != "replace" || operations[0].Path != openBaoReadinessPatchPath {
+		return nil, errors.New("OpenBao readiness post-render patch is invalid")
+	}
+	expected := []string{"/bin/sh", "-ec", openBaoReadinessShellCommand}
+	if !slices.Equal(operations[0].Value, expected) {
+		return nil, errors.New("OpenBao readiness command does not enforce CA and pod DNS verification")
+	}
+	return slices.Clone(operations[0].Value), nil
+}
+
+func platformStoreNamespaceBoundary(store map[string]any) bool {
+	conditions, ok := nested(store, "spec", "conditions").([]any)
+	if !ok || len(conditions) != 1 {
+		return false
+	}
+	condition, ok := conditions[0].(map[string]any)
+	return ok && len(condition) == 1 && exactStringSequence(condition["namespaces"], "external-secrets")
+}
+
+func exactStringSequence(value any, expected ...string) bool {
+	items, ok := value.([]any)
+	if !ok || len(items) != len(expected) {
+		return false
+	}
+	actual := make([]string, 0, len(items))
+	for _, item := range items {
+		actual = append(actual, stringValue(item))
+	}
+	return slices.Equal(actual, expected)
 }
 
 func validateOpenBaoHCL(source string) error {

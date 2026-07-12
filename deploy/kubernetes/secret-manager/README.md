@@ -14,7 +14,9 @@ The profile is intentionally split into three reconciliation stages:
 3. `store` publishes the `platform-secrets` `ClusterSecretStore` only after an
    operator has initialized and unsealed OpenBao, enabled Kubernetes auth,
    created the least-privilege `cloudring-external-secrets` role, and loaded the
-   first versioned secret paths.
+   first versioned secret paths. The store is usable only by `ExternalSecret`
+   objects in the privileged `external-secrets` namespace; it is not a tenant
+   credential gateway.
 
 Reconcile the stages as separate Flux `Kustomization` objects with explicit
 `dependsOn` ordering. Do not collapse them into one apply: `Bundle`,
@@ -37,6 +39,14 @@ certificate Secret because it also contains the server private key.
   active plus two healthy standby members on different nodes.
 - Configure Kubernetes auth with a bounded audience and a role restricted to
   the External Secrets service account. Do not use a static OpenBao token.
+- Give every tenant or service its own namespaced `SecretStore`, dedicated
+  Kubernetes service account, OpenBao auth role and backend path policy. Bind
+  that role to the exact service-account namespace/name and the `openbao`
+  audience; do not reuse the privileged `platform-secrets` trust domain.
+- Keep the readiness probe on the pod-specific
+  `<pod>.openbao-internal.openbao.svc` name. The Flux post-renderer replaces the
+  chart's insecure default probe and requires the mounted CA plus an explicit
+  TLS server name; `-tls-skip-verify` is forbidden.
 - Prove ExternalSecret synchronization, rotation, revocation, denied
   cross-namespace access, Raft snapshot export to an off-cell immutable target,
   and a real snapshot restore before producing readiness evidence.
