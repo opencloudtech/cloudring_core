@@ -76,6 +76,9 @@ spec:
     installCRDs: true
     replicaCount: 3
     leaderElect: true
+    systemAuthDelegator: false
+    rbac:
+      serviceAccountTokenCreate: false
     image:
       repository: ghcr.io/external-secrets/external-secrets
       tag: v2.7.0@sha256:6615aaea8ff44924d9d7dbc99982a130c82913f7583e212fa3aeebc6dc21fbf9
