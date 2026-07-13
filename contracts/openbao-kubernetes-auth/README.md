@@ -1,4 +1,4 @@
-# OpenBao Kubernetes authentication plan contract
+# OpenBao Kubernetes authentication plan and apply contract
 
 This contract lets a provider describe one least-privilege OpenBao workload
 identity without embedding credentials, endpoints, tenant data, or executable
@@ -31,7 +31,7 @@ service account and namespace, audience `openbao`, UID aliases, a read-only
 KV-v2 prefix, no default policy, and 10-minute/30-minute token TTL limits. These
 TTLs are CloudRING policy, not OpenBao defaults.
 
-The output is a plan, not an apply artifact. OpenBao 2.5.5 exposes GET and POST
+The `plan` output is not an apply artifact. OpenBao 2.5.5 exposes GET and POST
 for Kubernetes auth config, but no operation that restores an existing mount
 to an absent-config state. The planner therefore defines this exact lifecycle:
 
@@ -72,6 +72,133 @@ Secret if TokenRequest fails. Live verification must therefore prove the
 TokenRequest path and the absence of a legacy token Secret; source RBAC alone is
 not evidence of the runtime path. Rollback must never adopt or delete a
 pre-existing auth mount.
+
+## Executable apply path
+
+`cloudring-openbao supervise kubernetes-auth` is the public protected workflow
+for one dedicated workload identity and one create-only KV-v2 secret. It
+accepts a bounded v1 supervisor request only from an anonymous or named pipe.
+The request contains the apply template, one initial-root credential, and
+`changeAuthorized: true`; it does not contain a policy name, wrapper, child
+credential, child accessor, or binding. The supervisor generates all of those
+in memory, invokes the executor in-process, and cleans the temporary authority.
+No secret-bearing intermediate JSON is written or emitted.
+
+The supervisor verifies the exact OpenBao 2.5.5 initial-root profile, generates
+a 128-bit-random `cloudring-bootstrap-*` policy name, proves it absent, and
+creates the canonical target-specific management policy with CAS `-1`. It then
+creates a 10-minute, non-renewable, no-default-policy service token through
+`auth/token/create` with `no_parent: true`, an explicit maximum TTL of 15
+minutes, and a 60-second response wrapper. The wrapper accessor and wrapped
+child accessor remain in memory. After the executor returns, the supervisor
+first removes and proves absence of the exact version-1 temporary policy, then
+revokes and proves absence of both accessors. A token-create ambiguity is never
+retried: removing the token's sole policy deauthorizes any unknown child, and
+the result remains `partial_manual_intervention_required` for audit cleanup.
+Root authority has only these fixed broker operations and is never passed to a
+generic target-path API.
+
+`cloudring-openbao apply kubernetes-auth` is the lower-level v1 executor for one
+dedicated workload identity and one create-only KV-v2 secret. It accepts one
+bounded JSON request on an anonymous or named stdin pipe and refuses a terminal
+or regular file. Providers should use `supervise`; direct `apply` exists for a
+protected broker that already implements the same policy, wrapping, accessor,
+binding, and cleanup contract. The
+request carries the validated v2 contract, pinned HTTPS authorities and CA
+roots, a short-lived Kubernetes bearer token, a response-wrapped OpenBao
+management token, one secret value, the pre-created Lease identity, two
+negative-probe identities, and an execution binding. An already-authorized
+protected operator supervisor assembles this request in memory.
+The binding detects request drift inside that trust boundary; because the
+request is self-contained, it is not a signature or standalone approval
+receipt. Do not put the
+request, any constituent value, or a rendered command containing it in a file,
+argument, environment variable, terminal transcript, or evidence.
+
+The wrapped OpenBao token must be an orphaned, non-renewable service token with no
+`default` or `root` policy, a remaining TTL no greater than 15 minutes, and
+exactly one management policy. The executor requires the unwrap lookup accessor
+to equal the supervisor-recorded wrapped-child accessor, compares the complete
+policy body, and checks the exact capabilities needed for this contract. The
+policy includes only the target operations plus token lookup-self,
+revoke-self, and capabilities-self; it grants no renew operation. A wrapped
+root token is rejected, left valid, and reported as manual intervention with
+the Lease held because its response wrapper has already been consumed. The
+supervisor never uses root authority for a target mutation.
+
+The apply request uses schema
+`cloudring.openbao-kubernetes-auth-apply/v1`. Required groups are:
+
+| Group | Required content |
+| --- | --- |
+| `contract` | One valid `cloudring.openbao-kubernetes-auth-plan/v2` contract. |
+| `openBao` | HTTPS address, exact TLS server name, and base64-encoded CA PEM. It must not contain a bearer token. |
+| `kubernetes` | HTTPS address, exact TLS server name, base64-encoded CA PEM, and a short-lived base64-encoded bearer token for the executor ServiceAccount. |
+| `lease` | Namespace/name of a pre-created empty Lease and a unique run holder identity. |
+| `executorIdentity` | The exact namespace and ServiceAccount authenticated by the Kubernetes bearer token. It must be distinct from the positive and both negative workload identities. |
+| `managementPolicyName` | The sole policy on the wrapped management token. |
+| `managementAccessor` | The wrapped child accessor recorded by the protected supervisor; it must equal the unwrapped token lookup accessor. |
+| `wrappingTokenBase64` | A response-wrapping token; never a root or durable token. |
+| `seed` | One safe relative KV-v2 path and one or more uniquely named base64-encoded values. |
+| `negativeIdentities` | Existing wrong-ServiceAccount and wrong-namespace identities from the executor RBAC boundary. |
+| `approval` | `changeAuthorized: true` plus the exact canonical request consistency binding computed by an already-authorized protected supervisor. |
+
+The binding includes both API authorities, TLS server names, SHA-256 values of
+both CA roots, and the management child accessor, but excludes rotating bearer
+and wrapping token values. Unknown,
+duplicate, trailing, insecure, unbound, or oversized input is rejected
+before network mutation. Both API transports use only the supplied trust root,
+TLS 1.2 or newer, an exact TLS server name, bounded bodies, timeouts, no proxy,
+no redirects, and duplicate-response-field rejection. API response bodies and
+dynamic provider errors never enter the report.
+
+The executor performs this fixed transaction:
+
+1. Verify the exact active, initialized, unsealed OpenBao 2.5.5 health and
+   built-in plugin profiles; authenticate the bounded-lifetime projected
+   Kubernetes JWT as the exact executor ServiceAccount and UID through
+   `SelfSubjectReview`; verify the current executor ServiceAccount UID and
+   exact standard groups;
+   prove the required Lease, ServiceAccount, TokenRequest, and self-review
+   permissions plus denial of broader Lease, Secret, TokenReview, arbitrary
+   SubjectAccessReview, and unrelated-ServiceAccount access; then read all
+   positive/negative ServiceAccount UIDs.
+2. Acquire the pre-created Lease with a resourceVersion-guarded full update;
+   never create, patch, delete, or automatically take over a non-empty Lease.
+3. Unwrap and verify the exact non-root management token, child accessor,
+   canonical policy body, self-service token controls, and target capabilities.
+4. Capture all mount, config, role-inventory, KV mount, policy, role, metadata,
+   and secret pre-state before the first write.
+5. Apply the dedicated mount/config, create-only CAS policy, exact role, and
+   CAS-0 KV-v2 seed with pre-write rereads and exact OpenBao 2.5.5 post-write
+   readbacks, including the complete KV metadata version and timestamp shape.
+6. Request a 600-second projected token and prove the positive login, identity
+   metadata, policy/TTL, allowed data read, wrong audience/ServiceAccount/
+   namespace denial, sibling/metadata denial, and post-revoke denial.
+7. Revoke the management token and release the Lease with its latest
+   resourceVersion.
+
+Before the production seed exists, rollback runs in reverse order and removes
+only current-run objects after exact ownership/readback checks. KV-v2 has no
+atomic compare-and-delete for metadata, so successful creation of the fixed
+production seed is a commit point: later failures never automatically delete
+that data. They return `partial_manual_intervention_required`, revoke temporary
+authority where provable, preserve the target state, and keep the Lease for an
+owned manual recovery. Any drift, ambiguous API result, lost Lease, failed
+revocation, or failed cleanup has the same fail-closed result; automatic Lease
+takeover is forbidden. A fully cleaned supervisor pre-apply failure is
+`rolled_back`; the other statuses are `blocked_preflight` and `applied`.
+
+The apply report contains fixed gate names and non-claims only. `applied`
+proves the dedicated OpenBao workload identity plus one secret and its live
+authorization boundary. It does not claim ESO `SecretStore` readiness,
+`ExternalSecret` synchronization, rotation, recovery, or release qualification.
+Those are the next consumer-specific vertical slice.
+
+The synthetic `consumer-example/bootstrap-executor.yaml` supplies the exact
+empty Lease, executor identity, resourceName-bounded RBAC, and real negative
+identities needed by this workflow. It is a template and is not activated by
+the generic runtime stages.
 
 The contract is aligned with the versions pinned by the CloudRING runtime
 profile. Primary references are the [OpenBao Kubernetes auth

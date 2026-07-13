@@ -117,11 +117,17 @@ service account, namespace, and backend path, wait for `SecretStore` and a
 synthetic canary `ExternalSecret` to become Ready, and verify rotation and
 revocation. None of those live gates is claimed by this profile.
 
-Use the source-only Go planner in
-`contracts/openbao-kubernetes-auth/README.md` to validate the typed auth-mount,
-policy, and role contract before any live mutation. Its sanitized report is not
-an executable plan and does not replace pre-state, rollback, API readback, or
-the positive and negative live gates above.
+Use the Go plan and protected supervisor workflow in
+`contracts/openbao-kubernetes-auth/README.md`. The planner validates the typed
+contract without network access. The supervisor creates and cleans the exact
+temporary OpenBao delegation in memory; the apply executor uses the pre-created Lease
+and resourceName-bounded RBAC in
+`consumer-example/bootstrap-executor.yaml` to perform pre-state capture,
+conditional mutation, exact readback, live authorization tests, and fail-closed
+recovery. Production seed creation is a commit point because OpenBao KV-v2 has
+no CAS metadata delete. Its `applied` status proves only the dedicated workload identity and
+one KV-v2 value; it does not replace the ESO synchronization, rotation,
+recovery, audit, and production gates above.
 
 The OpenBao, External Secrets, and trust-manager images are digest-pinned. Chart
 versions remain explicit so a provider can review chart templates and image

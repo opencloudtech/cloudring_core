@@ -114,7 +114,7 @@ func TestBuildEnforcesExactLeastPrivilegeDesiredState(t *testing.T) {
 		plan.AuthConfigReadback.DisableLocalCAJWT || plan.AuthConfigReadback.TokenReviewerJWTSet {
 		t.Fatalf("incomplete local reviewer readback: %#v", plan.AuthConfigReadback)
 	}
-	wantPolicy := "path \"cloudring/data/services/cloudring-consumer-example/*\" {\n  capabilities = [\"read\"]\n}\n"
+	wantPolicy := "path \"cloudring/data/services/cloudring-consumer-example/*\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/revoke-self\" {\n  capabilities = [\"update\"]\n}\npath \"sys/capabilities-self\" {\n  capabilities = [\"update\"]\n}\n"
 	if plan.ACLPolicy.Policy != wantPolicy || plan.ACLPolicy.CAS != -1 || !plan.ACLPolicy.CASRequired {
 		t.Fatalf("ACL policy = %#v", plan.ACLPolicy)
 	}

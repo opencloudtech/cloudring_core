@@ -1,0 +1,177 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudring-consumer-negative-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-openbao-bootstrap-executor
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-openbao-reader-denied
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-openbao-reader
+  namespace: cloudring-consumer-negative-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+automountServiceAccountToken: false
+---
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: cloudring-openbao-bootstrap
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+spec: {}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudring-openbao-bootstrap-self-review
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+rules:
+  - apiGroups:
+      - authentication.k8s.io
+    resources:
+      - selfsubjectreviews
+    verbs:
+      - create
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - selfsubjectaccessreviews
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudring-openbao-bootstrap-self-review
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudring-openbao-bootstrap-self-review
+subjects:
+  - kind: ServiceAccount
+    name: cloudring-openbao-bootstrap-executor
+    namespace: cloudring-consumer-example
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudring-openbao-bootstrap-executor
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+rules:
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    resourceNames:
+      - cloudring-openbao-bootstrap
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    resourceNames:
+      - cloudring-openbao-bootstrap-executor
+      - cloudring-openbao-reader
+      - cloudring-openbao-reader-denied
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    resourceNames:
+      - cloudring-openbao-reader
+      - cloudring-openbao-reader-denied
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudring-openbao-bootstrap-executor
+  namespace: cloudring-consumer-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudring-openbao-bootstrap-executor
+subjects:
+  - kind: ServiceAccount
+    name: cloudring-openbao-bootstrap-executor
+    namespace: cloudring-consumer-example
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudring-openbao-bootstrap-negative-identity
+  namespace: cloudring-consumer-negative-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    resourceNames:
+      - cloudring-openbao-reader
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    resourceNames:
+      - cloudring-openbao-reader
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudring-openbao-bootstrap-negative-identity
+  namespace: cloudring-consumer-negative-example
+  labels:
+    app.kubernetes.io/part-of: cloudring-secret-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudring-openbao-bootstrap-negative-identity
+subjects:
+  - kind: ServiceAccount
+    name: cloudring-openbao-bootstrap-executor
+    namespace: cloudring-consumer-example
