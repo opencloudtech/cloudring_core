@@ -10,13 +10,19 @@ import (
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 
-// Validate enforces the fixed CloudRING v1 least-privilege profile.
+// Validate enforces the fixed CloudRING v2 least-privilege profile.
 func Validate(contract Contract) []Problem {
 	problems := make([]Problem, 0)
 	if contract.SchemaVersion != SchemaVersion {
 		problems = append(problems, Problem{Path: "$.schemaVersion", Code: "unsupported_value"})
 	}
 	problems = append(problems, validateMount("$.authMount", contract.AuthMount)...)
+	if contract.AuthMount == "kubernetes" {
+		problems = append(problems, Problem{Path: "$.authMount", Code: "shared_mount_name_forbidden"})
+	}
+	if contract.AuthMountOwnership != DedicatedAuthMountOwnership {
+		problems = append(problems, Problem{Path: "$.authMountOwnership", Code: "must_equal_dedicated_create_owned"})
+	}
 	problems = append(problems, validateMount("$.kvV2Mount", contract.KVV2Mount)...)
 	problems = append(problems, validateDNSLabel("$.policyName", contract.PolicyName)...)
 	if reservedPolicyName(contract.PolicyName) {

@@ -85,10 +85,14 @@ Secrets controller service account. The login service account must set
 `automountServiceAccountToken: false`, must not reference a legacy token Secret,
 and must not receive `system:auth-delegator`.
 
-The OpenBao server service account is the only TokenReview delegate. Configure
-each cluster's Kubernetes auth mount to use the server pod's rotating local
-service-account token and CA; do not persist a reviewer JWT. For every consumer,
-create a separate policy and role with:
+The OpenBao server service account is the only TokenReview delegate. Give each
+independently managed trust boundary a dedicated, non-generic Kubernetes auth
+mount and configure it to use the server pod's rotating local service-account
+token and CA; do not persist a reviewer JWT. The platform store uses
+`kubernetes-platform-secrets`; the synthetic consumer uses
+`kubernetes-consumer-example`. A site may choose different dedicated names,
+but must never collapse them to the shared `kubernetes` mount. For every
+consumer, create a separate policy and role with:
 
 - one exact service-account name and namespace, with no wildcards;
 - the exact `openbao` audience used by the `SecretStore`;
@@ -100,11 +104,14 @@ create a separate policy and role with:
 The `consumer-example` `SecretStore` intentionally omits a namespace override
 from `serviceAccountRef`: its identity is local to its own namespace. Its CA is
 the non-secret `openbao-client-ca` ConfigMap distributed by trust-manager, never
-a serving-key Secret. Site overlays own the real cluster auth-mount name, role,
-namespace, service-account identity, and backend prefix.
+a serving-key Secret. Site overlays own the real dedicated auth-mount name,
+role, namespace, service-account identity, and backend prefix.
 
 Source presence is not activation. Before a service uses this template, an
-operator must enable and configure the auth mount, install the policy and role,
+operator must apply the v2 dedicated-create-owned lifecycle: configure an
+absent auth config only on a mount created by that same execution, and block an
+existing mount whose config is absent, incomplete, or drifted. The operator
+must then install the policy and role,
 prove successful login and exact capabilities, prove denial for wrong audience,
 service account, namespace, and backend path, wait for `SecretStore` and a
 synthetic canary `ExternalSecret` to become Ready, and verify rotation and

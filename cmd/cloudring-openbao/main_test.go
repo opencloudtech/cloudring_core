@@ -12,8 +12,9 @@ import (
 )
 
 const validInput = `{
-  "schemaVersion":"cloudring.openbao-kubernetes-auth-plan/v1",
-  "authMount":"kubernetes",
+  "schemaVersion":"cloudring.openbao-kubernetes-auth-plan/v2",
+  "authMount":"kubernetes-consumer-example",
+  "authMountOwnership":"dedicated-create-owned",
   "kvV2Mount":"cloudring",
   "dataPrefix":"services/cloudring-consumer-example",
   "policyName":"cloudring-consumer-example-kv-read",
