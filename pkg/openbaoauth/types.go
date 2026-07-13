@@ -54,11 +54,21 @@ type Problem struct {
 type Plan struct {
 	AuthMountOwnership string
 	AuthMountStates    []AuthMountStateRule
+	MutationGate       MutationGate
 	AuthMount          AuthMountDesired
 	AuthConfig         KubernetesConfigDesired
+	AuthConfigReadback KubernetesConfigReadbackExpected
 	ACLPolicy          ACLPolicyDesired
 	Role               KubernetesRoleDesired
 	Actions            []Action
+}
+
+// MutationGate binds every mutating action to the normalized auth-mount
+// lifecycle decision. Blocked lifecycle states permit no write anywhere in
+// the plan, including policy and role endpoints.
+type MutationGate struct {
+	ID               string
+	AllowedDecisions []AuthMountDecision
 }
 
 // AuthMountStateRule is the complete fail-closed lifecycle table an executor
@@ -112,6 +122,19 @@ type KubernetesConfigDesired struct {
 	DisableLocalCAJWT    bool     `json:"disable_local_ca_jwt"`
 }
 
+// KubernetesConfigReadbackExpected is the complete non-secret OpenBao 2.5.5
+// config readback. TokenReviewerJWTSet is a read-only API fact and therefore
+// is deliberately not part of the POST body above.
+type KubernetesConfigReadbackExpected struct {
+	KubernetesHost       string   `json:"kubernetes_host"`
+	KubernetesCACert     string   `json:"kubernetes_ca_cert"`
+	PEMKeys              []string `json:"pem_keys"`
+	Issuer               string   `json:"issuer"`
+	DisableISSValidation bool     `json:"disable_iss_validation"`
+	DisableLocalCAJWT    bool     `json:"disable_local_ca_jwt"`
+	TokenReviewerJWTSet  bool     `json:"token_reviewer_jwt_set"`
+}
+
 // ACLPolicyDesired is one read-only KV-v2 policy.
 type ACLPolicyDesired struct {
 	Policy      string `json:"policy"`
@@ -149,6 +172,7 @@ type Action struct {
 	PreStateRequired       bool
 	RollbackRequired       bool
 	RunCondition           string
+	GlobalMutationGate     string
 	MutationGuard          string
 	RollbackMode           string
 	CASMode                string
@@ -201,6 +225,7 @@ type ActionSummary struct {
 	PreStateRequired       bool   `json:"preStateRequired"`
 	RollbackRequired       bool   `json:"rollbackRequired"`
 	RunCondition           string `json:"runCondition,omitempty"`
+	GlobalMutationGate     string `json:"globalMutationGate,omitempty"`
 	MutationGuard          string `json:"mutationGuard,omitempty"`
 	RollbackMode           string `json:"rollbackMode,omitempty"`
 	CASMode                string `json:"casMode"`

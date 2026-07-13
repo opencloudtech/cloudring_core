@@ -47,7 +47,16 @@ to an absent-config state. The planner therefore defines this exact lifecycle:
 The config POST has an explicit `auth-mount-created-by-current-run` mutation
 guard. The desired mount description binds the dedicated mount to the exact
 role name, and the pre-state includes the complete role inventory. Config
-absence alone never authorizes a write. A live operator must
+absence alone never authorizes a write. Before the first write, the ordered
+plan reads the auth mount, complete auth config, auth role inventory, KV-v2
+mount, ACL policy, and target role. Any missing prerequisite or drift blocks
+before partial mutation. Every write is also bound to the plan-wide auth-mount
+lifecycle mutation gate.
+
+Post-create mount readback must match both type and contract-bound description.
+Config readback must match the complete desired state and explicitly prove
+`token_reviewer_jwt_set: false`; the write-only `token_reviewer_jwt` field is
+never used as a substitute for that read-only fact. A live operator must
 still capture pre-state, prove that no static reviewer JWT is stored, validate
 TokenReview from the OpenBao server service account, use CAS for a new ACL
 policy, stop on role or policy drift, capture rollback data, and perform exact

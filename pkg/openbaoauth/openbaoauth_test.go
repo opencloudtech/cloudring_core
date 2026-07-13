@@ -35,6 +35,7 @@ func TestEvaluateBuildsDeterministicSanitizedPlan(t *testing.T) {
 	}
 	if got := findActionSummary(t, first.Actions, "configure-local-reviewer-only-on-created-mount"); got.MutationGuard != "auth-mount-created-by-current-run" ||
 		got.RunCondition != "create-dedicated-auth-mount-outcome-equals-created-by-current-execution" ||
+		got.GlobalMutationGate != authMountLifecycleMutationGate ||
 		got.RollbackMode != "disable-auth-mount-only-if-created-by-current-execution" {
 		t.Fatalf("sanitized report omitted fixed ownership guards: %#v", got)
 	}
@@ -107,6 +108,12 @@ func TestBuildEnforcesExactLeastPrivilegeDesiredState(t *testing.T) {
 		plan.AuthConfig.DisableLocalCAJWT || len(plan.AuthConfig.PEMKeys) != 0 {
 		t.Fatalf("unsafe local reviewer config: %#v", plan.AuthConfig)
 	}
+	if plan.AuthConfigReadback.KubernetesHost != plan.AuthConfig.KubernetesHost ||
+		plan.AuthConfigReadback.KubernetesCACert != "" || len(plan.AuthConfigReadback.PEMKeys) != 0 ||
+		plan.AuthConfigReadback.Issuer != "" || !plan.AuthConfigReadback.DisableISSValidation ||
+		plan.AuthConfigReadback.DisableLocalCAJWT || plan.AuthConfigReadback.TokenReviewerJWTSet {
+		t.Fatalf("incomplete local reviewer readback: %#v", plan.AuthConfigReadback)
+	}
 	wantPolicy := "path \"cloudring/data/services/cloudring-consumer-example/*\" {\n  capabilities = [\"read\"]\n}\n"
 	if plan.ACLPolicy.Policy != wantPolicy || plan.ACLPolicy.CAS != -1 || !plan.ACLPolicy.CASRequired {
 		t.Fatalf("ACL policy = %#v", plan.ACLPolicy)
@@ -129,20 +136,40 @@ func TestBuildEnforcesExactLeastPrivilegeDesiredState(t *testing.T) {
 		findAction(t, plan.Actions, "readback-kubernetes-auth-role").CASMode != "exact-post-write-readback" {
 		t.Fatalf("unexpected action ordering or concurrency contract: %#v", plan.Actions)
 	}
-	if !plan.Actions[0].PreStateRequired || !plan.Actions[1].PreStateRequired || !plan.Actions[2].PreStateRequired ||
-		plan.Actions[1].ID != "read-kubernetes-auth-config" || plan.Actions[2].ID != "list-kubernetes-auth-roles" ||
-		plan.Actions[2].FailClosedPrecondition != "preexisting-mount-must-have-no-foreign-roles" {
-		t.Fatalf("mount/config/role reads are not an ordered pre-state: %#v", plan.Actions[:3])
+	wantPreStateIDs := []string{"read-auth-mount", "read-kubernetes-auth-config", "list-kubernetes-auth-roles", "read-kv-v2-mount", "read-acl-policy", "read-kubernetes-auth-role"}
+	for index, id := range wantPreStateIDs {
+		if plan.Actions[index].ID != id || !plan.Actions[index].PreStateRequired || plan.Actions[index].Mutates {
+			t.Fatalf("pre-state action %d = %#v, want %q", index, plan.Actions[index], id)
+		}
+	}
+	if plan.Actions[2].FailClosedPrecondition != "preexisting-mount-must-have-no-foreign-roles" {
+		t.Fatalf("role inventory pre-state is not fail-closed: %#v", plan.Actions[2])
 	}
 	if got := findAction(t, plan.Actions, "create-dedicated-auth-mount-if-absent"); got.FailClosedPrecondition != "mount-must-be-absent-or-exact-dedicated-owned-state-with-exact-config" ||
 		got.RollbackMode != "disable-only-current-run-created-mount-after-exact-ownership-readback" {
 		t.Fatalf("unsafe auth-mount ownership action: %#v", got)
 	}
 	if got := findAction(t, plan.Actions, "configure-local-reviewer-only-on-created-mount"); got.RunCondition != "create-dedicated-auth-mount-outcome-equals-created-by-current-execution" ||
+		got.GlobalMutationGate != authMountLifecycleMutationGate ||
 		got.MutationGuard != "auth-mount-created-by-current-run" ||
 		got.FailClosedPrecondition != "preexisting-config-must-be-exact;absent-on-preexisting-mount-blocks" ||
 		got.RollbackMode != "disable-auth-mount-only-if-created-by-current-execution" {
 		t.Fatalf("unsafe auth-config ownership action: %#v", got)
+	}
+	if got := findAction(t, plan.Actions, "readback-auth-mount"); got.FailClosedPrecondition != "mount-type-and-contract-bound-description-must-match" || !reflect.DeepEqual(got.DesiredState, plan.AuthMount) {
+		t.Fatalf("auth-mount ownership readback is incomplete: %#v", got)
+	}
+	if got := findAction(t, plan.Actions, "readback-kubernetes-auth-config"); got.FailClosedPrecondition != "config-and-token-reviewer-jwt-set-false-must-match-complete-v2-5-5-readback" || !reflect.DeepEqual(got.DesiredState, plan.AuthConfigReadback) {
+		t.Fatalf("auth-config readback is incomplete: %#v", got)
+	}
+	if plan.MutationGate.ID != authMountLifecycleMutationGate ||
+		!reflect.DeepEqual(plan.MutationGate.AllowedDecisions, []AuthMountDecision{AuthMountCreateOwned, AuthMountReuseExact}) {
+		t.Fatalf("plan mutation gate = %#v", plan.MutationGate)
+	}
+	for _, action := range plan.Actions {
+		if action.Mutates && action.GlobalMutationGate != plan.MutationGate.ID {
+			t.Fatalf("mutating action is not bound to lifecycle gate: %#v", action)
+		}
 	}
 }
 
@@ -166,6 +193,27 @@ func TestDecideAuthMountLifecycleFailsClosedForEveryPreState(t *testing.T) {
 				t.Fatalf("DecideAuthMountLifecycle(%q) = %#v, %v", test.state, rule, ok)
 			}
 		})
+	}
+	plan, problems := Build(validContract())
+	if len(problems) != 0 {
+		t.Fatalf("Build() problems = %#v", problems)
+	}
+	for _, test := range tests {
+		if test.decision != AuthMountBlock {
+			continue
+		}
+		rule, _ := DecideAuthMountLifecycle(test.state)
+		if rule.Mutates || plan.MutationGate.Allows(rule.Decision) {
+			t.Fatalf("blocked lifecycle state permits mutation: state=%q rule=%#v gate=%#v", test.state, rule, plan.MutationGate)
+		}
+		for _, action := range plan.Actions {
+			if action.Mutates && action.GlobalMutationGate != plan.MutationGate.ID {
+				t.Fatalf("blocked state %q reaches ungated mutation: %#v", test.state, action)
+			}
+		}
+	}
+	if plan.MutationGate.Allows(AuthMountDecision("unknown")) || plan.MutationGate.Allows(AuthMountBlock) {
+		t.Fatalf("unknown or blocked decision passed mutation gate: %#v", plan.MutationGate)
 	}
 	if rule, ok := DecideAuthMountLifecycle(AuthMountPreState("unrecognized")); ok || rule != (AuthMountStateRule{}) {
 		t.Fatalf("unknown lifecycle state was not rejected: %#v, %v", rule, ok)
