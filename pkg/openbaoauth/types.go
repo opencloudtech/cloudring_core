@@ -7,8 +7,14 @@
 package openbaoauth
 
 const (
-	// SchemaVersion identifies the first CloudRING OpenBao Kubernetes-auth plan.
-	SchemaVersion = "cloudring.openbao-kubernetes-auth-plan/v1"
+	// SchemaVersion identifies the dedicated-mount CloudRING OpenBao
+	// Kubernetes-auth plan. Version 2 replaces the unsafe v1 assumption that an
+	// absent config on an existing auth mount could be rolled back.
+	SchemaVersion = "cloudring.openbao-kubernetes-auth-plan/v2"
+	// DedicatedAuthMountOwnership requires one auth mount per independently
+	// managed workload boundary and allows config creation only when the same
+	// execution created the mount. It is deliberately the only supported mode.
+	DedicatedAuthMountOwnership = "dedicated-create-owned"
 	// MaxInputBytes bounds stdin before decoding.
 	MaxInputBytes = 64 * 1024
 )
@@ -17,6 +23,7 @@ const (
 type Contract struct {
 	SchemaVersion        string           `json:"schemaVersion"`
 	AuthMount            string           `json:"authMount"`
+	AuthMountOwnership   string           `json:"authMountOwnership"`
 	KVV2Mount            string           `json:"kvV2Mount"`
 	DataPrefix           string           `json:"dataPrefix"`
 	PolicyName           string           `json:"policyName"`
@@ -45,12 +52,57 @@ type Problem struct {
 // Plan is a typed desired-state plan. It is intentionally not serialized by
 // the CLI because it contains provider/site identifiers.
 type Plan struct {
-	AuthMount  AuthMountDesired
-	AuthConfig KubernetesConfigDesired
-	ACLPolicy  ACLPolicyDesired
-	Role       KubernetesRoleDesired
-	Actions    []Action
+	AuthMountOwnership string
+	AuthMountStates    []AuthMountStateRule
+	MutationGate       MutationGate
+	AuthMount          AuthMountDesired
+	AuthConfig         KubernetesConfigDesired
+	AuthConfigReadback KubernetesConfigReadbackExpected
+	ACLPolicy          ACLPolicyDesired
+	Role               KubernetesRoleDesired
+	Actions            []Action
 }
+
+// MutationGate binds every mutating action to the normalized auth-mount
+// lifecycle decision. Blocked lifecycle states permit no write anywhere in
+// the plan, including policy and role endpoints.
+type MutationGate struct {
+	ID               string
+	AllowedDecisions []AuthMountDecision
+}
+
+// AuthMountStateRule is the complete fail-closed lifecycle table an executor
+// must use before any OpenBao mutation. State names are fixed public policy
+// terms and contain no provider identifiers.
+type AuthMountStateRule struct {
+	PreState     AuthMountPreState
+	Decision     AuthMountDecision
+	Mutates      bool
+	RollbackMode string
+}
+
+// AuthMountPreState is the normalized state observed under the exclusive
+// operator lock before a mount/config mutation decision.
+type AuthMountPreState string
+
+const (
+	AuthMountAbsent                                AuthMountPreState = "absent"
+	AuthMountPresentExact                          AuthMountPreState = "present-exact-type-contract-bound-description-config-and-no-foreign-roles"
+	AuthMountPresentConfigAbsent                   AuthMountPreState = "present-config-absent"
+	AuthMountPresentConfigDrifted                  AuthMountPreState = "present-config-drifted"
+	AuthMountPresentTypeOrDescDrift                AuthMountPreState = "present-non-kubernetes-or-description-drifted"
+	AuthMountUnknownIncompleteUnavailableOrChanged AuthMountPreState = "unknown-incomplete-unavailable-or-changed"
+)
+
+// AuthMountDecision is the only allowed lifecycle outcome for a normalized
+// pre-state.
+type AuthMountDecision string
+
+const (
+	AuthMountCreateOwned AuthMountDecision = "create-and-configure-current-run-owned"
+	AuthMountReuseExact  AuthMountDecision = "reuse-without-mutation"
+	AuthMountBlock       AuthMountDecision = "block-before-mutation"
+)
 
 // AuthMountDesired describes the supported OpenBao auth mount type.
 type AuthMountDesired struct {
@@ -68,6 +120,19 @@ type KubernetesConfigDesired struct {
 	Issuer               string   `json:"issuer"`
 	DisableISSValidation bool     `json:"disable_iss_validation"`
 	DisableLocalCAJWT    bool     `json:"disable_local_ca_jwt"`
+}
+
+// KubernetesConfigReadbackExpected is the complete non-secret OpenBao 2.5.5
+// config readback. TokenReviewerJWTSet is a read-only API fact and therefore
+// is deliberately not part of the POST body above.
+type KubernetesConfigReadbackExpected struct {
+	KubernetesHost       string   `json:"kubernetes_host"`
+	KubernetesCACert     string   `json:"kubernetes_ca_cert"`
+	PEMKeys              []string `json:"pem_keys"`
+	Issuer               string   `json:"issuer"`
+	DisableISSValidation bool     `json:"disable_iss_validation"`
+	DisableLocalCAJWT    bool     `json:"disable_local_ca_jwt"`
+	TokenReviewerJWTSet  bool     `json:"token_reviewer_jwt_set"`
 }
 
 // ACLPolicyDesired is one read-only KV-v2 policy.
@@ -106,6 +171,10 @@ type Action struct {
 	Conditional            bool
 	PreStateRequired       bool
 	RollbackRequired       bool
+	RunCondition           string
+	GlobalMutationGate     string
+	MutationGuard          string
+	RollbackMode           string
 	CASMode                string
 	DesiredState           any
 	FailClosedPrecondition string
@@ -130,10 +199,11 @@ type Report struct {
 	NonClaims                     []string        `json:"nonClaims"`
 }
 
-// ProfileSummary contains only fixed CloudRING v1 policy values. It contains
+// ProfileSummary contains only fixed CloudRING v2 policy values. It contains
 // no contract-provided identifiers.
 type ProfileSummary struct {
 	AuthType             string   `json:"authType"`
+	AuthMountOwnership   string   `json:"authMountOwnership"`
 	KubernetesHostMode   string   `json:"kubernetesHostMode"`
 	ReviewerSourceMode   string   `json:"reviewerSourceMode"`
 	Audience             string   `json:"audience"`
@@ -154,6 +224,10 @@ type ActionSummary struct {
 	Conditional            bool   `json:"conditional"`
 	PreStateRequired       bool   `json:"preStateRequired"`
 	RollbackRequired       bool   `json:"rollbackRequired"`
+	RunCondition           string `json:"runCondition,omitempty"`
+	GlobalMutationGate     string `json:"globalMutationGate,omitempty"`
+	MutationGuard          string `json:"mutationGuard,omitempty"`
+	RollbackMode           string `json:"rollbackMode,omitempty"`
 	CASMode                string `json:"casMode"`
 	FailClosedPrecondition string `json:"failClosedPrecondition,omitempty"`
 	ChangeApprovalRequired bool   `json:"changeApprovalRequired"`

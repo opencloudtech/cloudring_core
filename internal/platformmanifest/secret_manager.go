@@ -385,7 +385,7 @@ func validateObjects(objects []object) error {
 		return errors.New("OpenBao durable storage and retention contract is invalid")
 	}
 	store, err := require("ClusterSecretStore", "", "platform-secrets")
-	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao-active.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "name") != "external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "namespace") != "external-secrets" || !exactStringSequence(nested(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "audiences"), "openbao") {
+	if err != nil || nestedString(store.Data, "spec", "provider", "vault", "server") != "https://openbao-active.openbao.svc:8200" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "mountPath") != "kubernetes-platform-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "role") != "cloudring-external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "name") != "external-secrets" || nestedString(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "namespace") != "external-secrets" || !exactStringSequence(nested(store.Data, "spec", "provider", "vault", "auth", "kubernetes", "serviceAccountRef", "audiences"), "openbao") {
 		return errors.New("platform secret-store workload identity contract is invalid")
 	}
 	if !platformStoreNamespaceBoundary(store.Data) {
@@ -597,7 +597,7 @@ func exactConsumerSecretStore(store map[string]any) bool {
 		return false
 	}
 	kubernetes, ok := auth["kubernetes"].(map[string]any)
-	if !ok || len(kubernetes) != 3 || stringValue(kubernetes["mountPath"]) != "kubernetes" || stringValue(kubernetes["role"]) != "cloudring-consumer-example" {
+	if !ok || len(kubernetes) != 3 || stringValue(kubernetes["mountPath"]) != "kubernetes-consumer-example" || stringValue(kubernetes["role"]) != "cloudring-consumer-example" {
 		return false
 	}
 	serviceAccountRef, ok := kubernetes["serviceAccountRef"].(map[string]any)

@@ -75,7 +75,7 @@ spec:
         key: ca.crt
       auth:
         kubernetes:
-          mountPath: kubernetes
+          mountPath: kubernetes-consumer-example
           role: cloudring-consumer-example
           serviceAccountRef:
             name: cloudring-openbao-reader

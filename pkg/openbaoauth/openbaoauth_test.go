@@ -26,14 +26,21 @@ func TestEvaluateBuildsDeterministicSanitizedPlan(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("Evaluate() is not deterministic")
 	}
-	if first.Status != "planned" || first.Mode != "plan" || len(first.Actions) != 13 {
+	if first.Status != "planned" || first.Mode != "plan" || len(first.Actions) != 14 {
 		t.Fatalf("unexpected report status/mode/actions: %#v", first)
 	}
 	if first.MutationPerformed || first.ApplyAuthorized || !first.ApplyApprovalNeeded || first.InputMaterialEchoed ||
 		first.IdentifierFingerprintsEmitted {
 		t.Fatalf("plan made an unsafe claim: %#v", first)
 	}
+	if got := findActionSummary(t, first.Actions, "configure-local-reviewer-only-on-created-mount"); got.MutationGuard != "auth-mount-created-by-current-run" ||
+		got.RunCondition != "create-dedicated-auth-mount-outcome-equals-created-by-current-execution" ||
+		got.GlobalMutationGate != authMountLifecycleMutationGate ||
+		got.RollbackMode != "disable-auth-mount-only-if-created-by-current-execution" {
+		t.Fatalf("sanitized report omitted fixed ownership guards: %#v", got)
+	}
 	if first.Profile.AuthType != "kubernetes" || first.Profile.KubernetesHostMode != "in-cluster-service-dns" ||
+		first.Profile.AuthMountOwnership != DedicatedAuthMountOwnership ||
 		first.Profile.ReviewerSourceMode != "pod-local-rotating-service-account" ||
 		first.Profile.Audience != "openbao" || first.Profile.AliasNameSource != "serviceaccount_uid" ||
 		!reflect.DeepEqual(first.Profile.Capabilities, []string{"read"}) || first.Profile.BoundIdentityCount != 1 ||
@@ -78,14 +85,34 @@ func TestBuildEnforcesExactLeastPrivilegeDesiredState(t *testing.T) {
 	if len(problems) != 0 {
 		t.Fatalf("Build() problems = %#v", problems)
 	}
-	if plan.AuthMount.Type != "kubernetes" {
-		t.Fatalf("auth mount type = %q", plan.AuthMount.Type)
+	if plan.AuthMount.Type != "kubernetes" || plan.AuthMount.Description != "CloudRING dedicated Kubernetes workload authentication for cloudring-consumer-example" {
+		t.Fatalf("auth mount desired state = %#v", plan.AuthMount)
+	}
+	if plan.AuthMountOwnership != DedicatedAuthMountOwnership {
+		t.Fatalf("auth mount ownership = %q", plan.AuthMountOwnership)
+	}
+	wantStates := []AuthMountStateRule{
+		{PreState: AuthMountAbsent, Decision: AuthMountCreateOwned, Mutates: true, RollbackMode: "disable-current-run-created-mount-after-exact-ownership-readback"},
+		{PreState: AuthMountPresentExact, Decision: AuthMountReuseExact, RollbackMode: "none"},
+		{PreState: AuthMountPresentConfigAbsent, Decision: AuthMountBlock, RollbackMode: "none"},
+		{PreState: AuthMountPresentConfigDrifted, Decision: AuthMountBlock, RollbackMode: "none"},
+		{PreState: AuthMountPresentTypeOrDescDrift, Decision: AuthMountBlock, RollbackMode: "none"},
+		{PreState: AuthMountUnknownIncompleteUnavailableOrChanged, Decision: AuthMountBlock, RollbackMode: "none"},
+	}
+	if !reflect.DeepEqual(plan.AuthMountStates, wantStates) {
+		t.Fatalf("auth mount state table = %#v", plan.AuthMountStates)
 	}
 	if plan.AuthConfig.KubernetesHost != "https://kubernetes.default.svc" ||
 		plan.AuthConfig.KubernetesCACert != "" || plan.AuthConfig.TokenReviewerJWT != "" ||
 		plan.AuthConfig.Issuer != "" || !plan.AuthConfig.DisableISSValidation ||
 		plan.AuthConfig.DisableLocalCAJWT || len(plan.AuthConfig.PEMKeys) != 0 {
 		t.Fatalf("unsafe local reviewer config: %#v", plan.AuthConfig)
+	}
+	if plan.AuthConfigReadback.KubernetesHost != plan.AuthConfig.KubernetesHost ||
+		plan.AuthConfigReadback.KubernetesCACert != "" || len(plan.AuthConfigReadback.PEMKeys) != 0 ||
+		plan.AuthConfigReadback.Issuer != "" || !plan.AuthConfigReadback.DisableISSValidation ||
+		plan.AuthConfigReadback.DisableLocalCAJWT || plan.AuthConfigReadback.TokenReviewerJWTSet {
+		t.Fatalf("incomplete local reviewer readback: %#v", plan.AuthConfigReadback)
 	}
 	wantPolicy := "path \"cloudring/data/services/cloudring-consumer-example/*\" {\n  capabilities = [\"read\"]\n}\n"
 	if plan.ACLPolicy.Policy != wantPolicy || plan.ACLPolicy.CAS != -1 || !plan.ACLPolicy.CASRequired {
@@ -103,10 +130,93 @@ func TestBuildEnforcesExactLeastPrivilegeDesiredState(t *testing.T) {
 		role.TokenStrictlyBindIP {
 		t.Fatalf("role violates exact workload profile: %#v", role)
 	}
-	if len(plan.Actions) != 13 || plan.Actions[8].CASMode != "create-only-cas-minus-one" ||
-		plan.Actions[11].CASMode != "api-cas-unavailable-exclusive-lock" ||
-		plan.Actions[12].CASMode != "exact-post-write-readback" {
+	if len(plan.Actions) != 14 ||
+		findAction(t, plan.Actions, "create-acl-policy-if-absent").CASMode != "create-only-cas-minus-one" ||
+		findAction(t, plan.Actions, "create-role-if-absent").CASMode != "api-cas-unavailable-exclusive-lock" ||
+		findAction(t, plan.Actions, "readback-kubernetes-auth-role").CASMode != "exact-post-write-readback" {
 		t.Fatalf("unexpected action ordering or concurrency contract: %#v", plan.Actions)
+	}
+	wantPreStateIDs := []string{"read-auth-mount", "read-kubernetes-auth-config", "list-kubernetes-auth-roles", "read-kv-v2-mount", "read-acl-policy", "read-kubernetes-auth-role"}
+	for index, id := range wantPreStateIDs {
+		if plan.Actions[index].ID != id || !plan.Actions[index].PreStateRequired || plan.Actions[index].Mutates {
+			t.Fatalf("pre-state action %d = %#v, want %q", index, plan.Actions[index], id)
+		}
+	}
+	if plan.Actions[2].FailClosedPrecondition != "preexisting-mount-must-have-no-foreign-roles" {
+		t.Fatalf("role inventory pre-state is not fail-closed: %#v", plan.Actions[2])
+	}
+	if got := findAction(t, plan.Actions, "create-dedicated-auth-mount-if-absent"); got.FailClosedPrecondition != "mount-must-be-absent-or-exact-dedicated-owned-state-with-exact-config" ||
+		got.RollbackMode != "disable-only-current-run-created-mount-after-exact-ownership-readback" {
+		t.Fatalf("unsafe auth-mount ownership action: %#v", got)
+	}
+	if got := findAction(t, plan.Actions, "configure-local-reviewer-only-on-created-mount"); got.RunCondition != "create-dedicated-auth-mount-outcome-equals-created-by-current-execution" ||
+		got.GlobalMutationGate != authMountLifecycleMutationGate ||
+		got.MutationGuard != "auth-mount-created-by-current-run" ||
+		got.FailClosedPrecondition != "preexisting-config-must-be-exact;absent-on-preexisting-mount-blocks" ||
+		got.RollbackMode != "disable-auth-mount-only-if-created-by-current-execution" {
+		t.Fatalf("unsafe auth-config ownership action: %#v", got)
+	}
+	if got := findAction(t, plan.Actions, "readback-auth-mount"); got.FailClosedPrecondition != "mount-type-and-contract-bound-description-must-match" || !reflect.DeepEqual(got.DesiredState, plan.AuthMount) {
+		t.Fatalf("auth-mount ownership readback is incomplete: %#v", got)
+	}
+	if got := findAction(t, plan.Actions, "readback-kubernetes-auth-config"); got.FailClosedPrecondition != "config-and-token-reviewer-jwt-set-false-must-match-complete-v2-5-5-readback" || !reflect.DeepEqual(got.DesiredState, plan.AuthConfigReadback) {
+		t.Fatalf("auth-config readback is incomplete: %#v", got)
+	}
+	if plan.MutationGate.ID != authMountLifecycleMutationGate ||
+		!reflect.DeepEqual(plan.MutationGate.AllowedDecisions, []AuthMountDecision{AuthMountCreateOwned, AuthMountReuseExact}) {
+		t.Fatalf("plan mutation gate = %#v", plan.MutationGate)
+	}
+	for _, action := range plan.Actions {
+		if action.Mutates && action.GlobalMutationGate != plan.MutationGate.ID {
+			t.Fatalf("mutating action is not bound to lifecycle gate: %#v", action)
+		}
+	}
+}
+
+func TestDecideAuthMountLifecycleFailsClosedForEveryPreState(t *testing.T) {
+	tests := []struct {
+		state    AuthMountPreState
+		decision AuthMountDecision
+		mutates  bool
+	}{
+		{AuthMountAbsent, AuthMountCreateOwned, true},
+		{AuthMountPresentExact, AuthMountReuseExact, false},
+		{AuthMountPresentConfigAbsent, AuthMountBlock, false},
+		{AuthMountPresentConfigDrifted, AuthMountBlock, false},
+		{AuthMountPresentTypeOrDescDrift, AuthMountBlock, false},
+		{AuthMountUnknownIncompleteUnavailableOrChanged, AuthMountBlock, false},
+	}
+	for _, test := range tests {
+		t.Run(string(test.state), func(t *testing.T) {
+			rule, ok := DecideAuthMountLifecycle(test.state)
+			if !ok || rule.Decision != test.decision || rule.Mutates != test.mutates {
+				t.Fatalf("DecideAuthMountLifecycle(%q) = %#v, %v", test.state, rule, ok)
+			}
+		})
+	}
+	plan, problems := Build(validContract())
+	if len(problems) != 0 {
+		t.Fatalf("Build() problems = %#v", problems)
+	}
+	for _, test := range tests {
+		if test.decision != AuthMountBlock {
+			continue
+		}
+		rule, _ := DecideAuthMountLifecycle(test.state)
+		if rule.Mutates || plan.MutationGate.Allows(rule.Decision) {
+			t.Fatalf("blocked lifecycle state permits mutation: state=%q rule=%#v gate=%#v", test.state, rule, plan.MutationGate)
+		}
+		for _, action := range plan.Actions {
+			if action.Mutates && action.GlobalMutationGate != plan.MutationGate.ID {
+				t.Fatalf("blocked state %q reaches ungated mutation: %#v", test.state, action)
+			}
+		}
+	}
+	if plan.MutationGate.Allows(AuthMountDecision("unknown")) || plan.MutationGate.Allows(AuthMountBlock) {
+		t.Fatalf("unknown or blocked decision passed mutation gate: %#v", plan.MutationGate)
+	}
+	if rule, ok := DecideAuthMountLifecycle(AuthMountPreState("unrecognized")); ok || rule != (AuthMountStateRule{}) {
+		t.Fatalf("unknown lifecycle state was not rejected: %#v, %v", rule, ok)
 	}
 }
 
@@ -126,8 +236,12 @@ func TestParseRejectsInvalidProfiles(t *testing.T) {
 		path string
 		code string
 	}{
-		{"schema", func(value *Contract) { value.SchemaVersion = "v2" }, "$.schemaVersion", "unsupported_value"},
+		{"old v1 schema", func(value *Contract) { value.SchemaVersion = "cloudring.openbao-kubernetes-auth-plan/v1" }, "$.schemaVersion", "unsupported_value"},
 		{"reserved auth mount", func(value *Contract) { value.AuthMount = "token" }, "$.authMount", "reserved_name"},
+		{"ambiguous auth mount", func(value *Contract) { value.AuthMount = "kubernetes" }, "$.authMount", "shared_mount_name_forbidden"},
+		{"missing ownership", func(value *Contract) { value.AuthMountOwnership = "" }, "$.authMountOwnership", "must_equal_dedicated_create_owned"},
+		{"shared ownership", func(value *Contract) { value.AuthMountOwnership = "shared" }, "$.authMountOwnership", "must_equal_dedicated_create_owned"},
+		{"adopt ownership", func(value *Contract) { value.AuthMountOwnership = "adopt-existing" }, "$.authMountOwnership", "must_equal_dedicated_create_owned"},
 		{"invalid kv mount", func(value *Contract) { value.KVV2Mount = "CloudRING" }, "$.kvV2Mount", "invalid_dns_label"},
 		{"wildcard prefix", func(value *Contract) { value.DataPrefix = "services/*" }, "$.dataPrefix", "invalid_safe_prefix"},
 		{"traversal prefix", func(value *Contract) { value.DataPrefix = "services/../private" }, "$.dataPrefix", "invalid_safe_prefix"},
@@ -222,7 +336,7 @@ func TestEvaluateBoundsInputAndSanitizesReadErrors(t *testing.T) {
 
 func validContract() Contract {
 	return Contract{
-		SchemaVersion: SchemaVersion, AuthMount: "kubernetes", KVV2Mount: "cloudring",
+		SchemaVersion: SchemaVersion, AuthMount: "kubernetes-consumer-example", AuthMountOwnership: DedicatedAuthMountOwnership, KVV2Mount: "cloudring",
 		DataPrefix: "services/cloudring-consumer-example", PolicyName: "cloudring-consumer-example-kv-read",
 		RoleName:         "cloudring-consumer-example",
 		WorkloadIdentity: WorkloadIdentity{Namespace: "cloudring-consumer-example", ServiceAccount: "cloudring-openbao-reader"},
@@ -247,6 +361,28 @@ func containsProblem(problems []Problem, path, code string) bool {
 		}
 	}
 	return false
+}
+
+func findAction(t *testing.T, actions []Action, id string) Action {
+	t.Helper()
+	for _, action := range actions {
+		if action.ID == id {
+			return action
+		}
+	}
+	t.Fatalf("action %q not found", id)
+	return Action{}
+}
+
+func findActionSummary(t *testing.T, actions []ActionSummary, id string) ActionSummary {
+	t.Helper()
+	for _, action := range actions {
+		if action.ID == id {
+			return action
+		}
+	}
+	t.Fatalf("action summary %q not found", id)
+	return ActionSummary{}
 }
 
 type errorReader struct{}

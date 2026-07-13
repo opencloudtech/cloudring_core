@@ -51,7 +51,7 @@ func Parse(data []byte) (Contract, []Problem) {
 		return Contract{}, []Problem{{Path: "$", Code: "invalid_json_contract"}}
 	}
 	known := map[string]bool{
-		"schemaVersion": true, "authMount": true, "kvV2Mount": true,
+		"schemaVersion": true, "authMount": true, "authMountOwnership": true, "kvV2Mount": true,
 		"dataPrefix": true, "policyName": true, "roleName": true,
 		"workloadIdentity": true, "audience": true, "aliasNameSource": true,
 		"tokenTTL": true, "tokenMaxTTL": true, "tokenNoDefaultPolicy": true,

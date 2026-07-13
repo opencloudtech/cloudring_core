@@ -416,6 +416,36 @@ func TestSecretManagerProfileRejectsConsumerClusterSecretStore(t *testing.T) {
 	}
 }
 
+func TestSecretManagerProfileRejectsGenericPlatformAuthMount(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("store", "platform-secrets.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("          mountPath: kubernetes-platform-secrets"), []byte("          mountPath: kubernetes"))
+	if err := writeProfileFile(root, filepath.Join("store", "platform-secrets.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "platform secret-store workload identity") {
+		t.Fatalf("generic platform auth mount was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsGenericConsumerAuthMount(t *testing.T) {
+	root := copyProfile(t)
+	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("          mountPath: kubernetes-consumer-example"), []byte("          mountPath: kubernetes"))
+	if err := writeProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"), data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "namespaced SecretStore") {
+		t.Fatalf("generic consumer auth mount was accepted: %v", err)
+	}
+}
+
 func TestSecretManagerProfileRejectsConsumerCrossNamespaceServiceAccount(t *testing.T) {
 	root := copyProfile(t)
 	data, err := readProfileFile(root, filepath.Join("consumer-example", "service-store.yaml"))
