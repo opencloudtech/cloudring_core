@@ -75,6 +75,53 @@ pre-existing auth mount.
 
 ## Executable apply path
 
+Before running the stateful supervisor, render its temporary Kubernetes
+executor boundary from a non-secret site profile:
+
+```sh
+go run ./cmd/cloudring-openbao render kubernetes-auth-executor \
+  < ./contracts/openbao-kubernetes-auth/fixtures/synthetic-kubernetes-auth-executor.json
+```
+
+The renderer is the canonical source for all 10 temporary objects: the
+executor and negative identities, an initially empty Lease, exact
+resourceName-bounded Roles and RoleBindings, and the self-review
+ClusterRole/Binding. It emits no Secret, Pod, Job, token, certificate, API
+endpoint, or provider credential. The profile embeds the existing v2 auth
+contract so a shared `kubernetes` mount or inconsistent positive/negative
+identity relationship fails before YAML is produced.
+
+For a real site, keep only that non-secret profile in the provider repository.
+The workload namespace and a dedicated restricted negative namespace are
+persistent consumer prerequisites; the renderer neither creates nor deletes
+them. Prove both namespaces exist and that the negative namespace has the exact
+provider ownership label
+`cloudring.org/openbao-negative-identity: "true"` plus restricted Pod Security
+labels before any executor operation. With pipeline failure propagation
+enabled, pipe the accepted-core render through a server dry run
+(`kubectl create --dry-run=server -f -`) only after proving every rendered
+identity absent. Create without field adoption, capture the UID returned for
+each successfully created object in memory, and immediately GET and verify its
+exact rendered semantics. A collision or drift blocks the operation. A partial
+multi-object create owns only objects whose successful create-response UID was
+captured; matching names or content alone never prove ownership.
+
+Cleanup is deliberately not `kubectl delete -f -`, because that is name-based
+and can delete a concurrently replaced object. After a successful supervisor
+run, first prove the Lease has the captured UID, has no holder, and every other
+temporary object still has its captured UID and exact rendered semantics. Then
+delete each of the 10 objects through the Kubernetes API with
+`DeleteOptions.preconditions.uid` set to its captured UID. Deletion order is
+mandatory and monotonically removes privilege: the ClusterRoleBinding and two
+RoleBindings first; the ClusterRole and two Roles second; the three
+ServiceAccounts third; and the already-proven-empty same-UID Lease last. Stop
+immediately on any missing object, UID/content drift, non-empty Lease,
+precondition conflict, delete failure, or partial manual intervention, leaving
+the remaining boundary for recovery. Prove all 10 objects absent afterward.
+Never delete either persistent namespace as part of executor cleanup, and
+never hand-edit or copy the canonical generated YAML into a provider
+implementation.
+
 `cloudring-openbao supervise kubernetes-auth` is the public protected workflow
 for one dedicated workload identity and one create-only KV-v2 secret. It
 accepts a bounded v1 supervisor request only from an anonymous or named pipe.
@@ -195,10 +242,10 @@ authorization boundary. It does not claim ESO `SecretStore` readiness,
 `ExternalSecret` synchronization, rotation, recovery, or release qualification.
 Those are the next consumer-specific vertical slice.
 
-The synthetic `consumer-example/bootstrap-executor.yaml` supplies the exact
-empty Lease, executor identity, resourceName-bounded RBAC, and real negative
-identities needed by this workflow. It is a template and is not activated by
-the generic runtime stages.
+The synthetic executor profile deterministically reproduces
+`consumer-example/bootstrap-executor.yaml`; the platform manifest verifier
+rejects any byte drift from that public renderer. The generated example is a
+golden test artifact and is not activated by the generic runtime stages.
 
 The contract is aligned with the versions pinned by the CloudRING runtime
 profile. Primary references are the [OpenBao Kubernetes auth

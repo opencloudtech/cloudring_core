@@ -29,7 +29,7 @@ func TestSecretManagerProfileRejectsWidenedBootstrapExecutorRBAC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data = replaceOnce(t, data, []byte("      - cloudring-openbao-bootstrap\n    verbs:\n      - get\n      - update"), []byte("    verbs:\n      - get\n      - update\n      - create"))
+	data = replaceOnce(t, data, []byte("      - 'cloudring-openbao-exec-6434a933d18dc631c365fc81739ee121c36bd9ac'\n    verbs:\n      - get\n      - update"), []byte("    verbs:\n      - get\n      - update\n      - create"))
 	if err := writeProfileFile(root, path, data); err != nil {
 		t.Fatal(err)
 	}
@@ -598,6 +598,42 @@ func TestSecretManagerProfileRejectsConsumerWithoutTrustLabel(t *testing.T) {
 	}
 }
 
+func TestSecretManagerProfileRejectsUnownedOrUnrestrictedNegativeNamespace(t *testing.T) {
+	tests := []struct {
+		name        string
+		old         string
+		replacement string
+	}{
+		{
+			name:        "ownership label",
+			old:         "    cloudring.org/openbao-negative-identity: \"true\"\n",
+			replacement: "",
+		},
+		{
+			name:        "restricted policy",
+			old:         "    cloudring.org/openbao-negative-identity: \"true\"\n    pod-security.kubernetes.io/enforce: restricted\n",
+			replacement: "    cloudring.org/openbao-negative-identity: \"true\"\n    pod-security.kubernetes.io/enforce: baseline\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := copyProfile(t)
+			path := filepath.Join("consumer-example", "service-store.yaml")
+			data, err := readProfileFile(root, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data = replaceOnce(t, data, []byte(test.old), []byte(test.replacement))
+			if err := writeProfileFile(root, path, data); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "negative namespace security and ownership") {
+				t.Fatalf("unsafe negative namespace was accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestSecretManagerProfileRejectsWidenedExternalSecretsIngress(t *testing.T) {
 	root := copyProfile(t)
 	data, err := readProfileFile(root, filepath.Join("runtime", "network-policy.yaml"))
@@ -736,6 +772,26 @@ func copyProfile(t *testing.T) string {
 		if err := destinationRoot.WriteFile(relative, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	repository, err := os.OpenRoot(repositoryRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	profileData, err := repository.ReadFile(bootstrapExecutorProfilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	destinationRepository, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer destinationRepository.Close()
+	if err := destinationRepository.MkdirAll(filepath.Dir(bootstrapExecutorProfilePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := destinationRepository.WriteFile(bootstrapExecutorProfilePath, profileData, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	return root
 }

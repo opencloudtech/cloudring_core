@@ -117,17 +117,30 @@ service account, namespace, and backend path, wait for `SecretStore` and a
 synthetic canary `ExternalSecret` to become Ready, and verify rotation and
 revocation. None of those live gates is claimed by this profile.
 
-Use the Go plan and protected supervisor workflow in
-`contracts/openbao-kubernetes-auth/README.md`. The planner validates the typed
-contract without network access. The supervisor creates and cleans the exact
-temporary OpenBao delegation in memory; the apply executor uses the pre-created Lease
-and resourceName-bounded RBAC in
-`consumer-example/bootstrap-executor.yaml` to perform pre-state capture,
-conditional mutation, exact readback, live authorization tests, and fail-closed
-recovery. Production seed creation is a commit point because OpenBao KV-v2 has
-no CAS metadata delete. Its `applied` status proves only the dedicated workload identity and
-one KV-v2 value; it does not replace the ESO synchronization, rotation,
-recovery, audit, and production gates above.
+Use the Go renderer, plan, and protected supervisor workflow in
+`contracts/openbao-kubernetes-auth/README.md`. The renderer turns one
+non-secret site profile into the exact temporary executor identities, empty
+Lease, and resourceName-bounded RBAC. The workload and negative namespaces are
+persistent consumer prerequisites and are never part of temporary cleanup;
+the negative namespace has an exact ownership label and restricted Pod Security
+labels. A provider stores only that profile, performs a create-only server dry
+run, captures each successful create-response UID, and verifies exact live
+semantics. Cleanup requires an empty captured-UID Lease followed by individual
+Kubernetes API deletes with UID preconditions; name-based `kubectl delete -f`
+is forbidden. Bindings must be deleted before Roles, ServiceAccounts after all
+RBAC, and the empty same-UID Lease last; any failure stops cleanup. The provider
+must not copy or hand-edit the generated RBAC. The tracked
+`consumer-example/bootstrap-executor.yaml` is only the byte-verified golden
+output for the synthetic profile and is not a deployment input for real sites.
+
+The planner validates the typed contract without network access. The
+supervisor creates and cleans the exact temporary OpenBao delegation in memory;
+the apply executor uses the rendered Lease and RBAC to perform pre-state
+capture, conditional mutation, exact readback, live authorization tests, and
+fail-closed recovery. Production seed creation is a commit point because
+OpenBao KV-v2 has no CAS metadata delete. Its `applied` status proves only the
+dedicated workload identity and one KV-v2 value; it does not replace the ESO
+synchronization, rotation, recovery, audit, and production gates above.
 
 The OpenBao, External Secrets, and trust-manager images are digest-pinned. Chart
 versions remain explicit so a provider can review chart templates and image

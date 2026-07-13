@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "cloudring.openbao-kubernetes-auth-executor/v1",
+  "contract": {
+    "schemaVersion": "cloudring.openbao-kubernetes-auth-plan/v2",
+    "authMount": "kubernetes-consumer-example",
+    "authMountOwnership": "dedicated-create-owned",
+    "kvV2Mount": "cloudring",
+    "dataPrefix": "services/cloudring-consumer-example",
+    "policyName": "cloudring-consumer-example-kv-read",
+    "roleName": "cloudring-consumer-example",
+    "workloadIdentity": {
+      "namespace": "cloudring-consumer-example",
+      "serviceAccount": "cloudring-openbao-reader"
+    },
+    "audience": "openbao",
+    "aliasNameSource": "serviceaccount_uid",
+    "tokenTTL": "10m",
+    "tokenMaxTTL": "30m",
+    "tokenNoDefaultPolicy": true
+  },
+  "executorIdentity": {
+    "namespace": "cloudring-consumer-example",
+    "serviceAccount": "cloudring-openbao-bootstrap-executor"
+  },
+  "lease": {
+    "namespace": "cloudring-consumer-example",
+    "name": "cloudring-openbao-exec-6434a933d18dc631c365fc81739ee121c36bd9ac"
+  },
+  "negativeIdentities": {
+    "wrongServiceAccount": {
+      "namespace": "cloudring-consumer-example",
+      "serviceAccount": "cloudring-openbao-reader-denied"
+    },
+    "wrongNamespace": {
+      "namespace": "cloudring-consumer-negative-example",
+      "serviceAccount": "cloudring-openbao-reader"
+    }
+  }
+}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/opencloudtech/CloudRING/internal/openbaoapply"
 	"github.com/opencloudtech/CloudRING/pkg/openbaoauth"
+	"github.com/opencloudtech/CloudRING/pkg/openbaoexecutor"
 )
 
 const (
@@ -39,8 +40,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 2 && args[0] == "supervise" && args[1] == "kubernetes-auth" {
 		return runSupervise(context.Background(), stdin, stdout, stderr)
 	}
+	if len(args) == 2 && args[0] == "render" && args[1] == "kubernetes-auth-executor" {
+		return runRenderExecutor(stdin, stdout, stderr)
+	}
 	if len(args) != 2 || args[0] != "plan" || args[1] != "kubernetes-auth" {
-		fmt.Fprintln(stderr, "usage: cloudring-openbao plan kubernetes-auth < contract.json | cloudring-openbao apply kubernetes-auth < protected-pipe | cloudring-openbao supervise kubernetes-auth < protected-pipe")
+		fmt.Fprintln(stderr, "usage: cloudring-openbao plan kubernetes-auth < contract.json | cloudring-openbao render kubernetes-auth-executor < profile.json | cloudring-openbao apply kubernetes-auth < protected-pipe | cloudring-openbao supervise kubernetes-auth < protected-pipe")
 		return exitUsage
 	}
 	report, err := openbaoauth.Evaluate(stdin)
@@ -57,6 +61,29 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if report.Status != "planned" {
 		fmt.Fprintln(stderr, "OpenBao Kubernetes auth plan blocked")
 		return exitBlocked
+	}
+	return exitPlanned
+}
+
+func runRenderExecutor(stdin io.Reader, stdout, stderr io.Writer) int {
+	profile, problems, err := openbaoexecutor.Decode(stdin)
+	if err != nil {
+		fmt.Fprintln(stderr, "OpenBao executor profile input unavailable")
+		return exitUsage
+	}
+	if len(problems) != 0 {
+		fmt.Fprintln(stderr, "OpenBao Kubernetes auth executor profile blocked")
+		return exitBlocked
+	}
+	manifest, err := openbaoexecutor.Render(profile)
+	if err != nil {
+		fmt.Fprintln(stderr, "OpenBao Kubernetes auth executor profile blocked")
+		return exitBlocked
+	}
+	written, err := stdout.Write(manifest)
+	if err != nil || written != len(manifest) {
+		fmt.Fprintln(stderr, "encode OpenBao executor manifest")
+		return exitUsage
 	}
 	return exitPlanned
 }
