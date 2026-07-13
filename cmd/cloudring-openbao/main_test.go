@@ -7,8 +7,11 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/opencloudtech/CloudRING/internal/openbaoapply"
 )
 
 const validInput = `{
@@ -49,6 +52,8 @@ func TestRunUsesStableExitSemantics(t *testing.T) {
 	}{
 		{"usage", nil, strings.NewReader(""), io.Discard, exitUsage},
 		{"extra arg", []string{"plan", "kubernetes-auth", "file.json"}, strings.NewReader(validInput), io.Discard, exitUsage},
+		{"apply invalid", []string{"apply", "kubernetes-auth"}, strings.NewReader(`{"wrappingTokenBase64":"do-not-reflect"}`), io.Discard, exitBlocked},
+		{"supervise invalid", []string{"supervise", "kubernetes-auth"}, strings.NewReader(`{"rootCredentialBase64":"do-not-reflect"}`), io.Discard, exitBlocked},
 		{"blocked", []string{"plan", "kubernetes-auth"}, strings.NewReader(`{"unexpected":"do-not-reflect"}`), io.Discard, exitBlocked},
 		{"input unavailable", []string{"plan", "kubernetes-auth"}, cliErrorReader{}, io.Discard, exitUsage},
 		{"output unavailable", []string{"plan", "kubernetes-auth"}, strings.NewReader(validInput), cliErrorWriter{}, exitUsage},
@@ -63,6 +68,46 @@ func TestRunUsesStableExitSemantics(t *testing.T) {
 				t.Fatalf("stderr reflected input: %q", stderr.String())
 			}
 		})
+	}
+}
+
+func TestRunApplyDoesNotReflectInput(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"apply", "kubernetes-auth"}, strings.NewReader(`{"wrappingTokenBase64":"do-not-reflect"}`), &stdout, &stderr)
+	if code != exitBlocked || !strings.Contains(stdout.String(), `"status":"blocked_preflight"`) {
+		t.Fatalf("run() code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "do-not-reflect") {
+		t.Fatalf("apply reflected input: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestApplyStdinAllowsPipeAndRejectsRegularFile(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	if !applyStdinAllowed(reader) {
+		t.Fatal("anonymous pipe was rejected")
+	}
+	regular, err := os.CreateTemp(t.TempDir(), "request")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer regular.Close()
+	if applyStdinAllowed(regular) {
+		t.Fatal("regular request file was accepted")
+	}
+}
+
+func TestEncodeApplyReportUsesManualInterventionExitAfterMutation(t *testing.T) {
+	var stderr bytes.Buffer
+	report := openbaoapply.Report{SchemaVersion: openbaoapply.SchemaVersion, Status: openbaoapply.StatusApplied, MutationPerformed: true}
+	if code := encodeApplyReport(report, cliErrorWriter{}, &stderr); code != exitManualIntervention {
+		t.Fatalf("encodeApplyReport()=%d stderr=%q", code, stderr.String())
 	}
 }
 

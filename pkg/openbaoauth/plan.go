@@ -56,7 +56,7 @@ func Build(contract Contract) (Plan, []Problem) {
 	if problems := Validate(contract); len(problems) != 0 {
 		return Plan{}, problems
 	}
-	policy := fmt.Sprintf("path %q {\n  capabilities = [\"read\"]\n}\n", contract.KVV2Mount+"/data/"+contract.DataPrefix+"/*")
+	policy := fmt.Sprintf("path %q {\n  capabilities = [\"read\"]\n}\npath \"auth/token/lookup-self\" {\n  capabilities = [\"read\"]\n}\npath \"auth/token/revoke-self\" {\n  capabilities = [\"update\"]\n}\npath \"sys/capabilities-self\" {\n  capabilities = [\"update\"]\n}\n", contract.KVV2Mount+"/data/"+contract.DataPrefix+"/*")
 	authMount := AuthMountDesired{Type: "kubernetes", Description: "CloudRING dedicated Kubernetes workload authentication for " + contract.RoleName}
 	config := KubernetesConfigDesired{
 		KubernetesHost: "https://kubernetes.default.svc", KubernetesCACert: "", TokenReviewerJWT: "",

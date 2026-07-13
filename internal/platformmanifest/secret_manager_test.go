@@ -17,8 +17,40 @@ func TestSecretManagerProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify secret-manager profile: %v", err)
 	}
-	if report.Status != "ready" || report.Documents != 22 || len(report.Checks) != 8 {
+	if report.Status != "ready" || report.Documents != 33 || len(report.Checks) != 9 {
 		t.Fatalf("unexpected report: %#v", report)
+	}
+}
+
+func TestSecretManagerProfileRejectsWidenedBootstrapExecutorRBAC(t *testing.T) {
+	root := copyProfile(t)
+	path := filepath.Join("consumer-example", "bootstrap-executor.yaml")
+	data, err := readProfileFile(root, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("      - cloudring-openbao-bootstrap\n    verbs:\n      - get\n      - update"), []byte("    verbs:\n      - get\n      - update\n      - create"))
+	if err := writeProfileFile(root, path, data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "apply executor boundary") {
+		t.Fatalf("widened bootstrap executor RBAC was accepted: %v", err)
+	}
+}
+
+func TestSecretManagerProfileRejectsPreclaimedBootstrapLease(t *testing.T) {
+	root := copyProfile(t)
+	path := filepath.Join("consumer-example", "bootstrap-executor.yaml")
+	data, err := readProfileFile(root, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = replaceOnce(t, data, []byte("spec: {}"), []byte("spec:\n  holderIdentity: stale-holder"))
+	if err := writeProfileFile(root, path, data); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifySecretManager(root); err == nil || !strings.Contains(err.Error(), "apply executor boundary") {
+		t.Fatalf("preclaimed bootstrap Lease was accepted: %v", err)
 	}
 }
 
@@ -692,6 +724,7 @@ func copyProfile(t *testing.T) string {
 		"runtime/kustomization.yaml", "runtime/network-policy.yaml", "runtime/openbao-release.yaml", "runtime/tls.yaml",
 		"store/kustomization.yaml", "store/platform-secrets.yaml",
 		"consumer-example/kustomization.yaml", "consumer-example/service-store.yaml",
+		"consumer-example/bootstrap-executor.yaml",
 	} {
 		data, err := sourceRoot.ReadFile(relative)
 		if err != nil {

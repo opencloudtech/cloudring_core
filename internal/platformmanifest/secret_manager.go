@@ -117,8 +117,8 @@ func VerifySecretManager(root string) (Report, error) {
 		objects = append(objects, stageObjects...)
 	}
 	report.Documents = len(objects)
-	if len(objects) != 22 {
-		return report, fmt.Errorf("secret-manager document count is %d, want 22", len(objects))
+	if len(objects) != 33 {
+		return report, fmt.Errorf("secret-manager document count is %d, want 33", len(objects))
 	}
 	if err := validateObjects(objects); err != nil {
 		return report, err
@@ -133,6 +133,7 @@ func VerifySecretManager(root string) (Report, error) {
 		"external_secrets_workload_identity_ready",
 		"external_secrets_token_request_rbac_least_privilege",
 		"namespaced_consumer_identity_example_ready",
+		"openbao_apply_executor_rbac_and_lease_ready",
 	}
 	return report, nil
 }
@@ -294,6 +295,8 @@ func validateObjects(objects []object) error {
 		"Certificate/openbao/openbao-server",
 		"ClusterIssuer//cloudring-openbao-ca",
 		"ClusterIssuer//cloudring-openbao-selfsigned-bootstrap",
+		"ClusterRole//cloudring-openbao-bootstrap-self-review",
+		"ClusterRoleBinding//cloudring-openbao-bootstrap-self-review",
 		"ClusterSecretStore//platform-secrets",
 		"HelmRelease/cert-manager/trust-manager",
 		"HelmRelease/external-secrets/external-secrets",
@@ -301,16 +304,25 @@ func validateObjects(objects []object) error {
 		"HelmRepository/cert-manager/jetstack",
 		"HelmRepository/external-secrets/external-secrets",
 		"HelmRepository/openbao/openbao",
+		"Lease/cloudring-consumer-example/cloudring-openbao-bootstrap",
 		"Namespace//cloudring-consumer-example",
+		"Namespace//cloudring-consumer-negative-example",
 		"Namespace//external-secrets",
 		"Namespace//openbao",
 		"NetworkPolicy/openbao/openbao-ingress",
+		"Role/cloudring-consumer-example/cloudring-openbao-bootstrap-executor",
 		"Role/cloudring-consumer-example/cloudring-openbao-reader-token-request",
+		"Role/cloudring-consumer-negative-example/cloudring-openbao-bootstrap-negative-identity",
 		"Role/external-secrets/external-secrets-token-request",
+		"RoleBinding/cloudring-consumer-example/cloudring-openbao-bootstrap-executor",
 		"RoleBinding/cloudring-consumer-example/cloudring-openbao-reader-token-request",
+		"RoleBinding/cloudring-consumer-negative-example/cloudring-openbao-bootstrap-negative-identity",
 		"RoleBinding/external-secrets/external-secrets-token-request",
 		"SecretStore/cloudring-consumer-example/cloudring-openbao",
+		"ServiceAccount/cloudring-consumer-example/cloudring-openbao-bootstrap-executor",
 		"ServiceAccount/cloudring-consumer-example/cloudring-openbao-reader",
+		"ServiceAccount/cloudring-consumer-example/cloudring-openbao-reader-denied",
+		"ServiceAccount/cloudring-consumer-negative-example/cloudring-openbao-reader",
 	}
 	actual := make([]string, 0, len(index))
 	for key := range index {
@@ -426,6 +438,9 @@ func validateObjects(objects []object) error {
 	if !exactConsumerSecretStore(consumerStore.Data) {
 		return errors.New("consumer example namespaced SecretStore contract is invalid")
 	}
+	if !validateBootstrapExecutorObjects(require) {
+		return errors.New("consumer example OpenBao apply executor boundary is invalid")
+	}
 	bootstrapIssuer, _ := require("ClusterIssuer", "", "cloudring-openbao-selfsigned-bootstrap")
 	if nested(bootstrapIssuer.Data, "spec", "selfSigned") == nil {
 		return errors.New("OpenBao bootstrap issuer is invalid")
@@ -451,6 +466,118 @@ func validateObjects(objects []object) error {
 		return errors.New("OpenBao NetworkPolicy is invalid")
 	}
 	return nil
+}
+
+func validateBootstrapExecutorObjects(require func(string, string, string) (object, error)) bool {
+	selfReviewRole, err := require("ClusterRole", "", "cloudring-openbao-bootstrap-self-review")
+	if err != nil || !exactSelfReviewClusterRole(selfReviewRole.Data) {
+		return false
+	}
+	selfReviewBinding, err := require("ClusterRoleBinding", "", "cloudring-openbao-bootstrap-self-review")
+	if err != nil || !exactClusterRoleBinding(selfReviewBinding.Data, "cloudring-openbao-bootstrap-self-review", "cloudring-consumer-example", "cloudring-openbao-bootstrap-executor") {
+		return false
+	}
+	negativeNamespace, err := require("Namespace", "", "cloudring-consumer-negative-example")
+	if err != nil || nestedString(negativeNamespace.Data, "apiVersion") != "v1" || !exactStringMap(nested(negativeNamespace.Data, "metadata", "labels"), map[string]string{
+		"app.kubernetes.io/part-of":          "cloudring-secret-manager",
+		"pod-security.kubernetes.io/enforce": "restricted",
+		"pod-security.kubernetes.io/audit":   "restricted",
+		"pod-security.kubernetes.io/warn":    "restricted",
+	}) {
+		return false
+	}
+	for _, identity := range []struct{ namespace, name string }{
+		{"cloudring-consumer-example", "cloudring-openbao-bootstrap-executor"},
+		{"cloudring-consumer-example", "cloudring-openbao-reader-denied"},
+		{"cloudring-consumer-negative-example", "cloudring-openbao-reader"},
+	} {
+		serviceAccount, err := require("ServiceAccount", identity.namespace, identity.name)
+		automount, explicit := nested(serviceAccount.Data, "automountServiceAccountToken").(bool)
+		if err != nil || nestedString(serviceAccount.Data, "apiVersion") != "v1" || !explicit || automount || nested(serviceAccount.Data, "secrets") != nil {
+			return false
+		}
+	}
+	lease, err := require("Lease", "cloudring-consumer-example", "cloudring-openbao-bootstrap")
+	if err != nil || nestedString(lease.Data, "apiVersion") != "coordination.k8s.io/v1" || !exactMappingKeys(nested(lease.Data, "spec")) {
+		return false
+	}
+	role, err := require("Role", "cloudring-consumer-example", "cloudring-openbao-bootstrap-executor")
+	if err != nil || !exactBootstrapExecutorRole(role.Data) {
+		return false
+	}
+	binding, err := require("RoleBinding", "cloudring-consumer-example", "cloudring-openbao-bootstrap-executor")
+	if err != nil || !exactTokenRequestRoleBinding(binding.Data, "cloudring-openbao-bootstrap-executor", "cloudring-consumer-example", "cloudring-openbao-bootstrap-executor") {
+		return false
+	}
+	negativeRole, err := require("Role", "cloudring-consumer-negative-example", "cloudring-openbao-bootstrap-negative-identity")
+	if err != nil || !exactBootstrapNegativeRole(negativeRole.Data) {
+		return false
+	}
+	negativeBinding, err := require("RoleBinding", "cloudring-consumer-negative-example", "cloudring-openbao-bootstrap-negative-identity")
+	return err == nil && exactTokenRequestRoleBinding(negativeBinding.Data, "cloudring-openbao-bootstrap-negative-identity", "cloudring-consumer-example", "cloudring-openbao-bootstrap-executor")
+}
+
+func exactSelfReviewClusterRole(role map[string]any) bool {
+	if nestedString(role, "apiVersion") != "rbac.authorization.k8s.io/v1" {
+		return false
+	}
+	rules, ok := nested(role, "rules").([]any)
+	if !ok || len(rules) != 2 {
+		return false
+	}
+	authentication, authenticationOK := rules[0].(map[string]any)
+	authorization, authorizationOK := rules[1].(map[string]any)
+	return authenticationOK && authorizationOK && len(authentication) == 3 && len(authorization) == 3 &&
+		exactStringSequence(authentication["apiGroups"], "authentication.k8s.io") && exactStringSequence(authentication["resources"], "selfsubjectreviews") && exactStringSequence(authentication["verbs"], "create") &&
+		exactStringSequence(authorization["apiGroups"], "authorization.k8s.io") && exactStringSequence(authorization["resources"], "selfsubjectaccessreviews") && exactStringSequence(authorization["verbs"], "create")
+}
+
+func exactClusterRoleBinding(binding map[string]any, role, subjectNamespace, subjectName string) bool {
+	if nestedString(binding, "apiVersion") != "rbac.authorization.k8s.io/v1" {
+		return false
+	}
+	roleRef, ok := nested(binding, "roleRef").(map[string]any)
+	if !ok || len(roleRef) != 3 || stringValue(roleRef["apiGroup"]) != "rbac.authorization.k8s.io" || stringValue(roleRef["kind"]) != "ClusterRole" || stringValue(roleRef["name"]) != role {
+		return false
+	}
+	subjects, ok := nested(binding, "subjects").([]any)
+	if !ok || len(subjects) != 1 {
+		return false
+	}
+	subject, ok := subjects[0].(map[string]any)
+	return ok && len(subject) == 3 && stringValue(subject["kind"]) == "ServiceAccount" && stringValue(subject["namespace"]) == subjectNamespace && stringValue(subject["name"]) == subjectName
+}
+
+func exactBootstrapExecutorRole(role map[string]any) bool {
+	if nestedString(role, "apiVersion") != "rbac.authorization.k8s.io/v1" {
+		return false
+	}
+	rules, ok := nested(role, "rules").([]any)
+	if !ok || len(rules) != 3 {
+		return false
+	}
+	leaseRule, leaseOK := rules[0].(map[string]any)
+	getRule, getOK := rules[1].(map[string]any)
+	tokenRule, tokenOK := rules[2].(map[string]any)
+	return leaseOK && getOK && tokenOK && len(leaseRule) == 4 && len(getRule) == 4 && len(tokenRule) == 4 &&
+		exactStringSequence(leaseRule["apiGroups"], "coordination.k8s.io") && exactStringSequence(leaseRule["resources"], "leases") && exactStringSequence(leaseRule["resourceNames"], "cloudring-openbao-bootstrap") && exactStringSequence(leaseRule["verbs"], "get", "update") &&
+		exactStringSequence(getRule["apiGroups"], "") && exactStringSequence(getRule["resources"], "serviceaccounts") && exactStringSequence(getRule["resourceNames"], "cloudring-openbao-bootstrap-executor", "cloudring-openbao-reader", "cloudring-openbao-reader-denied") && exactStringSequence(getRule["verbs"], "get") &&
+		exactStringSequence(tokenRule["apiGroups"], "") && exactStringSequence(tokenRule["resources"], "serviceaccounts/token") && exactStringSequence(tokenRule["resourceNames"], "cloudring-openbao-reader", "cloudring-openbao-reader-denied") && exactStringSequence(tokenRule["verbs"], "create")
+}
+
+func exactBootstrapNegativeRole(role map[string]any) bool {
+	if nestedString(role, "apiVersion") != "rbac.authorization.k8s.io/v1" {
+		return false
+	}
+	rules, ok := nested(role, "rules").([]any)
+	if !ok || len(rules) != 2 {
+		return false
+	}
+	getRule, getOK := rules[0].(map[string]any)
+	tokenRule, tokenOK := rules[1].(map[string]any)
+	return getOK && tokenOK && len(getRule) == 4 && len(tokenRule) == 4 &&
+		exactStringSequence(getRule["apiGroups"], "") && exactStringSequence(getRule["resources"], "serviceaccounts") && exactStringSequence(getRule["resourceNames"], "cloudring-openbao-reader") && exactStringSequence(getRule["verbs"], "get") &&
+		exactStringSequence(tokenRule["apiGroups"], "") && exactStringSequence(tokenRule["resources"], "serviceaccounts/token") && exactStringSequence(tokenRule["resourceNames"], "cloudring-openbao-reader") && exactStringSequence(tokenRule["verbs"], "create")
 }
 
 func openBaoReadinessPostRenderCommand(release map[string]any) ([]string, error) {
