@@ -28,6 +28,9 @@ The extraction backlog classifies these paths as publishable `public-core`:
 | Path | Public role |
 | --- | --- |
 | `pkg/ocs` | OCSv3 connector package and validator contracts. |
+| `pkg/backup/restoreproof` | Provider-neutral restore proof model, canonical digests, and fail-closed validator. |
+| `pkg/backup/velero118` | Exact Velero 1.18.1 CSI data-mover decoders, archive reader, collectors, and adapter execution boundary. |
+| `cmd/cloudring-backup` | Read-only baseline, collection, and offline verification workflow. |
 | `internal/iam` | IAM decision and policy interface candidate. |
 | `internal/migration` | Go and upstream Kubernetes runtime policy guard candidate. |
 | `contracts/release/release-bom-contract.json` | Release BOM machine contract candidate. |
@@ -52,7 +55,8 @@ code has been separated from installation values.
 
 ## Migration Notes
 
-This map is a classification contract only. It does not move code.
+The backup proof paths above are the first runtime extraction slice. Other
+listed candidate paths remain classifications until code and tests are present.
 
 Service paths such as backup, IaaS, message delivery, marketplace,
 observability, resilience, and accelerator/HPC surfaces should become complete

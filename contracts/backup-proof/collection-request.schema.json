@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/backup-proof/collection-request.schema.json",
+  "title": "CloudRING CSI data-mover restore-proof collection request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "veleroNamespace",
+    "restoreName",
+    "sourceNamespace",
+    "sourcePvc",
+    "targetNamespace",
+    "targetPvc",
+    "dataUploadName",
+    "serverStatusRequestName",
+    "serverStatusRequestUidSha256",
+    "cleanupRunNonceSha256",
+    "evidencePrefix"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "cloudring.restore-proof.collection-request/v1"
+    },
+    "veleroNamespace": { "$ref": "#/$defs/name" },
+    "restoreName": { "$ref": "#/$defs/name" },
+    "sourceNamespace": { "$ref": "#/$defs/name" },
+    "sourcePvc": { "$ref": "#/$defs/name" },
+    "targetNamespace": { "$ref": "#/$defs/name" },
+    "targetPvc": { "$ref": "#/$defs/name" },
+    "dataUploadName": { "$ref": "#/$defs/name" },
+    "serverStatusRequestName": { "$ref": "#/$defs/name" },
+    "serverStatusRequestUidSha256": { "$ref": "#/$defs/digest" },
+    "cleanupRunNonceSha256": { "$ref": "#/$defs/digest" },
+    "evidencePrefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 229,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._/+:-]*[A-Za-z0-9])?$",
+      "not": { "pattern": "\\.\\." }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/backup-proof/baseline-request.schema.json",
+  "title": "CloudRING pre-restore source baseline request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sourceNamespace", "sourcePvc", "evidencePrefix"],
+  "properties": {
+    "schemaVersion": { "const": "cloudring.restore-proof.baseline-request/v1" },
+    "sourceNamespace": { "$ref": "#/$defs/name" },
+    "sourcePvc": { "$ref": "#/$defs/name" },
+    "evidencePrefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 229,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._/+:-]*[A-Za-z0-9])?$",
+      "not": { "pattern": "\\.\\." }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    }
+  }
+}

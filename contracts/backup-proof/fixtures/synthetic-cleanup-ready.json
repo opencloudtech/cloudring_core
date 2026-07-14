@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "cloudring.restore-proof.cleanup-ready/v1",
+  "status": "ready-for-cleanup",
+  "readyAt": "2026-07-14T12:02:03Z",
+  "cleanupRunNonceSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}
