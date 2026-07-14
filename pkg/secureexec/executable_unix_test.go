@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -73,6 +74,63 @@ func TestPinnedExecutablePreservesBoundedCommandFailureDiagnostics(t *testing.T)
 	defer zero(stderr)
 	if err == nil || len(stdout) != 0 || string(stderr) != "missing" {
 		t.Fatalf("command failure = stdout:%q stderr:%q err:%v", stdout, stderr, err)
+	}
+}
+
+func TestPinnedExecutableAllowsConcurrentReplayRuns(t *testing.T) {
+	dir := t.TempDir()
+	markerDir := filepath.Join(dir, "markers")
+	if err := os.Mkdir(markerDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "kubectl")
+	writeExecutable(t, path, `#!/bin/sh
+set -eu
+cat "$KUBECONFIG" >/dev/null
+: > "$1/$2"
+attempt=0
+while [ "$(find "$1" -type f | wc -l | tr -d ' ')" -lt "$3" ]; do
+  attempt=$((attempt + 1))
+  [ "$attempt" -lt 100 ] || exit 94
+  sleep 0.02
+done
+printf overlap-ok
+`)
+	executable, err := PinAbsolute(path, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer executable.Close()
+	replay := newReplay(t, []byte("apiVersion: v1\n"))
+	defer replay.Close()
+
+	const invocations = 4
+	var wait sync.WaitGroup
+	errorsByInvocation := make([]error, invocations)
+	for invocation := range invocations {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			stdout, stderr, runErr := executable.Run(
+				context.Background(),
+				[]string{markerDir, strconv.Itoa(invocation), strconv.Itoa(invocations)},
+				nil,
+				1024,
+				1024,
+				replay,
+			)
+			defer zero(stdout)
+			defer zero(stderr)
+			if runErr != nil || string(stdout) != "overlap-ok" || len(stderr) != 0 {
+				errorsByInvocation[invocation] = errors.New("concurrent pinned replay invocation failed")
+			}
+		}()
+	}
+	wait.Wait()
+	for invocation, err := range errorsByInvocation {
+		if err != nil {
+			t.Fatalf("invocation %d: %v", invocation, err)
+		}
 	}
 }
 

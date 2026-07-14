@@ -29,7 +29,7 @@ const (
 )
 
 type Executable struct {
-	mu             sync.Mutex
+	mu             sync.RWMutex
 	file           *os.File
 	invocationPath string
 	snapshotDir    string
@@ -143,8 +143,8 @@ func (executable *Executable) IdentitySHA256() string {
 	if executable == nil {
 		return ""
 	}
-	executable.mu.Lock()
-	defer executable.mu.Unlock()
+	executable.mu.RLock()
+	defer executable.mu.RUnlock()
 	if executable.closed {
 		return ""
 	}
@@ -158,17 +158,15 @@ func (executable *Executable) Run(ctx context.Context, arguments []string, input
 		maximumStderr <= 0 || maximumStderr > maxCapturedOutputBytes {
 		return nil, nil, errors.New("invalid pinned command")
 	}
-	executable.mu.Lock()
-	defer executable.mu.Unlock()
+	executable.mu.RLock()
+	defer executable.mu.RUnlock()
 	if executable.closed || executable.file == nil || executable.timeout <= 0 {
 		return nil, nil, errors.New("pinned executable is closed")
 	}
-	if executable.useDescriptor {
-		if _, err := executable.file.Seek(0, io.SeekStart); err != nil {
-			return nil, nil, errors.New("rewind pinned executable")
+	if !executable.useDescriptor {
+		if err := executable.verifySnapshot(); err != nil {
+			return nil, nil, errors.New("verify pinned executable")
 		}
-	} else if err := executable.verifySnapshot(); err != nil {
-		return nil, nil, errors.New("verify pinned executable")
 	}
 	invocationContext, cancel := context.WithTimeout(ctx, executable.timeout)
 	defer cancel()
