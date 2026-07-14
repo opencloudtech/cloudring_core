@@ -652,12 +652,28 @@ func (client *openBaoRESTClient) read(ctx context.Context, method, token, path s
 	if status == http.StatusNotFound {
 		return ReadResult{Found: false}, nil
 	}
+	// OpenBao 2.5.5 reports a missing auth mount through the read-specific
+	// logical error contract rather than HTTP 404. Accept only its exact,
+	// mount-bound envelope; every other 400 remains an API failure.
+	if status == http.StatusBadRequest && exactMissingAuthMountRead(path, payload) {
+		return ReadResult{Found: false}, nil
+	}
 	if status != http.StatusOK {
 		return ReadResult{}, errAPIUnavailable
 	}
 	data, _ := object(payload, "data")
 	auth, _ := object(payload, "auth")
 	return ReadResult{Found: true, Data: data, Auth: auth}, nil
+}
+
+func exactMissingAuthMountRead(path string, payload map[string]any) bool {
+	const prefix = "sys/auth/"
+	mount := strings.TrimPrefix(path, prefix)
+	if mount == path || !dnsLabel.MatchString(mount) || len(payload) != 1 {
+		return false
+	}
+	errors, ok := stringSlice(payload, "errors")
+	return ok && len(errors) == 1 && errors[0] == "No auth engine at "+mount+"/"
 }
 
 func (client *openBaoRESTClient) Write(ctx context.Context, token, path string, body any) (ReadResult, error) {

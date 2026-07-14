@@ -391,6 +391,12 @@ func TestOpenBaoRESTClientUsesExactStatusesAndResponseShapes(t *testing.T) {
 			_ = json.NewEncoder(writer).Encode(map[string]any{"data": map[string]any{"value": "synthetic"}})
 		case "/v1/synthetic/missing":
 			writer.WriteHeader(http.StatusNotFound)
+		case "/v1/sys/auth/kubernetes-absent":
+			writer.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(writer).Encode(map[string]any{"errors": []string{"No auth engine at kubernetes-absent/"}})
+		case "/v1/sys/auth/kubernetes-drifted":
+			writer.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(writer).Encode(map[string]any{"errors": []string{"unexpected response"}})
 		case "/v1/synthetic/write", "/v1/synthetic/delete":
 			writer.WriteHeader(http.StatusNoContent)
 		case "/v1/auth/kubernetes-consumer-example/login":
@@ -430,6 +436,12 @@ func TestOpenBaoRESTClientUsesExactStatusesAndResponseShapes(t *testing.T) {
 	}
 	if result, err := client.Read(context.Background(), "bearer-value", "synthetic/missing"); err != nil || result.Found {
 		t.Fatalf("missing=%+v err=%v", result, err)
+	}
+	if result, err := client.Read(context.Background(), "bearer-value", "sys/auth/kubernetes-absent"); err != nil || result.Found {
+		t.Fatalf("missing auth mount=%+v err=%v", result, err)
+	}
+	if _, err := client.Read(context.Background(), "bearer-value", "sys/auth/kubernetes-drifted"); err == nil {
+		t.Fatal("drifted missing-auth envelope accepted")
 	}
 	if _, err := client.Write(context.Background(), "bearer-value", "synthetic/write", map[string]any{"value": "synthetic"}); err != nil {
 		t.Fatal(err)
