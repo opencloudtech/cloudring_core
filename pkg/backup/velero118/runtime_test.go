@@ -6,6 +6,7 @@
 package velero118
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/opencloudtech/CloudRING/pkg/backup/restoreproof"
+	"github.com/opencloudtech/CloudRING/pkg/kubeconfigpipe"
 )
 
 func TestKubectlReaderUsesExactRawAPIPath(t *testing.T) {
@@ -146,14 +148,13 @@ func TestPinnedCommandTimeoutKillsProcessGroup(t *testing.T) {
 
 func TestSuccessfulPinnedCommandKillsBackgroundProcessGroup(t *testing.T) {
 	pidPath := filepath.Join(t.TempDir(), "background-pid")
-	script := writeExecutable(t, "#!/bin/sh\nsleep 300 </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$CLOUDRING_BACKGROUND_PID\"\nprintf 'ok'\n")
-	t.Setenv("CLOUDRING_BACKGROUND_PID", pidPath)
+	script := writeExecutable(t, "#!/bin/sh\nsleep 300 </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$1\"\nprintf 'ok'\n")
 	executable, err := pinExecutable(script, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer executable.Close()
-	output, _, err := runCommand(context.Background(), executable, nil, nil, 1024)
+	output, _, err := runCommand(context.Background(), executable, []string{pidPath}, nil, 1024)
 	if err != nil || string(output) != "ok" {
 		t.Fatalf("successful command = %q, %v", output, err)
 	}
@@ -175,6 +176,72 @@ func TestSuccessfulPinnedCommandKillsBackgroundProcessGroup(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("background process %d survived successful adapter exit", pid)
+}
+
+func TestKubeconfigReplayCannotBlockBackgroundProcessCleanup(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "background-pid")
+	script := writeExecutable(t, "#!/bin/sh\nsleep 300 </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$1\"\nprintf 'ok'\n")
+	executable, err := pinExecutable(script, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer executable.Close()
+	replay := newKubeconfigReplay(t, bytes.Repeat([]byte{'a'}, 1<<20))
+	defer replay.Close()
+	started := time.Now()
+	if _, _, err := runCommandWithKubeconfig(context.Background(), executable, []string{pidPath}, 1024, replay); err == nil {
+		t.Fatal("command that did not consume its kubeconfig unexpectedly succeeded")
+	}
+	if time.Since(started) > 2*time.Second {
+		t.Fatal("kubeconfig replay blocked process-tree cleanup")
+	}
+	// #nosec G304 -- pidPath is a test-owned path inside t.TempDir().
+	payload, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(payload)))
+	if err != nil || pid <= 0 {
+		t.Fatalf("background pid = %q, %v", payload, err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		err = syscall.Kill(pid, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("background process %d survived replay cancellation", pid)
+}
+
+func newKubeconfigReplay(t *testing.T, data []byte) *kubeconfigpipe.Replay {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeDone := make(chan error, 1)
+	go func() {
+		_, writeErr := writer.Write(data)
+		closeErr := writer.Close()
+		if writeErr != nil {
+			writeDone <- writeErr
+			return
+		}
+		writeDone <- closeErr
+	}()
+	replay, err := kubeconfigpipe.NewFromFD(int(reader.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-writeDone; err != nil {
+		t.Fatal(err)
+	}
+	return replay
 }
 
 func TestAdapterErrorsDoNotReflectChildOutput(t *testing.T) {
