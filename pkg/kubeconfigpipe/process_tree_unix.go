@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
 
-package velero118
+package kubeconfigpipe
 
 import (
 	"errors"
@@ -25,7 +25,7 @@ func configureProcessTree(command *exec.Cmd) {
 		}
 		return err
 	}
-	command.WaitDelay = 5 * time.Second
+	command.WaitDelay = 2 * time.Second
 }
 
 func cleanupProcessTree(command *exec.Cmd) error {

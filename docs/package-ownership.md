@@ -30,7 +30,8 @@ The extraction backlog classifies these paths as publishable `public-core`:
 | `pkg/ocs` | OCSv3 connector package and validator contracts. |
 | `pkg/backup/restoreproof` | Provider-neutral restore proof model, canonical digests, and fail-closed validator. |
 | `pkg/backup/velero118` | Exact Velero 1.18.1 CSI data-mover decoders, archive reader, collectors, and adapter execution boundary. |
-| `pkg/kubeconfigpipe` | Bounded in-memory replay of a brokered pipe-backed kubeconfig for multi-query child processes. |
+| `pkg/kubeconfigpipe` | Bounded in-memory replay of a brokered pipe-backed kubeconfig plus process-tree-contained execution for multi-query child processes. |
+| `pkg/secureexec` | Content-pinned executable identity, bounded output, process-tree cleanup, and optional kubeconfig replay for downstream collectors. |
 | `cmd/cloudring-backup` | Read-only baseline, collection, and offline verification workflow. |
 | `internal/iam` | IAM decision and policy interface candidate. |
 | `internal/migration` | Go and upstream Kubernetes runtime policy guard candidate. |

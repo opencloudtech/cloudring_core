@@ -6,38 +6,30 @@ package velero118
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
 	"github.com/opencloudtech/CloudRING/pkg/backup/restoreproof"
 	"github.com/opencloudtech/CloudRING/pkg/kubeconfigpipe"
+	"github.com/opencloudtech/CloudRING/pkg/secureexec"
 )
 
 const (
-	maxAdapterResponseBytes  = 64 << 10
-	maxPinnedExecutableBytes = 512 << 20
-	defaultKubectlTimeout    = 2 * time.Minute
-	defaultProbeTimeout      = 30 * time.Minute
-	defaultBackendTimeout    = 2 * time.Minute
+	maxAdapterResponseBytes = 64 << 10
+	defaultKubectlTimeout   = 2 * time.Minute
+	defaultProbeTimeout     = 30 * time.Minute
+	defaultBackendTimeout   = 2 * time.Minute
 )
 
 // KubectlReader uses kubectl's raw API path so discovery cannot silently select
 // a different served version. It performs read-only GET requests.
 type KubectlReader struct {
-	executable *pinnedExecutable
+	executable *secureexec.Executable
 	kubeconfig *kubeconfigpipe.Replay
 }
 
@@ -50,24 +42,24 @@ func NewKubectlReader(binary string) (*KubectlReader, error) {
 // This supports multi-query collectors without ever persisting kubeconfig
 // bytes or exposing them through argv or the child environment.
 func NewKubectlReaderFromKubeconfigFD(binary string, fd int) (*KubectlReader, error) {
+	reader, err := newKubectlReader(binary, nil)
+	if err != nil {
+		return nil, err
+	}
 	replay, err := kubeconfigpipe.NewFromFD(fd)
 	if err != nil {
+		_ = reader.Close()
 		return nil, err
 	}
-	reader, err := newKubectlReader(binary, replay)
-	if err != nil {
-		_ = replay.Close()
-		return nil, err
-	}
+	reader.kubeconfig = replay
 	return reader, nil
 }
 
 func newKubectlReader(binary string, replay *kubeconfigpipe.Replay) (*KubectlReader, error) {
-	resolved, err := resolveExecutable(binary)
-	if err != nil {
-		return nil, errors.New("resolve kubectl executable")
+	if strings.TrimSpace(binary) == "" {
+		binary = "kubectl"
 	}
-	executable, err := pinExecutable(resolved, defaultKubectlTimeout)
+	executable, err := secureexec.Pin(binary, defaultKubectlTimeout)
 	if err != nil {
 		return nil, errors.New("pin kubectl executable")
 	}
@@ -205,14 +197,10 @@ func possibleNotFound(output, stderr []byte) bool {
 
 // ExecProbeObserver invokes a downstream read-only probe adapter. Object refs
 // enter through stdin and adapter stderr is never reflected.
-type ExecProbeObserver struct{ executable *pinnedExecutable }
+type ExecProbeObserver struct{ executable *secureexec.Executable }
 
 func NewExecProbeObserver(path string) (*ExecProbeObserver, error) {
-	resolved, err := resolveAbsoluteExecutable(path)
-	if err != nil {
-		return nil, errors.New("resolve data probe adapter")
-	}
-	executable, err := pinExecutable(resolved, defaultProbeTimeout)
+	executable, err := secureexec.PinAbsolute(path, defaultProbeTimeout)
 	if err != nil {
 		return nil, errors.New("pin data probe adapter")
 	}
@@ -261,14 +249,10 @@ func (observer *ExecProbeObserver) Observe(ctx context.Context, request ProbeReq
 
 // ExecBackendObserver invokes a provider adapter with the raw handle only on
 // stdin. The handle is zeroed from the request buffer after execution.
-type ExecBackendObserver struct{ executable *pinnedExecutable }
+type ExecBackendObserver struct{ executable *secureexec.Executable }
 
 func NewExecBackendObserver(path string) (*ExecBackendObserver, error) {
-	resolved, err := resolveAbsoluteExecutable(path)
-	if err != nil {
-		return nil, errors.New("resolve provider observer adapter")
-	}
-	executable, err := pinExecutable(resolved, defaultBackendTimeout)
+	executable, err := secureexec.PinAbsolute(path, defaultBackendTimeout)
 	if err != nil {
 		return nil, errors.New("pin provider observer adapter")
 	}
@@ -346,275 +330,24 @@ func safeAPISegment(value string) bool {
 	return true
 }
 
-func resolveExecutable(binary string) (string, error) {
-	if binary == "" {
-		binary = "kubectl"
-	}
-	if filepath.IsAbs(binary) {
-		return resolveAbsoluteExecutable(binary)
-	}
-	path, err := exec.LookPath(binary)
-	if err != nil {
-		return "", err
-	}
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	return resolveAbsoluteExecutable(absolute)
-}
-
-func resolveAbsoluteExecutable(path string) (string, error) {
-	if !filepath.IsAbs(path) || strings.ContainsRune(path, '\x00') {
-		return "", errors.New("executable path must be absolute")
-	}
-	clean := filepath.Clean(path)
-	resolved, err := filepath.EvalSymlinks(clean)
-	if err != nil || !filepath.IsAbs(resolved) {
-		return "", errors.New("resolve executable identity")
-	}
-	return resolved, nil
-}
-
-type pinnedExecutable struct {
-	mu             sync.Mutex
-	file           *os.File
-	invocationPath string
-	snapshotDir    string
-	useDescriptor  bool
-	identitySHA256 string
-	timeout        time.Duration
-	closed         bool
-}
+type pinnedExecutable = secureexec.Executable
 
 func pinExecutable(path string, timeout time.Duration) (*pinnedExecutable, error) {
-	if timeout <= 0 || runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		return nil, errors.New("pinned executable runtime is unsupported")
-	}
-	// #nosec G304 -- path is an absolute, symlink-resolved executable identity and is validated below as a bounded regular executable.
-	source, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer source.Close()
-	info, err := source.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 || info.Size() <= 0 || info.Size() > maxPinnedExecutableBytes {
-		return nil, errors.New("executable identity is invalid")
-	}
-	snapshotDir, err := os.MkdirTemp("", ".cloudring-pinned-exec-")
-	if err != nil {
-		return nil, errors.New("create pinned executable directory")
-	}
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.RemoveAll(snapshotDir)
-		}
-	}()
-	// #nosec G302 -- the directory must be searchable only by its owner so its private executable can run.
-	if err := os.Chmod(snapshotDir, 0o700); err != nil {
-		return nil, errors.New("protect pinned executable directory")
-	}
-	snapshotPath := filepath.Join(snapshotDir, "executable")
-	// #nosec G304 G302 -- snapshotPath is inside the fresh private directory and an executable copy requires owner execute permission.
-	snapshot, err := os.OpenFile(snapshotPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o500)
-	if err != nil {
-		return nil, errors.New("create pinned executable snapshot")
-	}
-	hasher := sha256.New()
-	copied, copyErr := io.Copy(io.MultiWriter(snapshot, hasher), io.LimitReader(source, maxPinnedExecutableBytes+1))
-	chmodErr := snapshot.Chmod(0o500)
-	syncErr := snapshot.Sync()
-	closeErr := snapshot.Close()
-	if copyErr != nil || chmodErr != nil || syncErr != nil || closeErr != nil || copied != info.Size() {
-		return nil, errors.New("write pinned executable snapshot")
-	}
-	// #nosec G304 -- snapshotPath is the exact private file created above and is revalidated immediately after opening.
-	pinned, err := os.Open(snapshotPath)
-	if err != nil {
-		return nil, errors.New("open pinned executable snapshot")
-	}
-	pinnedInfo, statErr := pinned.Stat()
-	if statErr != nil || !pinnedInfo.Mode().IsRegular() || pinnedInfo.Mode().Perm()&0o111 == 0 || pinnedInfo.Size() != info.Size() {
-		_ = pinned.Close()
-		return nil, errors.New("pinned executable snapshot is invalid")
-	}
-	invocationPath := snapshotPath
-	useDescriptor := runtime.GOOS == "linux"
-	retainedDir := snapshotDir
-	if useDescriptor {
-		invocationPath = "/proc/self/fd/3"
-		if err := os.Remove(snapshotPath); err != nil {
-			_ = pinned.Close()
-			return nil, errors.New("unlink pinned executable snapshot")
-		}
-		if err := os.Remove(snapshotDir); err != nil {
-			_ = pinned.Close()
-			return nil, errors.New("remove pinned executable directory")
-		}
-		retainedDir = ""
-	}
-	cleanup = false
-	return &pinnedExecutable{file: pinned, invocationPath: invocationPath, snapshotDir: retainedDir, useDescriptor: useDescriptor, identitySHA256: hex.EncodeToString(hasher.Sum(nil)), timeout: timeout}, nil
-}
-
-func (executable *pinnedExecutable) IdentitySHA256() string {
-	if executable == nil {
-		return ""
-	}
-	executable.mu.Lock()
-	defer executable.mu.Unlock()
-	if executable.closed {
-		return ""
-	}
-	return executable.identitySHA256
-}
-
-func (executable *pinnedExecutable) Close() error {
-	if executable == nil {
-		return nil
-	}
-	executable.mu.Lock()
-	defer executable.mu.Unlock()
-	if executable.closed {
-		return nil
-	}
-	executable.closed = true
-	closeErr := executable.file.Close()
-	removeErr := error(nil)
-	if executable.snapshotDir != "" {
-		removeErr = os.RemoveAll(executable.snapshotDir)
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return removeErr
+	return secureexec.PinAbsolute(path, timeout)
 }
 
 func runCommand(ctx context.Context, executable *pinnedExecutable, arguments []string, input []byte, maximum int64) ([]byte, []byte, error) {
-	return runCommandConfigured(ctx, executable, arguments, input, maximum, nil)
-}
-
-func runCommandWithKubeconfig(ctx context.Context, executable *pinnedExecutable, arguments []string, maximum int64, kubeconfig *kubeconfigpipe.Replay) ([]byte, []byte, error) {
-	if kubeconfig == nil {
-		return nil, nil, errors.New("pipe-backed kubeconfig is missing")
-	}
-	return runCommandConfigured(ctx, executable, arguments, nil, maximum, kubeconfig)
-}
-
-func runCommandConfigured(ctx context.Context, executable *pinnedExecutable, arguments []string, input []byte, maximum int64, kubeconfig *kubeconfigpipe.Replay) ([]byte, []byte, error) {
 	if executable == nil {
 		return nil, nil, errors.New("command executable is missing")
 	}
-	executable.mu.Lock()
-	defer executable.mu.Unlock()
-	if executable.closed || executable.file == nil || executable.timeout <= 0 {
-		return nil, nil, errors.New("command executable is closed")
-	}
-	if executable.useDescriptor {
-		if _, err := executable.file.Seek(0, io.SeekStart); err != nil {
-			return nil, nil, errors.New("rewind command executable")
-		}
-	} else if err := executable.verifySnapshot(); err != nil {
-		return nil, nil, errors.New("rewind command executable")
-	}
-	invocationContext, cancel := context.WithTimeout(ctx, executable.timeout)
-	defer cancel()
-	// #nosec G204 -- execution uses an already-open, content-hashed file
-	// descriptor; validated arguments contain no adapter data or credentials.
-	command := exec.CommandContext(invocationContext, executable.invocationPath, arguments...)
-	if executable.useDescriptor {
-		command.ExtraFiles = []*os.File{executable.file}
-	}
-	var completeKubeconfig func() error
-	if kubeconfig != nil {
-		var err error
-		completeKubeconfig, err = kubeconfig.Attach(command)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	configureProcessTree(command)
-	if input != nil {
-		command.Stdin = bytes.NewReader(input)
-	}
-	stdout := boundedBuffer{maximum: int(maximum)}
-	stderr := boundedBuffer{maximum: 64 << 10}
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	err := command.Run()
-	cleanupErr := cleanupProcessTree(command)
-	var kubeconfigReplayErr error
-	if completeKubeconfig != nil {
-		kubeconfigReplayErr = completeKubeconfig()
-	}
-	if stdout.exceeded || stderr.exceeded {
-		zeroBytes(stdout.buffer.Bytes())
-		zeroBytes(stderr.buffer.Bytes())
-		return nil, nil, errors.New("command output exceeded limit")
-	}
-	output := append([]byte(nil), stdout.buffer.Bytes()...)
-	errorOutput := append([]byte(nil), stderr.buffer.Bytes()...)
-	zeroBytes(stdout.buffer.Bytes())
-	zeroBytes(stderr.buffer.Bytes())
-	if cleanupErr != nil {
-		zeroBytes(output)
-		zeroBytes(errorOutput)
-		return nil, nil, errors.New("command process-tree cleanup failed")
-	}
-	if kubeconfigReplayErr != nil {
-		zeroBytes(output)
-		zeroBytes(errorOutput)
-		return nil, nil, kubeconfigReplayErr
-	}
-	if err != nil {
-		return output, errorOutput, errors.New("command failed")
-	}
-	zeroBytes(errorOutput)
-	return output, nil, nil
+	return executable.Run(ctx, arguments, input, maximum, 64<<10, nil)
 }
 
-func (executable *pinnedExecutable) verifySnapshot() error {
-	if executable.snapshotDir == "" || executable.invocationPath == "" {
-		return errors.New("pinned executable snapshot is missing")
+func runCommandWithKubeconfig(ctx context.Context, executable *pinnedExecutable, arguments []string, maximum int64, kubeconfig *kubeconfigpipe.Replay) ([]byte, []byte, error) {
+	if executable == nil || kubeconfig == nil {
+		return nil, nil, errors.New("pipe-backed command is incomplete")
 	}
-	file, err := os.Open(executable.invocationPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, io.LimitReader(file, maxPinnedExecutableBytes+1)); err != nil {
-		return err
-	}
-	if hex.EncodeToString(hasher.Sum(nil)) != executable.identitySHA256 {
-		return errors.New("pinned executable snapshot changed")
-	}
-	return nil
-}
-
-type boundedBuffer struct {
-	buffer   bytes.Buffer
-	maximum  int
-	exceeded bool
-}
-
-func (writer *boundedBuffer) Write(value []byte) (int, error) {
-	if writer.maximum <= 0 {
-		writer.exceeded = true
-		return len(value), nil
-	}
-	remaining := writer.maximum + 1 - writer.buffer.Len()
-	if remaining > 0 {
-		if remaining > len(value) {
-			remaining = len(value)
-		}
-		_, _ = writer.buffer.Write(value[:remaining])
-	}
-	if writer.buffer.Len() > writer.maximum || remaining < len(value) {
-		writer.exceeded = true
-	}
-	return len(value), nil
+	return executable.Run(ctx, arguments, nil, maximum, 64<<10, kubeconfig)
 }
 
 func zeroBytes(value []byte) {

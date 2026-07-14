@@ -175,6 +175,15 @@ argv or the environment, and removes unrelated credential variables from the
 native Windows claim is made. The default mode without `--kubeconfig-fd`
 continues to use the operator's normal Kubernetes client configuration.
 
+Consumers that build additional multi-query collectors must pin the executable
+once with `secureexec.Pin` and invoke it through `Executable.Run`. That boundary
+does not consult `PATH` again, bounds stdout and stderr, creates a separate Unix
+process group, bounds inherited-I/O waiting, kills remaining descendants, and
+only then completes the replay writer. Calling `Replay.Attach` or
+`kubeconfigpipe.Run` directly leaves executable identity or output bounds with
+the caller and is not sufficient by itself for a credential-bearing production
+collector.
+
 The collector needs only `get` on the exact named Backup, Restore,
 ServerStatusRequest, source and target PVC, and source and target PV, plus `get/list` on
 PVCs, PVs, DataUploads, DataDownloads, and ConfigMaps used for exact reads,
