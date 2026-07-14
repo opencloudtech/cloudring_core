@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: rook-ceph-cluster
+  namespace: rook-ceph
+  labels:
+    app.kubernetes.io/part-of: cloudring-storage
+  annotations:
+    cloudring.org/non-claim: example-node-and-device-references-must-be-replaced-before-activation
+spec:
+  suspend: true
+  interval: 15m
+  releaseName: rook-ceph-cluster
+  dependsOn:
+    - name: rook-ceph
+      namespace: rook-ceph
+  chart:
+    spec:
+      chart: rook-ceph-cluster
+      version: v1.20.2
+      sourceRef:
+        kind: HelmRepository
+        name: rook-release
+        namespace: rook-ceph
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    operatorNamespace: rook-ceph
+    clusterName: rook-ceph
+    csiDriverNamePrefix: ""
+    cephImage:
+      repository: quay.io/ceph/ceph
+      tag: v20.2.2
+      allowUnsupported: false
+      imagePullPolicy: IfNotPresent
+    toolbox:
+      enabled: false
+    monitoring:
+      enabled: false
+      createPrometheusRules: false
+    cephClusterSpec:
+      dataDirHostPath: /var/lib/rook
+      skipUpgradeChecks: false
+      continueUpgradeAfterChecksEvenIfNotHealthy: false
+      upgradeOSDRequiresHealthyPGs: true
+      mon:
+        count: 3
+        allowMultiplePerNode: false
+      mgr:
+        count: 2
+        allowMultiplePerNode: false
+      dashboard:
+        enabled: false
+      crashCollector:
+        disable: false
+      cleanupPolicy:
+        confirmation: ""
+        allowUninstallWithVolumes: false
+      storage:
+        useAllNodes: false
+        useAllDevices: false
+        config:
+          encryptedDevice: "true"
+        nodes:
+          - name: example-storage-node-a
+            devices:
+              - name: /dev/disk/by-id/cloudring-example-osd-a
+          - name: example-storage-node-b
+            devices:
+              - name: /dev/disk/by-id/cloudring-example-osd-b
+          - name: example-storage-node-c
+            devices:
+              - name: /dev/disk/by-id/cloudring-example-osd-c
+      disruptionManagement:
+        managePodBudgets: true
+        osdMaintenanceTimeout: 30
+    cephBlockPools:
+      - name: tenant-rbd
+        spec:
+          failureDomain: host
+          replicated:
+            size: 3
+            requireSafeReplicaSize: true
+        storageClass:
+          enabled: false
+    cephBlockPoolsVolumeSnapshotClass:
+      enabled: false
+    cephFileSystems: []
+    cephFileSystemVolumeSnapshotClass:
+      enabled: false
+    cephObjectStores: []
+    cephECBlockPools: []
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-ceph-rbd
+  labels:
+    app.kubernetes.io/part-of: cloudring-storage
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: rook-ceph.rbd.csi.ceph.com
+parameters:
+  clusterID: rook-ceph
+  pool: tenant-rbd
+  imageFormat: "2"
+  imageFeatures: layering
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+  csi.storage.k8s.io/controller-publish-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/controller-publish-secret-namespace: rook-ceph
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+  csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+  csi.storage.k8s.io/fstype: ext4
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: rook-ceph-rbd-retain
+  labels:
+    app.kubernetes.io/part-of: cloudring-storage
+    velero.io/csi-volumesnapshot-class: "true"
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: "false"
+driver: rook-ceph.rbd.csi.ceph.com
+deletionPolicy: Retain
+parameters:
+  clusterID: rook-ceph
+  csi.storage.k8s.io/snapshotter-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/snapshotter-secret-namespace: rook-ceph

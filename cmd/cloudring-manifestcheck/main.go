@@ -19,12 +19,26 @@ func main() {
 		fmt.Fprintln(os.Stderr, "unexpected positional arguments")
 		os.Exit(2)
 	}
-	report, err := platformmanifest.VerifySecretManager(*root)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "platform manifest verification blocked")
-		os.Exit(1)
+	reports := make([]platformmanifest.Report, 0, 2)
+	for _, verify := range []func(string) (platformmanifest.Report, error){
+		platformmanifest.VerifySecretManager,
+		platformmanifest.VerifyRookCephRBD,
+	} {
+		report, err := verify(*root)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "platform manifest verification blocked")
+			os.Exit(1)
+		}
+		reports = append(reports, report)
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {
+	output := struct {
+		Status   string                    `json:"status"`
+		Profiles []platformmanifest.Report `json:"profiles"`
+	}{
+		Status:   "ready",
+		Profiles: reports,
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
 		fmt.Fprintln(os.Stderr, "encode platform manifest report")
 		os.Exit(2)
 	}
