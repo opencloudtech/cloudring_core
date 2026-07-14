@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "cloudring.restore-proof.collection-request/v1",
+  "veleroNamespace": "velero",
+  "restoreName": "synthetic-copy-restore",
+  "sourceNamespace": "synthetic-source",
+  "sourcePvc": "example-volume",
+  "targetNamespace": "synthetic-target",
+  "targetPvc": "example-volume",
+  "dataUploadName": "synthetic-backup-volume-1",
+  "serverStatusRequestName": "cloudring-status",
+  "serverStatusRequestUidSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "cleanupRunNonceSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "evidencePrefix": "runtime/synthetic-drill"
+}

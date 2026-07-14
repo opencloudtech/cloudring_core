@@ -72,6 +72,11 @@ Security reviewers start with IAM, policy, source-safety, and evidence
 contracts. Release reviewers start with BOM, readiness, rollback, and non-claim
 contracts.
 
+Backup operators start with `docs/restore-proof-collector.md`. Generic typed
+collection and validation belong in public core. A deployment's BackupContents
+archive, source baseline, unsigned or signed receipts, provider credentials,
+adapter configuration, and live evidence stay downstream.
+
 ## Non-claims
 
 The public boundary does not claim that any private deployment is ready, that

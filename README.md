@@ -54,6 +54,8 @@ full platform extraction or a production installation is complete.
 - Use provider adapter interfaces for infrastructure integration.
 - Use portal shell contracts for user-interface extensions.
 - Use evidence and readiness contracts before making operational claims.
+- Use `docs/restore-proof-collector.md` for the public Velero 1.18.1 CSI
+  data-mover proof workflow and its explicit non-claims.
 
 ## Fresh clone validation
 

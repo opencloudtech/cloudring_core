@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "cloudring.restore-proof.baseline-request/v1",
+  "sourceNamespace": "synthetic-source",
+  "sourcePvc": "example-volume",
+  "evidencePrefix": "runtime/synthetic-drill"
+}

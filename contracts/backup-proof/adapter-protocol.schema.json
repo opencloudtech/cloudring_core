@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/backup-proof/adapter-protocol.schema.json",
+  "title": "CloudRING restore-proof adapter protocol",
+  "oneOf": [
+    { "$ref": "#/$defs/probeRequest" },
+    { "$ref": "#/$defs/backendRequest" },
+    { "$ref": "#/$defs/probeResponse" },
+    { "$ref": "#/$defs/backendResponse" }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/-]*$"
+    },
+    "versionId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 255,
+      "pattern": "^v[A-Za-z0-9._:+/-]+$"
+    },
+    "gvr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group", "version", "resource"],
+      "properties": {
+        "group": { "type": "string" },
+        "version": { "type": "string", "minLength": 1 },
+        "resource": { "type": "string", "minLength": 1 }
+      }
+    },
+    "objectQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gvr", "namespace", "name", "uidSha256"],
+      "properties": {
+        "gvr": { "$ref": "#/$defs/gvr" },
+        "namespace": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "uidSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "probeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "challenge", "adapterExecutableSha256", "source", "target"],
+      "properties": {
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-request/v1" },
+        "challenge": { "$ref": "#/$defs/digest" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
+        "source": { "$ref": "#/$defs/objectQuery" },
+        "target": { "$ref": "#/$defs/objectQuery" }
+      }
+    },
+    "backendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "challenge", "adapterExecutableSha256", "operation", "sourceKind", "artifactHandle", "artifactHandleSha256"],
+      "properties": {
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-request/v1" },
+        "challenge": { "$ref": "#/$defs/digest" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
+        "operation": { "const": "observe" },
+        "sourceKind": { "const": "persistent-volume" },
+        "artifactHandle": { "type": "string", "minLength": 1 },
+        "artifactHandleSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "probeResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "implementation",
+        "version",
+        "requestSha256",
+        "adapterExecutableSha256",
+        "hashAlgorithm",
+        "sourceSha256",
+        "targetSha256",
+        "validatedBytes",
+        "startedAt",
+        "completedAt",
+        "evidenceRef",
+        "evidenceSha256"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-response/v1" },
+        "implementation": { "$ref": "#/$defs/runtimeId" },
+        "version": { "$ref": "#/$defs/versionId" },
+        "requestSha256": { "$ref": "#/$defs/digest" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
+        "hashAlgorithm": { "const": "sha256" },
+        "sourceSha256": { "$ref": "#/$defs/digest" },
+        "targetSha256": { "$ref": "#/$defs/digest" },
+        "validatedBytes": { "type": "integer", "minimum": 1 },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "evidenceRef": { "$ref": "#/$defs/runtimeId" },
+        "evidenceSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "backendResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "implementation", "version", "requestSha256", "adapterExecutableSha256", "artifactHandleSha256", "present", "observedAt", "evidenceRef", "evidenceSha256"],
+      "properties": {
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-response/v1" },
+        "implementation": { "$ref": "#/$defs/runtimeId" },
+        "version": { "$ref": "#/$defs/versionId" },
+        "requestSha256": { "$ref": "#/$defs/digest" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
+        "artifactHandleSha256": { "$ref": "#/$defs/digest" },
+        "present": { "type": "boolean" },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "evidenceRef": { "$ref": "#/$defs/runtimeId" },
+        "evidenceSha256": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}
