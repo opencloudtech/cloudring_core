@@ -140,9 +140,10 @@ func TestExpectForbiddenRejectsBadRequest(t *testing.T) {
 
 func TestHealthRequiresExactOpenBaoVersion(t *testing.T) {
 	version := supportedOpenBaoVersion
+	performanceMode := "primary"
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"initialized":true,"sealed":false,"standby":false,"performance_standby":false,"replication_performance_mode":"disabled","replication_dr_mode":"disabled","server_time_utc":` + strconv.FormatInt(time.Now().Unix(), 10) + `,"version":"` + version + `","cluster_name":"synthetic-cluster","cluster_id":"synthetic-cluster-id"}`))
+		_, _ = writer.Write([]byte(`{"initialized":true,"sealed":false,"standby":false,"performance_standby":false,"replication_performance_mode":"` + performanceMode + `","replication_dr_mode":"disabled","server_time_utc":` + strconv.FormatInt(time.Now().Unix(), 10) + `,"version":"` + version + `","cluster_name":"synthetic-cluster","cluster_id":"synthetic-cluster-id"}`))
 	}))
 	defer server.Close()
 	connection := testTLSConnection(t, server, "")
@@ -151,8 +152,17 @@ func TestHealthRequiresExactOpenBaoVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := client.Health(context.Background()); err != nil {
-		t.Fatalf("supported health rejected: %v", err)
+		t.Fatalf("supported active HA health rejected: %v", err)
 	}
+	performanceMode = "disabled"
+	if err := client.Health(context.Background()); err != nil {
+		t.Fatalf("supported standalone health rejected: %v", err)
+	}
+	performanceMode = "secondary"
+	if err := client.Health(context.Background()); err == nil {
+		t.Fatal("performance-replication secondary accepted as writable active health")
+	}
+	performanceMode = "primary"
 	version = "2.5.4"
 	if err := client.Health(context.Background()); err == nil {
 		t.Fatal("unsupported OpenBao version accepted")
