@@ -16,6 +16,12 @@ import (
 	"github.com/opencloudtech/CloudRING/pkg/backup/velero118"
 )
 
+func TestNewCollectorKubectlReaderRejectsStdioDescriptor(t *testing.T) {
+	if _, err := newCollectorKubectlReader("kubectl", 2); err == nil {
+		t.Fatal("stdio kubeconfig descriptor must fail closed")
+	}
+}
+
 func TestBaselineWritesPrivateNonOverwritingArtifact(t *testing.T) {
 	directory := t.TempDir()
 	requestPath := filepath.Join(directory, "request.json")

@@ -23,6 +23,7 @@ import (
 
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
 	"github.com/opencloudtech/CloudRING/pkg/backup/restoreproof"
+	"github.com/opencloudtech/CloudRING/pkg/kubeconfigpipe"
 )
 
 const (
@@ -37,9 +38,31 @@ const (
 // a different served version. It performs read-only GET requests.
 type KubectlReader struct {
 	executable *pinnedExecutable
+	kubeconfig *kubeconfigpipe.Replay
 }
 
 func NewKubectlReader(binary string) (*KubectlReader, error) {
+	return newKubectlReader(binary, nil)
+}
+
+// NewKubectlReaderFromKubeconfigFD consumes one pipe-backed kubeconfig from fd
+// and replays it through a fresh anonymous pipe for every kubectl invocation.
+// This supports multi-query collectors without ever persisting kubeconfig
+// bytes or exposing them through argv or the child environment.
+func NewKubectlReaderFromKubeconfigFD(binary string, fd int) (*KubectlReader, error) {
+	replay, err := kubeconfigpipe.NewFromFD(fd)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := newKubectlReader(binary, replay)
+	if err != nil {
+		_ = replay.Close()
+		return nil, err
+	}
+	return reader, nil
+}
+
+func newKubectlReader(binary string, replay *kubeconfigpipe.Replay) (*KubectlReader, error) {
 	resolved, err := resolveExecutable(binary)
 	if err != nil {
 		return nil, errors.New("resolve kubectl executable")
@@ -48,14 +71,28 @@ func NewKubectlReader(binary string) (*KubectlReader, error) {
 	if err != nil {
 		return nil, errors.New("pin kubectl executable")
 	}
-	return &KubectlReader{executable: executable}, nil
+	return &KubectlReader{executable: executable, kubeconfig: replay}, nil
 }
 
 func (reader *KubectlReader) Close() error {
-	if reader == nil || reader.executable == nil {
+	if reader == nil {
 		return nil
 	}
-	return reader.executable.Close()
+	var executableErr error
+	if reader.executable != nil {
+		executableErr = reader.executable.Close()
+	}
+	return errors.Join(executableErr, reader.kubeconfig.Close())
+}
+
+func (reader *KubectlReader) run(ctx context.Context, arguments []string, maximum int64) ([]byte, []byte, error) {
+	if reader == nil || reader.executable == nil {
+		return nil, nil, errors.New("kubectl reader is closed")
+	}
+	if reader.kubeconfig == nil {
+		return runCommand(ctx, reader.executable, arguments, nil, maximum)
+	}
+	return runCommandWithKubeconfig(ctx, reader.executable, arguments, maximum, reader.kubeconfig)
 }
 
 func (reader *KubectlReader) Get(ctx context.Context, gvr restoreproof.GVR, namespace, name string) ([]byte, error) {
@@ -63,7 +100,7 @@ func (reader *KubectlReader) Get(ctx context.Context, gvr restoreproof.GVR, name
 		return nil, errors.New("invalid Kubernetes object read")
 	}
 	path := rawResourcePath(gvr, namespace) + "/" + url.PathEscape(name)
-	output, stderr, err := runCommand(ctx, reader.executable, []string{"get", "--raw", path}, nil, strictjson.MaxDocumentBytes)
+	output, stderr, err := reader.run(ctx, []string{"get", "--raw", path}, strictjson.MaxDocumentBytes)
 	defer zeroBytes(stderr)
 	if err != nil {
 		notFound := possibleNotFound(output, stderr)
@@ -92,7 +129,7 @@ func (reader *KubectlReader) ListPage(ctx context.Context, gvr restoreproof.GVR,
 		query.Set("continue", continueToken)
 	}
 	path := rawResourcePath(gvr, namespace) + "?" + query.Encode()
-	output, stderr, err := runCommand(ctx, reader.executable, []string{"get", "--raw", path}, nil, strictjson.MaxDocumentBytes)
+	output, stderr, err := reader.run(ctx, []string{"get", "--raw", path}, strictjson.MaxDocumentBytes)
 	defer zeroBytes(stderr)
 	if err != nil {
 		zeroBytes(output)
@@ -115,7 +152,7 @@ func (reader *KubectlReader) ConfirmAbsent(ctx context.Context, gvr restoreproof
 	query.Set("fieldSelector", "metadata.name="+name)
 	query.Set("limit", "2")
 	path := rawResourcePath(gvr, namespace) + "?" + query.Encode()
-	output, stderr, err := runCommand(ctx, reader.executable, []string{"get", "--raw", path}, nil, strictjson.MaxDocumentBytes)
+	output, stderr, err := reader.run(ctx, []string{"get", "--raw", path}, strictjson.MaxDocumentBytes)
 	defer zeroBytes(stderr)
 	if err != nil {
 		zeroBytes(output)
@@ -455,6 +492,17 @@ func (executable *pinnedExecutable) Close() error {
 }
 
 func runCommand(ctx context.Context, executable *pinnedExecutable, arguments []string, input []byte, maximum int64) ([]byte, []byte, error) {
+	return runCommandConfigured(ctx, executable, arguments, input, maximum, nil)
+}
+
+func runCommandWithKubeconfig(ctx context.Context, executable *pinnedExecutable, arguments []string, maximum int64, kubeconfig *kubeconfigpipe.Replay) ([]byte, []byte, error) {
+	if kubeconfig == nil {
+		return nil, nil, errors.New("pipe-backed kubeconfig is missing")
+	}
+	return runCommandConfigured(ctx, executable, arguments, nil, maximum, kubeconfig)
+}
+
+func runCommandConfigured(ctx context.Context, executable *pinnedExecutable, arguments []string, input []byte, maximum int64, kubeconfig *kubeconfigpipe.Replay) ([]byte, []byte, error) {
 	if executable == nil {
 		return nil, nil, errors.New("command executable is missing")
 	}
@@ -478,6 +526,14 @@ func runCommand(ctx context.Context, executable *pinnedExecutable, arguments []s
 	if executable.useDescriptor {
 		command.ExtraFiles = []*os.File{executable.file}
 	}
+	var completeKubeconfig func() error
+	if kubeconfig != nil {
+		var err error
+		completeKubeconfig, err = kubeconfig.Attach(command)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	configureProcessTree(command)
 	if input != nil {
 		command.Stdin = bytes.NewReader(input)
@@ -488,6 +544,10 @@ func runCommand(ctx context.Context, executable *pinnedExecutable, arguments []s
 	command.Stderr = &stderr
 	err := command.Run()
 	cleanupErr := cleanupProcessTree(command)
+	var kubeconfigReplayErr error
+	if completeKubeconfig != nil {
+		kubeconfigReplayErr = completeKubeconfig()
+	}
 	if stdout.exceeded || stderr.exceeded {
 		zeroBytes(stdout.buffer.Bytes())
 		zeroBytes(stderr.buffer.Bytes())
@@ -501,6 +561,11 @@ func runCommand(ctx context.Context, executable *pinnedExecutable, arguments []s
 		zeroBytes(output)
 		zeroBytes(errorOutput)
 		return nil, nil, errors.New("command process-tree cleanup failed")
+	}
+	if kubeconfigReplayErr != nil {
+		zeroBytes(output)
+		zeroBytes(errorOutput)
+		return nil, nil, kubeconfigReplayErr
 	}
 	if err != nil {
 		return output, errorOutput, errors.New("command failed")

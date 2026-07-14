@@ -57,6 +57,7 @@ func runBaseline(ctx context.Context, arguments []string, stdout io.Writer) erro
 	requestPath := flags.String("request", "", "baseline request JSON")
 	outputPath := flags.String("output", "", "new private baseline file")
 	kubectl := flags.String("kubectl", "kubectl", "kubectl executable")
+	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *requestPath == "" || *outputPath == "" {
 		return errors.New("invalid baseline arguments")
 	}
@@ -67,7 +68,7 @@ func runBaseline(ctx context.Context, arguments []string, stdout io.Writer) erro
 	if err := readStrictJSON(*requestPath, &request); err != nil {
 		return errors.New("read baseline request")
 	}
-	reader, err := velero118.NewKubectlReader(*kubectl)
+	reader, err := newCollectorKubectlReader(*kubectl, *kubeconfigFD)
 	if err != nil {
 		return err
 	}
@@ -94,6 +95,7 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 	cleanupReadyPath := flags.String("cleanup-ready", "", "new atomic ready-for-cleanup marker")
 	outputPath := flags.String("output", "", "new private receipt file")
 	kubectl := flags.String("kubectl", "kubectl", "kubectl executable")
+	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
 	cleanupTimeout := flags.Duration("cleanup-timeout", 30*time.Minute, "maximum wait for downstream cleanup")
 	pollInterval := flags.Duration("poll-interval", 2*time.Second, "cleanup observation interval")
 	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *requestPath == "" || *baselinePath == "" || *archivePath == "" ||
@@ -124,7 +126,7 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 		return errors.New("read exact archived DataUpload")
 	}
 	defer zeroBytes(archivedDataUpload)
-	reader, err := velero118.NewKubectlReader(*kubectl)
+	reader, err := newCollectorKubectlReader(*kubectl, *kubeconfigFD)
 	if err != nil {
 		return err
 	}
@@ -149,6 +151,16 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 	}
 	_, _ = fmt.Fprintln(stdout, "status=receipt_written")
 	return nil
+}
+
+func newCollectorKubectlReader(binary string, kubeconfigFD int) (*velero118.KubectlReader, error) {
+	if kubeconfigFD == -1 {
+		return velero118.NewKubectlReader(binary)
+	}
+	if kubeconfigFD < 3 {
+		return nil, errors.New("kubeconfig pipe descriptor is invalid")
+	}
+	return velero118.NewKubectlReaderFromKubeconfigFD(binary, kubeconfigFD)
 }
 
 func runVerify(arguments []string, stdout io.Writer) error {

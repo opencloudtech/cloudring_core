@@ -146,6 +146,35 @@ paths, tenant content, or child-process stderr.
 
 ## Kubernetes access
 
+For a credential broker or supervisor that supplies kubeconfig through an
+anonymous pipe, pass the inherited descriptor explicitly:
+
+```sh
+cloudring-backup baseline \
+  --request /protected/baseline-request.json \
+  --output /protected/source-baseline.json \
+  --kubeconfig-fd 3
+
+cloudring-backup collect \
+  --request /protected/collection-request.json \
+  --baseline /protected/source-baseline.json \
+  --archive /protected/backup-contents.tar.gz \
+  --data-probe-adapter /opt/cloudring/bin/volume-probe \
+  --provider-adapter /opt/cloudring/bin/provider-observer \
+  --cleanup-ready /protected/run-unique.cleanup-ready.json \
+  --cleanup-timeout 30m \
+  --output /protected/unsigned-volume-receipt.json \
+  --kubeconfig-fd 3
+```
+
+The collector consumes that pipe once, keeps the bounded kubeconfig only in
+process memory, and gives every `kubectl` invocation a fresh anonymous replay
+pipe. It rejects regular-file descriptors, never places kubeconfig bytes in
+argv or the environment, and removes unrelated credential variables from the
+`kubectl` environment. This pipe mode is supported on Linux and macOS; no
+native Windows claim is made. The default mode without `--kubeconfig-fd`
+continues to use the operator's normal Kubernetes client configuration.
+
 The collector needs only `get` on the exact named Backup, Restore,
 ServerStatusRequest, source and target PVC, and source and target PV, plus `get/list` on
 PVCs, PVs, DataUploads, DataDownloads, and ConfigMaps used for exact reads,
