@@ -56,8 +56,9 @@ func NewFromFD(fd int) (*Replay, error) {
 }
 
 // Attach adds a fresh replay pipe to an unstarted command and returns an
-// idempotent completion function. The caller must invoke completion after
-// Command.Run returns, including on failure.
+// idempotent completion function. Low-level callers must contain and clean the
+// complete process tree before invoking completion; prefer Run for the safe
+// combined lifecycle.
 func (replay *Replay) Attach(command *exec.Cmd) (func() error, error) {
 	if replay == nil || command == nil || command.Process != nil {
 		return nil, errors.New("invalid kubeconfig replay command")
