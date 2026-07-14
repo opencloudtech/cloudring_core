@@ -34,6 +34,7 @@ func TestDuplicateFDIsAtomicallyCloseOnExecAndNotInherited(t *testing.T) {
 		t.Fatal("duplicated kubeconfig descriptor is not close-on-exec")
 	}
 	fdPath := fmt.Sprintf("/dev/fd/%d", duplicate.Fd())
+	// #nosec G204 -- test-only fixed shell and script; fdPath is derived only from the local numeric descriptor.
 	if err := exec.Command("/bin/sh", "-c", `test ! -e "$1"`, "sh", fdPath).Run(); err != nil {
 		t.Fatal("duplicated kubeconfig descriptor was inherited by an unrelated exec")
 	}

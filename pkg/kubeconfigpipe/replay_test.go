@@ -71,6 +71,7 @@ func TestNewFromFDRejectsRegularFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("apiVersion: v1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G304 -- path is a test-owned regular file inside t.TempDir().
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
