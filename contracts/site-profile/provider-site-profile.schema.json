@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "provider-site-profile.schema.json",
+  "title": "CloudRING Provider Site Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "cloudring.io/v1alpha1"},
+    "kind": {"const": "ProviderSiteProfile"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"$ref": "#/$defs/name"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerAdapterRef",
+        "siteClass",
+        "regionRef",
+        "availability",
+        "inventory",
+        "network",
+        "storage",
+        "identity",
+        "operations",
+        "observability",
+        "ocs",
+        "nonClaim"
+      ],
+      "properties": {
+        "providerAdapterRef": {"$ref": "#/$defs/reference"},
+        "siteClass": {"$ref": "#/$defs/name"},
+        "regionRef": {"$ref": "#/$defs/reference"},
+        "availability": {"$ref": "#/$defs/availability"},
+        "inventory": {"$ref": "#/$defs/inventory"},
+        "network": {"$ref": "#/$defs/network"},
+        "storage": {"$ref": "#/$defs/storage"},
+        "identity": {"$ref": "#/$defs/identity"},
+        "operations": {"$ref": "#/$defs/operations"},
+        "observability": {"$ref": "#/$defs/observability"},
+        "ocs": {"$ref": "#/$defs/ocs"},
+        "nonClaim": {"const": "preflight-and-plan-only"}
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 63,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 253,
+      "pattern": "^[a-z][a-z0-9]*(?:[._/-][a-z0-9]+)*$",
+      "allOf": [
+        {"not": {"pattern": "\\.\\."}},
+        {"not": {"pattern": "//"}}
+      ]
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimumControlPlaneNodes", "minimumWorkerNodes", "minimumFailureDomains"],
+      "properties": {
+        "minimumControlPlaneNodes": {"type": "integer", "minimum": 3},
+        "minimumWorkerNodes": {"type": "integer", "minimum": 3},
+        "minimumFailureDomains": {"type": "integer", "minimum": 3}
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 3,
+          "items": {"$ref": "#/$defs/node"},
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["roles"],
+                "properties": {
+                  "roles": {"contains": {"const": "control-plane"}}
+                }
+              },
+              "minContains": 3
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["roles"],
+                "properties": {
+                  "roles": {"contains": {"const": "worker"}}
+                }
+              },
+              "minContains": 3
+            }
+          ]
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "failureDomain",
+        "roles",
+        "providerResourceRef",
+        "managementAddressRef",
+        "provisioningAddressRef"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/name"},
+        "failureDomain": {"$ref": "#/$defs/name"},
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["control-plane", "worker", "storage", "gateway"]}
+        },
+        "providerResourceRef": {"$ref": "#/$defs/reference"},
+        "managementAddressRef": {"$ref": "#/$defs/reference"},
+        "provisioningAddressRef": {"$ref": "#/$defs/reference"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dualStack", "managementPlaneRef", "provisioningPlaneRef", "tenantPlaneRef", "publicIngressRef"],
+      "properties": {
+        "dualStack": {"const": true},
+        "managementPlaneRef": {"$ref": "#/$defs/reference"},
+        "provisioningPlaneRef": {"$ref": "#/$defs/reference"},
+        "tenantPlaneRef": {"$ref": "#/$defs/reference"},
+        "publicIngressRef": {"$ref": "#/$defs/reference"}
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultClassRef", "snapshotClassRef", "backupLocationRef", "immutableRetentionPolicyRef", "offCellBackup"],
+      "properties": {
+        "defaultClassRef": {"$ref": "#/$defs/reference"},
+        "snapshotClassRef": {"$ref": "#/$defs/reference"},
+        "backupLocationRef": {"$ref": "#/$defs/reference"},
+        "immutableRetentionPolicyRef": {"$ref": "#/$defs/reference"},
+        "offCellBackup": {"const": true}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["oidcProviderRef", "workloadIdentityRef", "runtimeInputBrokerRef"],
+      "properties": {
+        "oidcProviderRef": {"$ref": "#/$defs/reference"},
+        "workloadIdentityRef": {"$ref": "#/$defs/reference"},
+        "runtimeInputBrokerRef": {"$ref": "#/$defs/reference"}
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gitOpsSourceRef", "bootstrapPlanRef", "upgradePlanRef", "rollbackPlanRef"],
+      "properties": {
+        "gitOpsSourceRef": {"$ref": "#/$defs/reference"},
+        "bootstrapPlanRef": {"$ref": "#/$defs/reference"},
+        "upgradePlanRef": {"$ref": "#/$defs/reference"},
+        "rollbackPlanRef": {"$ref": "#/$defs/reference"}
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metricsRef", "logsRef", "tracesRef", "alertsRef"],
+      "properties": {
+        "metricsRef": {"$ref": "#/$defs/reference"},
+        "logsRef": {"$ref": "#/$defs/reference"},
+        "tracesRef": {"$ref": "#/$defs/reference"},
+        "alertsRef": {"$ref": "#/$defs/reference"}
+      }
+    },
+    "ocs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "conformanceProfileRef"],
+      "properties": {
+        "version": {"const": "v3"},
+        "conformanceProfileRef": {"$ref": "#/$defs/reference"}
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+apiVersion: cloudring.io/v1alpha1
+kind: ProviderSiteProfile
+metadata:
+  name: synthetic-provider-site
+spec:
+  providerAdapterRef: adapters.synthetic
+  siteClass: synthetic
+  regionRef: regions.synthetic
+  availability:
+    minimumControlPlaneNodes: 3
+    minimumWorkerNodes: 3
+    minimumFailureDomains: 3
+  inventory:
+    nodes:
+      - id: node-a
+        failureDomain: zone-a
+        roles: [control-plane, worker]
+        providerResourceRef: inventory.nodes.node-a
+        managementAddressRef: inventory.addresses.node-a.management
+        provisioningAddressRef: inventory.addresses.node-a.provisioning
+      - id: node-b
+        failureDomain: zone-b
+        roles: [control-plane, worker]
+        providerResourceRef: inventory.nodes.node-b
+        managementAddressRef: inventory.addresses.node-b.management
+        provisioningAddressRef: inventory.addresses.node-b.provisioning
+      - id: node-c
+        failureDomain: zone-c
+        roles: [control-plane, worker]
+        providerResourceRef: inventory.nodes.node-c
+        managementAddressRef: inventory.addresses.node-c.management
+        provisioningAddressRef: inventory.addresses.node-c.provisioning
+  network:
+    dualStack: true
+    managementPlaneRef: networks.management
+    provisioningPlaneRef: networks.provisioning
+    tenantPlaneRef: networks.tenant
+    publicIngressRef: networks.ingress
+  storage:
+    defaultClassRef: storage.default
+    snapshotClassRef: storage.snapshots
+    backupLocationRef: backup.off-cell
+    immutableRetentionPolicyRef: backup.retention
+    offCellBackup: true
+  identity:
+    oidcProviderRef: identity.oidc
+    workloadIdentityRef: identity.workload
+    runtimeInputBrokerRef: runtime-inputs.platform
+  operations:
+    gitOpsSourceRef: gitops.platform
+    bootstrapPlanRef: operations.bootstrap
+    upgradePlanRef: operations.upgrade
+    rollbackPlanRef: operations.rollback
+  observability:
+    metricsRef: observability.metrics
+    logsRef: observability.logs
+    tracesRef: observability.traces
+    alertsRef: observability.alerts
+  ocs:
+    version: v3
+    conformanceProfileRef: ocs.provider-conformance
+  nonClaim: preflight-and-plan-only
