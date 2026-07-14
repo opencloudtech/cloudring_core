@@ -724,8 +724,9 @@ func (client *openBaoRESTClient) Health(ctx context.Context) error {
 	}
 	performanceStandby, performanceOK := payload["performance_standby"].(bool)
 	serverTime, serverTimeOK := integer(payload, "server_time_utc")
+	performanceMode := textValue(payload, "replication_performance_mode")
 	if !performanceOK || performanceStandby || !serverTimeOK || deltaSeconds(time.Now().Unix(), serverTime) > 300 ||
-		textValue(payload, "replication_performance_mode") != "disabled" || textValue(payload, "replication_dr_mode") != "disabled" ||
+		(performanceMode != "disabled" && performanceMode != "primary") || textValue(payload, "replication_dr_mode") != "disabled" ||
 		textValue(payload, "cluster_name") == "" || textValue(payload, "cluster_id") == "" {
 		return errAPIUnavailable
 	}
