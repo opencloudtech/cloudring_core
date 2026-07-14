@@ -455,7 +455,9 @@ func (client *supervisorOpenBaoRESTClient) CreateWrappedManagementToken(ctx cont
 	wrapInfo, ok := object(payload, "wrap_info")
 	leaseDuration, leaseOK := integer(payload, "lease_duration")
 	renewable, renewableOK := payload["renewable"].(bool)
-	if !ok || len(payload) != 8 || len(wrapInfo) != 6 || textValue(payload, "request_id") == "" || textValue(payload, "lease_id") != "" ||
+	// OpenBao 2.5.5 builds a wrapped HTTP response from WrapInfo alone, so the
+	// serialized request_id field is present and empty.
+	if !ok || len(payload) != 8 || len(wrapInfo) != 6 || textValue(payload, "request_id") != "" || textValue(payload, "lease_id") != "" ||
 		!leaseOK || leaseDuration != 0 || !renewableOK || renewable || payload["data"] != nil || payload["warnings"] != nil || payload["auth"] != nil {
 		return WrappedToken{}, errMutationAmbiguous
 	}

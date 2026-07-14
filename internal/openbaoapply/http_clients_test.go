@@ -203,6 +203,7 @@ func TestTokenRequestRequiresBoundedExpirationTimestamp(t *testing.T) {
 
 func TestSupervisorClientWrapsAndRevokesBothAccessors(t *testing.T) {
 	revoked := map[string]bool{}
+	requestID := ""
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		if request.Header.Get("X-Vault-Token") != "root-bearer" {
@@ -216,7 +217,7 @@ func TestSupervisorClientWrapsAndRevokesBothAccessors(t *testing.T) {
 				return
 			}
 			_ = json.NewEncoder(writer).Encode(map[string]any{
-				"request_id": "synthetic-request", "lease_id": "", "renewable": false, "lease_duration": 0, "data": nil,
+				"request_id": requestID, "lease_id": "", "renewable": false, "lease_duration": 0, "data": nil,
 				"wrap_info": map[string]any{"to" + "ken": "wrapper-value", "accessor": "wrapper-accessor", "ttl": 60, "creation_time": time.Now().UTC().Format(time.RFC3339Nano), "creation_path": "auth/token/create", "wrapped_accessor": "child-accessor"},
 				"warnings":  nil, "auth": nil,
 			})
@@ -250,6 +251,10 @@ func TestSupervisorClientWrapsAndRevokesBothAccessors(t *testing.T) {
 	wrapped, err := client.CreateWrappedManagementToken(context.Background(), "root-bearer", "root-accessor", "cloudring-bootstrap-test")
 	if err != nil || wrapped.Value != "wrapper-value" || wrapped.WrappedAccessor != "child-accessor" {
 		t.Fatalf("wrapped=%+v err=%v", wrapped, err)
+	}
+	requestID = "unexpected-request-id"
+	if _, err := client.CreateWrappedManagementToken(context.Background(), "root-bearer", "root-accessor", "cloudring-bootstrap-test"); err == nil {
+		t.Fatal("non-empty wrapped-response request_id accepted")
 	}
 	for _, accessor := range []string{wrapped.Accessor, wrapped.WrappedAccessor} {
 		if !client.RevokeAccessorAndProve(context.Background(), "root-bearer", accessor) || !revoked[accessor] {
