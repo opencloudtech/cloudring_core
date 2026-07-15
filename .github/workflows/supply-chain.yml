@@ -56,6 +56,7 @@ jobs:
             .github/workflows/ci.yml
             .github/workflows/cla-dco.yml
             .github/workflows/license.yml
+            .github/workflows/release-provenance.yml
             .github/workflows/security.yml
             .github/workflows/supply-chain.yml
           )
@@ -110,7 +111,11 @@ jobs:
                 .value == "read" or .value == "none" or
                 (.value == "write" and .key == "security-events" and
                  $job_key == "codeql" and
-                 $workflow_path == ".github/workflows/security.yml"))
+                 $workflow_path == ".github/workflows/security.yml") or
+                (.value == "write" and
+                 (.key == "id-token" or .key == "attestations") and
+                 $job_key == "artifact-provenance" and
+                 $workflow_path == ".github/workflows/release-provenance.yml"))
               end;
             def no_pull_request_target:
               .on as $events |
@@ -126,6 +131,8 @@ jobs:
               type == "string" and
               (. == "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" or
                . == "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16" or
+               . == "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" or
+               . == "actions/attest@a1948c3f048ba23858d222213b7c278aabede763" or
                test("^github/codeql-action/(init|autobuild|analyze)@99df26d4f13ea111d4ec1a7dddef6063f76b97e9$") or
                test("^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$"));
             def safe_image:
@@ -252,6 +259,7 @@ jobs:
           expect_rejected missing-permissions $'"on": pull_request\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           expect_rejected root-write $'"on": pull_request\npermissions: {contents: write}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           expect_rejected job-write $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    permissions: {contents: write}\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected unrelated-attestation-write $'"on": workflow_dispatch\npermissions: {contents: read}\njobs:\n  artifact-provenance:\n    permissions: {contents: read, id-token: write, attestations: write}\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           github_token_context='git''hub.to''ken'
           token_property='to''ken'
           github_token_expression='$'
@@ -432,6 +440,9 @@ jobs:
                 ;;
               .github/workflows/license.yml)
                 expected_jobs='["license-check"]'
+                ;;
+              .github/workflows/release-provenance.yml)
+                expected_jobs='["artifact-provenance"]'
                 ;;
               .github/workflows/security.yml)
                 expected_jobs='["codeql","gosec","govulncheck","secret-scan"]'

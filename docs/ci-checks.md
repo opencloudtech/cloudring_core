@@ -34,7 +34,7 @@ The public CI contract covers these checks:
 | OCS conformance | The reference synthetic module must pass `go run ./cmd/ocsctl conformance`. |
 | Source-safety | The Go scanner must approve the complete tree and pre-push commit range, including intermediate commits and reviewed non-text artifacts. |
 | Security | CodeQL, govulncheck, gosec, and both current-tree and Git-history secret scans must pass without broad exclusions. |
-| Supply chain | Actions must be commit-pinned; workflows must be syntax-checked and must not request unexpected write permissions or PR secrets. |
+| Supply chain | Actions must be commit-pinned; workflows must be syntax-checked and must not request unexpected write permissions or PR secrets. The release-only workflow builds the Linux CLI bundle, generates a CycloneDX 1.6 SBOM, uploads both as one short-retention artifact set, and creates GitHub/Sigstore build and SBOM attestations. |
 | License and contribution docs | `LICENSE`, `NOTICE`, `CONTRIBUTING.md`, `SECURITY.md`, `GOVERNANCE.md`, `CLA.md`, `DCO.md`, and `TRADEMARKS.md` must exist in the public root. |
 
 This contract does not require live provider credentials, secret environment
@@ -72,3 +72,25 @@ checks, force-pushes, branch deletion, or bypasses for other contributors.
 Adding another administrator changes this trust assumption and requires an
 explicit governance and branch-protection review before that access is
 granted.
+
+## Release provenance
+
+`.github/workflows/release-provenance.yml` runs only for a version tag or an
+explicit workflow dispatch. It never runs for a pull request. The job builds
+all public Go commands for Linux AMD64 with read-only modules and embedded VCS
+metadata, packages `LICENSE`, `NOTICE`, and the CycloneDX SBOM, records the
+bundle checksum, and creates a GitHub artifact attestation for the bundle and
+SBOM. The only write permissions are job-local `id-token` and `attestations`
+permissions for this exact reviewed workflow and job.
+
+After downloading the bundle from its workflow run, verify the provenance and
+SBOM attestation against this repository:
+
+```bash
+gh attestation verify cloudring-linux-amd64.tar.gz \
+  --repo opencloudtech/CloudRING
+```
+
+An attestation binds an artifact to its accepted source and build workflow; it
+does not replace vulnerability scanning, code review, release policy, or live
+service validation.

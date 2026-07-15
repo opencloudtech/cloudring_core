@@ -1,0 +1,78 @@
+name: release-provenance
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-provenance
+  cancel-in-progress: false
+
+jobs:
+  artifact-provenance:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Build release bundle and CycloneDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GOOS=linux GOARCH=amd64 CGO_ENABLED=0
+          export SOURCE_DATE_EPOCH
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          root="dist/cloudring-linux-amd64"
+          mkdir -p "${root}/bin"
+          while IFS= read -r command_dir; do
+            command_name="$(basename "${command_dir}")"
+            go build -mod=readonly -trimpath -buildvcs=true \
+              -ldflags='-s -w -buildid=' \
+              -o "${root}/bin/${command_name}" "./${command_dir}"
+          done < <(find cmd -mindepth 1 -maxdepth 1 -type d -print | sort)
+          cp LICENSE NOTICE "${root}/"
+          go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0 \
+            mod -json -test -licenses -output dist/cloudring-sbom.cdx.json .
+          jq -e \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.6" and (.components | length) >= 1' \
+            dist/cloudring-sbom.cdx.json >/dev/null
+          cp dist/cloudring-sbom.cdx.json "${root}/"
+          tar --sort=name --mtime="@${SOURCE_DATE_EPOCH}" --owner=0 --group=0 \
+            --numeric-owner -C dist -czf dist/cloudring-linux-amd64.tar.gz \
+            cloudring-linux-amd64
+          sha256sum dist/cloudring-linux-amd64.tar.gz \
+            > dist/cloudring-linux-amd64.tar.gz.sha256
+      - name: Upload release bundle and SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cloudring-linux-amd64
+          path: |
+            dist/cloudring-linux-amd64.tar.gz
+            dist/cloudring-linux-amd64.tar.gz.sha256
+            dist/cloudring-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Attest release bundle provenance
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.0.0
+        with:
+          subject-path: dist/cloudring-linux-amd64.tar.gz
+      - name: Attest release bundle SBOM
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.0.0
+        with:
+          subject-path: dist/cloudring-linux-amd64.tar.gz
+          sbom-path: dist/cloudring-sbom.cdx.json
