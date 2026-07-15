@@ -1,7 +1,7 @@
 # Velero CSI Data-Mover Restore-Proof Collector
 
 `cloudring-backup` is a read-only collector toward Kubernetes and the storage
-provider for one volume data path through Velero 1.18.1 CSI data mover. It
+provider for one volume data path through Velero 1.18.2 CSI data mover. It
 writes only local private artifacts. The receipt binds the exact Backup,
 Restore, source PVC/PV, restored PVC/PV, retained and archived DataUpload,
 temporary DataUploadResult ConfigMap, terminal DataDownload, an independent
@@ -16,7 +16,7 @@ and generated receipts remain downstream.
 
 The first contract supports exactly:
 
-- Velero `v1.18.1`, proven by a fresh official `ServerStatusRequest` processed
+- Velero `v1.18.2`, proven by a fresh official `ServerStatusRequest` processed
   by the running server;
 - a direct Backup with `snapshotMoveData: true`;
 - the built-in Velero CSI data mover;
@@ -30,6 +30,11 @@ The first contract supports exactly:
 - two provider absence observations at least ten seconds apart, followed by a
   source-handle presence observation and a final Kubernetes/source quiet fence
   after the second target absence observation.
+
+The exact patch level is intentional: Velero 1.18.2 skips
+VolumeGroupSnapshot cleanup for backups that did not use group snapshots,
+avoiding the spurious restore warning fixed upstream in
+[velero#9900](https://github.com/vmware-tanzu/velero/pull/9900).
 
 CSI-native snapshot restore and filesystem backup are rejected. Supporting a
 new Velero version or restore method requires a separately versioned decoder,
@@ -78,8 +83,8 @@ Restore completes, the downstream workflow creates an official
 `velero.io/v1` `ServerStatusRequest`, waits for `status.phase: Processed`, and
 records its exact name plus SHA-256 of its UID in a separate collection request
 derived from `synthetic-collection-request.json`. Start collection while that
-object is still present: Velero 1.18.1 expires processed requests after one
-minute. The collector requires `serverVersion: v1.18.1`, a processing timestamp
+object is still present: Velero 1.18.2 expires processed requests after one
+minute. The collector requires `serverVersion: v1.18.2`, a processing timestamp
 after Restore completion, exact UID/GVK, and the one-minute freshness bound.
 The downstream workflow also generates a fresh random run nonce, puts only its
 SHA-256 digest in `cleanupRunNonceSha256`, and checks that exact digest in the

@@ -274,7 +274,7 @@ func TestCollectorRejectsInvalidVeleroRuntimeAndBaselineTimeline(t *testing.T) {
 	}{
 		{name: "wrong server version", mutate: func(t *testing.T, reader *fakeReader, _ *CollectionRequest, _ *restoreproof.SourceBaseline) {
 			mutateObject(t, reader, restoreproof.VeleroV1ServerStatusRequestGVR, "velero", "cloudring-status", func(object map[string]any) {
-				object["status"].(map[string]any)["serverVersion"] = "v1.17.0"
+				object["status"].(map[string]any)["serverVersion"] = "v1.18.1"
 			})
 		}},
 		{name: "stale server status", mutate: func(t *testing.T, reader *fakeReader, _ *CollectionRequest, _ *restoreproof.SourceBaseline) {
@@ -911,7 +911,7 @@ func validRuntimeFixture(t *testing.T) (*fakeReader, []byte) {
 		"backupName": "backup-direct", "scheduleName": "", "namespaceMapping": map[string]string{"source": "target"},
 	}, map[string]any{"phase": "Completed", "startTimestamp": "2026-07-14T12:01:00Z", "completionTimestamp": "2026-07-14T12:02:00Z", "errors": 0, "warnings": 0}, nil)
 	serverStatus := kubeObject(t, "velero.io/v1", "ServerStatusRequest", metadata("cloudring-status", "velero", "server-status-uid", "4", nil, map[string]string{}), map[string]any{}, map[string]any{
-		"phase": "Processed", "processedTimestamp": "2026-07-14T12:02:01Z", "serverVersion": "v1.18.1",
+		"phase": "Processed", "processedTimestamp": "2026-07-14T12:02:01Z", "serverVersion": "v1.18.2",
 	}, nil)
 	sourcePVC := kubeObject(t, "v1", "PersistentVolumeClaim", metadata("volume", "source", sourceUID, "10", nil, map[string]string{}), map[string]any{"volumeName": "source-pv", "storageClassName": "fast"}, map[string]any{"phase": "Bound"}, nil)
 	sourcePV := kubeObject(t, "v1", "PersistentVolume", metadata("source-pv", "", "source-pv-uid", "11", nil, map[string]string{}), map[string]any{
