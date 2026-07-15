@@ -9,24 +9,25 @@ spec:
   availability:
     minimumControlPlaneNodes: 3
     minimumWorkerNodes: 3
+    minimumGatewayNodes: 3
     minimumFailureDomains: 3
   inventory:
     nodes:
       - id: node-a
         failureDomain: zone-a
-        roles: [control-plane, worker]
+        roles: [control-plane, worker, gateway]
         providerResourceRef: inventory.nodes.node-a
         managementAddressRef: inventory.addresses.node-a.management
         provisioningAddressRef: inventory.addresses.node-a.provisioning
       - id: node-b
         failureDomain: zone-b
-        roles: [control-plane, worker]
+        roles: [control-plane, worker, gateway]
         providerResourceRef: inventory.nodes.node-b
         managementAddressRef: inventory.addresses.node-b.management
         provisioningAddressRef: inventory.addresses.node-b.provisioning
       - id: node-c
         failureDomain: zone-c
-        roles: [control-plane, worker]
+        roles: [control-plane, worker, gateway]
         providerResourceRef: inventory.nodes.node-c
         managementAddressRef: inventory.addresses.node-c.management
         provisioningAddressRef: inventory.addresses.node-c.provisioning

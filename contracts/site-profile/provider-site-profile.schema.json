@@ -69,10 +69,11 @@
     "availability": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["minimumControlPlaneNodes", "minimumWorkerNodes", "minimumFailureDomains"],
+      "required": ["minimumControlPlaneNodes", "minimumWorkerNodes", "minimumGatewayNodes", "minimumFailureDomains"],
       "properties": {
         "minimumControlPlaneNodes": {"type": "integer", "minimum": 3},
         "minimumWorkerNodes": {"type": "integer", "minimum": 3},
+        "minimumGatewayNodes": {"type": "integer", "minimum": 3},
         "minimumFailureDomains": {"type": "integer", "minimum": 3}
       }
     },
@@ -102,6 +103,16 @@
                 "required": ["roles"],
                 "properties": {
                   "roles": {"contains": {"const": "worker"}}
+                }
+              },
+              "minContains": 3
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["roles"],
+                "properties": {
+                  "roles": {"contains": {"const": "gateway"}}
                 }
               },
               "minContains": 3

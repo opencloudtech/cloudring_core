@@ -42,6 +42,7 @@ func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
 		{name: "single stack", old: "dualStack: true", replacement: "dualStack: false", blocker: "dual_stack_network"},
 		{name: "no immutable backup", old: "offCellBackup: true", replacement: "offCellBackup: false", blocker: "snapshot_and_off_cell_storage"},
 		{name: "no rollback", old: "rollbackPlanRef: operations.rollback", replacement: "rollbackPlanRef: ''", blocker: "bootstrap_upgrade_rollback"},
+		{name: "weak gateway availability", old: "minimumGatewayNodes: 3", replacement: "minimumGatewayNodes: 2", blocker: "availability_policy"},
 		{name: "weak availability", old: "minimumFailureDomains: 3", replacement: "minimumFailureDomains: 2", blocker: "availability_policy"},
 		{name: "unsafe reference", old: "regionRef: regions.synthetic", replacement: "regionRef: regions..synthetic", blocker: "provider_binding"},
 		{name: "readiness overclaim", old: "nonClaim: preflight-and-plan-only", replacement: "nonClaim: production-ready", blocker: "readiness_non_claim"},
@@ -57,6 +58,39 @@ func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
 				t.Fatalf("blocked profile produced a plan: %v", err)
 			}
 		})
+	}
+}
+
+func TestInventoryRequiresGatewayRoleAcrossDeclaredFailureDomains(t *testing.T) {
+	profile := parseFixture(t, validProfileYAML)
+	profile.Spec.Inventory.Nodes[2].Roles = []string{"control-plane", "worker"}
+
+	report := Validate(profile)
+	if report.Status != "blocked" || !contains(report.Blockers, "inventory") {
+		t.Fatalf("two-node Gateway inventory passed HA validation: %#v", report)
+	}
+}
+
+func TestInventoryRejectsGatewayNodesInOneFailureDomain(t *testing.T) {
+	profile := parseFixture(t, validProfileYAML)
+	profile.Spec.Inventory.Nodes[1].Roles = []string{"control-plane", "worker"}
+	profile.Spec.Inventory.Nodes[2].Roles = []string{"control-plane", "worker"}
+	profile.Spec.Inventory.Nodes = append(profile.Spec.Inventory.Nodes,
+		Node{
+			ID: "gateway-b", FailureDomain: "zone-a", Roles: []string{"gateway"},
+			ProviderResourceRef: "inventory.nodes.gateway-b", ManagementAddressRef: "inventory.addresses.gateway-b.management",
+			ProvisioningAddressRef: "inventory.addresses.gateway-b.provisioning",
+		},
+		Node{
+			ID: "gateway-c", FailureDomain: "zone-a", Roles: []string{"gateway"},
+			ProviderResourceRef: "inventory.nodes.gateway-c", ManagementAddressRef: "inventory.addresses.gateway-c.management",
+			ProvisioningAddressRef: "inventory.addresses.gateway-c.provisioning",
+		},
+	)
+
+	report := Validate(profile)
+	if report.Status != "blocked" || !contains(report.Blockers, "inventory") {
+		t.Fatalf("single-domain Gateway inventory passed HA validation: %#v", report)
 	}
 }
 
@@ -169,24 +203,25 @@ spec:
   availability:
     minimumControlPlaneNodes: 3
     minimumWorkerNodes: 3
+    minimumGatewayNodes: 3
     minimumFailureDomains: 3
   inventory:
     nodes:
       - id: node-a
         failureDomain: zone-a
-        roles: [control-plane, worker]
+        roles: [control-plane, worker, gateway]
         providerResourceRef: inventory.nodes.node-a
         managementAddressRef: inventory.addresses.node-a.management
         provisioningAddressRef: inventory.addresses.node-a.provisioning
       - id: node-b
         failureDomain: zone-b
-        roles: [control-plane, worker]
+        roles: [control-plane, worker, gateway]
         providerResourceRef: inventory.nodes.node-b
         managementAddressRef: inventory.addresses.node-b.management
         provisioningAddressRef: inventory.addresses.node-b.provisioning
       - id: node-c
         failureDomain: zone-c
-        roles: [control-plane, worker]
+        roles: [control-plane, worker, gateway]
         providerResourceRef: inventory.nodes.node-c
         managementAddressRef: inventory.addresses.node-c.management
         provisioningAddressRef: inventory.addresses.node-c.provisioning
