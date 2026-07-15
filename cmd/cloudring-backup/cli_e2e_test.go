@@ -182,7 +182,7 @@ func cliCollectionFixture(t *testing.T, baselineAt time.Time, sourcePVC []byte) 
 		"backupName": "backup-direct", "scheduleName": "", "namespaceMapping": map[string]string{"source": "target"},
 	}, map[string]any{"phase": "Completed", "startTimestamp": timestamp(time.Millisecond), "completionTimestamp": timestamp(4 * time.Millisecond), "errors": 0, "warnings": 0}, nil)
 	serverStatus := cliKubeObject("velero.io/v1", "ServerStatusRequest", cliMetadata("cloudring-status", "velero", "server-status-uid", "4", nil, nil), map[string]any{}, map[string]any{
-		"phase": "Processed", "processedTimestamp": timestamp(5 * time.Millisecond), "serverVersion": "v1.18.1",
+		"phase": "Processed", "processedTimestamp": timestamp(5 * time.Millisecond), "serverVersion": "v1.18.2",
 	}, nil)
 	targetPVC := cliKubeObject("v1", "PersistentVolumeClaim", cliMetadata("volume", "target", targetUID, "20", nil, nil),
 		map[string]any{"volumeName": "target-pv", "storageClassName": "fast"}, map[string]any{"phase": "Bound"}, nil)

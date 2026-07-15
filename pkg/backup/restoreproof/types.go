@@ -9,7 +9,7 @@ package restoreproof
 const (
 	ReceiptSchemaVersion      = "cloudring.restore-proof.csi-data-mover/v1"
 	BaselineSchemaVersion     = "cloudring.restore-proof.source-baseline/v1"
-	VeleroVersion             = "v1.18.1"
+	VeleroVersion             = "v1.18.2"
 	MethodCSIDataMover        = "csi-data-mover"
 	ScopeSingleVolumeDataPath = "single-volume-data-path-only"
 )
@@ -176,7 +176,7 @@ type AsyncHelper struct {
 	EvidenceSHA256        string               `json:"evidenceSha256"`
 }
 
-// DataDownloadLineage records the Velero 1.18.1 fields derived from an exact
+// DataDownloadLineage records the Velero 1.18.2 fields derived from an exact
 // archived DataUploadResult.
 type DataDownloadLineage struct {
 	TargetVolumePVC               string          `json:"targetVolumePvc"`

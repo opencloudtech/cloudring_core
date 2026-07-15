@@ -1,7 +1,7 @@
 # Backup and Restore Proof Contracts
 
 This directory defines the public, provider-neutral contract used to collect an
-unsigned proof for one Velero 1.18.1 CSI data-mover volume restore.
+unsigned proof for one Velero 1.18.2 CSI data-mover volume restore.
 
 - `baseline-request.schema.json` identifies the source PVC before the Restore
   exists.

@@ -3,7 +3,7 @@
 Backup is modeled as an OCSv3 service module. CloudRING owns the reusable
 backup/restore contracts, typed decoders, collectors, validators, lifecycle
 interfaces, and source-safe provider adapter protocols. The current public
-runtime slice includes the Velero 1.18.1 CSI data-mover restore-proof collector
+runtime slice includes the Velero 1.18.2 CSI data-mover restore-proof collector
 documented in `docs/restore-proof-collector.md`.
 
 Storage-service implementations and scheduler workers remain module concerns.

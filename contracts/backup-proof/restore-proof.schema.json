@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cloudring.org/contracts/backup-proof/restore-proof.schema.json",
-  "title": "CloudRING Velero 1.18.1 CSI data-mover volume restore proof",
+  "title": "CloudRING Velero 1.18.2 CSI data-mover volume restore proof",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,7 +19,7 @@
   "properties": {
     "schemaVersion": { "const": "cloudring.restore-proof.csi-data-mover/v1" },
     "proofScope": { "const": "single-volume-data-path-only" },
-    "veleroVersion": { "const": "v1.18.1" },
+    "veleroVersion": { "const": "v1.18.2" },
     "veleroRuntime": { "$ref": "#/$defs/veleroRuntime" },
     "collectedAt": { "$ref": "#/$defs/timestamp" },
     "context": { "$ref": "#/$defs/context" },
@@ -139,7 +139,7 @@
       "properties": {
         "gvr": { "$ref": "#/$defs/gvr" },
         "object": { "$ref": "#/$defs/targetResource" },
-        "serverVersion": { "const": "v1.18.1" },
+        "serverVersion": { "const": "v1.18.2" },
         "phase": { "const": "Processed" },
         "processedAt": { "$ref": "#/$defs/timestamp" },
         "observedAt": { "$ref": "#/$defs/timestamp" },
