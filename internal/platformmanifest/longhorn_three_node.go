@@ -351,8 +351,10 @@ func validateLonghornStorageClass(class map[string]any) bool {
 }
 
 func validateLonghornSnapshotClass(class map[string]any) bool {
-	return exactMappingKeys(class, "apiVersion", "kind", "metadata", "driver", "deletionPolicy") &&
+	parameters, ok := nested(class, "parameters").(map[string]any)
+	return ok && exactMappingKeys(class, "apiVersion", "kind", "metadata", "driver", "deletionPolicy", "parameters") &&
 		nestedString(class, "apiVersion") == "snapshot.storage.k8s.io/v1" && nestedString(class, "driver") == "driver.longhorn.io" &&
 		nestedString(class, "deletionPolicy") == "Retain" && nestedString(class, "metadata", "labels", "velero.io/csi-volumesnapshot-class") == "true" &&
-		nestedString(class, "metadata", "annotations", "snapshot.storage.kubernetes.io/is-default-class") == "false"
+		nestedString(class, "metadata", "annotations", "snapshot.storage.kubernetes.io/is-default-class") == "false" &&
+		exactMappingKeys(parameters, "type") && nestedString(class, "parameters", "type") == "snap"
 }
