@@ -34,9 +34,10 @@ language, deployment substrate, or release cadence.
 ## Repository state
 
 The current pull request series is the first extraction from the existing
-platform into its canonical public repository. Contracts and conformance are
-available first; runtime, IAM, billing, portal, installer, operations, and
-service slices are being moved with their tests. Green checks prove only the
+platform into its canonical public repository. Contracts, conformance,
+backup-proof, and IAM/identity runtime slices are available; billing, portal,
+installer, operations, and service slices are being moved with their tests.
+Green checks prove only the
 surfaces present in a commit and must not be interpreted as a claim that the
 full platform extraction or a production installation is complete.
 
@@ -47,6 +48,8 @@ full platform extraction or a production installation is complete.
 - Use `docs/conformance.md` to validate OCSv3 module packages.
 - Use `docs/http-transport-security.md` for the provider-neutral public HTTP
   transport and response-header audit.
+- Use `docs/iam-policy.md` for the importable IAM, OIDC/JWKS/JWT, secure-cookie,
+  CSRF, and management-gate runtime boundary.
 - Use `examples/synthetic-service-module/connector-package.json`
   as the smallest connector-package example.
 - Use `reference/synthetic-service/module-package.json` as the

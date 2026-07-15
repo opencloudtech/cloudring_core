@@ -32,8 +32,11 @@ The extraction backlog classifies these paths as publishable `public-core`:
 | `pkg/backup/velero118` | Exact Velero 1.18.2 CSI data-mover decoders, archive reader, collectors, and adapter execution boundary. |
 | `pkg/kubeconfigpipe` | Bounded in-memory replay of a brokered pipe-backed kubeconfig plus process-tree-contained execution for multi-query child processes. |
 | `pkg/secureexec` | Content-pinned executable identity, bounded output, process-tree cleanup, and optional kubeconfig replay for downstream collectors. |
+| `pkg/iam` | Importable IAM decision runtime, lifecycle and tenant boundaries, audited support and break-glass controls, and policy verification. |
+| `pkg/identity` | Importable OIDC/JWKS/JWT, bootstrap-reference, secure-cookie, CSRF, and management-gate runtime. |
+| `internal/privateartifact` | Stable-directory, atomic no-overwrite writer for sanitized owner-only evidence. |
 | `cmd/cloudring-backup` | Read-only baseline, collection, and offline verification workflow. |
-| `internal/iam` | IAM decision and policy interface candidate. |
+| `cmd/cloudring-id` | Provider-neutral identity contract and offline asymmetric-token verification CLI. |
 | `internal/migration` | Go and upstream Kubernetes runtime policy guard candidate. |
 | `contracts/release/release-bom-contract.json` | Release BOM machine contract candidate. |
 | `docs/what-is-ocsv3.md` | External service-team SDK documentation entry point. |
@@ -57,8 +60,11 @@ code has been separated from installation values.
 
 ## Migration Notes
 
-The backup proof paths above are the first runtime extraction slice. Other
-listed candidate paths remain classifications until code and tests are present.
+The backup-proof and IAM/identity paths above are implemented public runtime
+slices. Other listed candidate paths remain classifications until code and
+tests are present. The IAM/identity slice is an importable decision and token
+validation runtime; it does not by itself claim a deployed identity provider,
+durable business-state database, provider portal, or live installation.
 
 Service paths such as backup, IaaS, message delivery, marketplace,
 observability, resilience, and accelerator/HPC surfaces should become complete
