@@ -37,6 +37,13 @@ reference through their own secret-safe inventory mechanism, implement the
 declared phases, and retain live acceptance and rollback evidence outside the
 public repository.
 
+Provider-neutral storage bases live under `deploy/kubernetes/storage`. Use the
+Rook-Ceph RBD profile when three independent, dedicated raw devices are
+available. Use the suspended Longhorn three-node profile for a compact cell
+with enough supported filesystem capacity but no dedicated Ceph devices. Both
+profiles require downstream host preflight, activation, backup/restore, node
+loss, recovery, and cleanup evidence; a source render is never live readiness.
+
 This slice is a complete preflight and planning contract. It is not an
 installer, does not prove that any provider site is reachable, and does not
 claim production readiness.

@@ -72,6 +72,7 @@ go test ./... -count=1
 go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
 go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 go run ./cmd/cloudring-registry validate ./contracts/module-registry/fixtures/synthetic-module-registry.json
+go run ./cmd/cloudring-manifestcheck --root .
 ```
 
 The example package is synthetic. It is intended for local validation and does
