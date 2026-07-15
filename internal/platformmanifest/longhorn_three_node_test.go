@@ -14,7 +14,7 @@ func TestLonghornThreeNodeProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify Longhorn three-node profile: %v", err)
 	}
-	if report.Status != "ready" || report.Files != 2 || report.Documents != 5 || len(report.Checks) != 8 {
+	if report.Status != "ready" || report.Files != 2 || report.Documents != 11 || len(report.Checks) != 9 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -38,6 +38,10 @@ func TestLonghornThreeNodeProfileRejectsUnsafeChanges(t *testing.T) {
 		{"wrong provisioner", "provisioner: driver.longhorn.io\n", "provisioner: forbidden.example.csi\n"},
 		{"immediate binding", "volumeBindingMode: WaitForFirstConsumer\n", "volumeBindingMode: Immediate\n"},
 		{"delete snapshots", "deletionPolicy: Retain\n", "deletionPolicy: Delete\n"},
+		{"mutable snapshot controller", "snapshot-controller:v8.5.0@sha256:74ca61ab13e978f03cf0f336a607281d15f04cda0a38a881306365473b28a3d8\n", "snapshot-controller:latest\n"},
+		{"single snapshot controller replica", "  replicas: 2\n  minReadySeconds: 35\n", "  replicas: 1\n  minReadySeconds: 35\n"},
+		{"snapshot controller leader election disabled", "            - --leader-election=true\n", "            - --leader-election=false\n"},
+		{"snapshot controller wildcard RBAC", "    resources: [\"persistentvolumes\"]\n", "    resources: [\"*\"]\n"},
 		{"ui ingress", "    ingress:\n      enabled: false\n", "    ingress:\n      enabled: true\n"},
 		{"second Velero selector", "    app.kubernetes.io/part-of: cloudring-storage\n  annotations:\n    storageclass.kubernetes.io/is-default-class: \"false\"\n", "    app.kubernetes.io/part-of: cloudring-storage\n    velero.io/csi-volumesnapshot-class: \"true\"\n  annotations:\n    storageclass.kubernetes.io/is-default-class: \"false\"\n"},
 	}

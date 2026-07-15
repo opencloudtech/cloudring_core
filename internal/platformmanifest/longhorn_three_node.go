@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -36,7 +37,7 @@ func VerifyLonghornThreeNode(root string) (Report, error) {
 	}
 	report.Files = files
 	report.Documents = len(objects)
-	if report.Files != 2 || report.Documents != 5 {
+	if report.Files != 2 || report.Documents != 11 {
 		return report, errors.New("Longhorn three-node source inventory is incomplete")
 	}
 	if err := validateLonghornThreeNodeObjects(objects); err != nil {
@@ -51,6 +52,7 @@ func VerifyLonghornThreeNode(root string) (Report, error) {
 		"degraded_creation_and_telemetry_disabled",
 		"storage_class_non_default_and_delayed",
 		"single_retained_velero_snapshot_class",
+		"ha_snapshot_controller_pinned_and_least_privilege",
 		"ui_ingress_disabled",
 	}
 	return report, nil
@@ -100,9 +102,15 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 		}
 	}
 	expected := []string{
+		"ClusterRole//cloudring-snapshot-controller",
+		"ClusterRoleBinding//cloudring-snapshot-controller",
+		"Deployment/kube-system/snapshot-controller",
 		"HelmRelease/longhorn-system/longhorn",
 		"HelmRepository/longhorn-system/longhorn",
 		"Namespace//longhorn-system",
+		"Role/kube-system/cloudring-snapshot-controller-leader-election",
+		"RoleBinding/kube-system/cloudring-snapshot-controller-leader-election",
+		"ServiceAccount/kube-system/snapshot-controller",
 		"StorageClass//longhorn-replicated",
 		"VolumeSnapshotClass//longhorn-retain",
 	}
@@ -155,7 +163,126 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 	if veleroSnapshotLabels != 1 || !validateLonghornSnapshotClass(snapshotClass.Data) {
 		return errors.New("Longhorn Velero snapshot class is invalid")
 	}
+	if !validateLonghornSnapshotController(index) {
+		return errors.New("Longhorn common CSI snapshot controller is invalid")
+	}
 	return nil
+}
+
+func validateLonghornSnapshotController(index map[string]object) bool {
+	labels := map[string]string{
+		"app.kubernetes.io/name":      "snapshot-controller",
+		"app.kubernetes.io/component": "csi-snapshot-control-plane",
+		"app.kubernetes.io/part-of":   "cloudring-storage",
+	}
+	require := func(kind, namespace, name string) object {
+		return index[kind+"/"+namespace+"/"+name]
+	}
+
+	serviceAccount := require("ServiceAccount", "kube-system", "snapshot-controller")
+	if !exactMappingKeys(serviceAccount.Data, "apiVersion", "kind", "metadata") ||
+		nestedString(serviceAccount.Data, "apiVersion") != "v1" ||
+		!exactStringMap(nested(serviceAccount.Data, "metadata", "labels"), labels) {
+		return false
+	}
+
+	clusterRole := require("ClusterRole", "", "cloudring-snapshot-controller")
+	expectedClusterRules := []any{
+		map[string]any{"apiGroups": []any{""}, "resources": []any{"persistentvolumes"}, "verbs": []any{"get", "list", "watch"}},
+		map[string]any{"apiGroups": []any{""}, "resources": []any{"persistentvolumeclaims"}, "verbs": []any{"get", "list", "watch", "update"}},
+		map[string]any{"apiGroups": []any{""}, "resources": []any{"events"}, "verbs": []any{"list", "watch", "create", "update", "patch"}},
+		map[string]any{"apiGroups": []any{"snapshot.storage.k8s.io"}, "resources": []any{"volumesnapshotclasses"}, "verbs": []any{"get", "list", "watch"}},
+		map[string]any{"apiGroups": []any{"snapshot.storage.k8s.io"}, "resources": []any{"volumesnapshotcontents"}, "verbs": []any{"create", "get", "list", "watch", "update", "delete", "patch"}},
+		map[string]any{"apiGroups": []any{"snapshot.storage.k8s.io"}, "resources": []any{"volumesnapshotcontents/status"}, "verbs": []any{"patch"}},
+		map[string]any{"apiGroups": []any{"snapshot.storage.k8s.io"}, "resources": []any{"volumesnapshots"}, "verbs": []any{"create", "get", "list", "watch", "update", "patch", "delete"}},
+		map[string]any{"apiGroups": []any{"snapshot.storage.k8s.io"}, "resources": []any{"volumesnapshots/status"}, "verbs": []any{"update", "patch"}},
+	}
+	if !exactMappingKeys(clusterRole.Data, "apiVersion", "kind", "metadata", "rules") ||
+		nestedString(clusterRole.Data, "apiVersion") != "rbac.authorization.k8s.io/v1" ||
+		!exactStringMap(nested(clusterRole.Data, "metadata", "labels"), labels) ||
+		!reflect.DeepEqual(nested(clusterRole.Data, "rules"), expectedClusterRules) {
+		return false
+	}
+
+	clusterBinding := require("ClusterRoleBinding", "", "cloudring-snapshot-controller")
+	if !validateLonghornSnapshotBinding(clusterBinding.Data, "ClusterRole", "cloudring-snapshot-controller", labels) {
+		return false
+	}
+	leaderRole := require("Role", "kube-system", "cloudring-snapshot-controller-leader-election")
+	expectedLeaderRules := []any{map[string]any{
+		"apiGroups": []any{"coordination.k8s.io"},
+		"resources": []any{"leases"},
+		"verbs":     []any{"get", "watch", "list", "delete", "update", "create"},
+	}}
+	if !exactMappingKeys(leaderRole.Data, "apiVersion", "kind", "metadata", "rules") ||
+		nestedString(leaderRole.Data, "apiVersion") != "rbac.authorization.k8s.io/v1" ||
+		!exactStringMap(nested(leaderRole.Data, "metadata", "labels"), labels) ||
+		!reflect.DeepEqual(nested(leaderRole.Data, "rules"), expectedLeaderRules) {
+		return false
+	}
+	leaderBinding := require("RoleBinding", "kube-system", "cloudring-snapshot-controller-leader-election")
+	if !validateLonghornSnapshotBinding(leaderBinding.Data, "Role", "cloudring-snapshot-controller-leader-election", labels) {
+		return false
+	}
+
+	deployment := require("Deployment", "kube-system", "snapshot-controller")
+	container, ok := longhornSnapshotControllerContainer(deployment.Data)
+	if !ok || !exactMappingKeys(deployment.Data, "apiVersion", "kind", "metadata", "spec") ||
+		nestedString(deployment.Data, "apiVersion") != "apps/v1" ||
+		!exactStringMap(nested(deployment.Data, "metadata", "labels"), labels) ||
+		nestedString(deployment.Data, "metadata", "annotations", "cloudring.org/upstream-source") != "kubernetes-csi/external-snapshotter@v8.5.0" ||
+		nestedNumber(deployment.Data, "spec", "replicas") != 2 || nestedNumber(deployment.Data, "spec", "minReadySeconds") != 35 ||
+		nestedString(deployment.Data, "spec", "strategy", "type") != "RollingUpdate" ||
+		nestedNumber(deployment.Data, "spec", "strategy", "rollingUpdate", "maxSurge") != 0 ||
+		nestedNumber(deployment.Data, "spec", "strategy", "rollingUpdate", "maxUnavailable") != 1 ||
+		nestedString(deployment.Data, "spec", "template", "spec", "serviceAccountName") != "snapshot-controller" ||
+		nestedString(deployment.Data, "spec", "template", "spec", "priorityClassName") != "system-cluster-critical" ||
+		nestedString(deployment.Data, "spec", "template", "spec", "nodeSelector", "kubernetes.io/os") != "linux" ||
+		nestedString(deployment.Data, "spec", "template", "spec", "securityContext", "seccompProfile", "type") != "RuntimeDefault" {
+		return false
+	}
+	return exactMappingKeys(container, "name", "image", "imagePullPolicy", "args", "ports", "livenessProbe", "securityContext", "resources") &&
+		stringValue(container["name"]) == "snapshot-controller" &&
+		stringValue(container["image"]) == "registry.k8s.io/sig-storage/snapshot-controller:v8.5.0@sha256:74ca61ab13e978f03cf0f336a607281d15f04cda0a38a881306365473b28a3d8" &&
+		stringValue(container["imagePullPolicy"]) == "IfNotPresent" &&
+		exactStringSequence(container["args"], "--v=2", "--leader-election=true", "--http-endpoint=:8080") &&
+		nestedString(container, "livenessProbe", "httpGet", "path") == "/healthz/leader-election" &&
+		nestedString(container, "livenessProbe", "httpGet", "port") == "health" &&
+		exactBool(container, false, "securityContext", "allowPrivilegeEscalation") &&
+		exactBool(container, true, "securityContext", "readOnlyRootFilesystem") &&
+		exactBool(container, true, "securityContext", "runAsNonRoot") &&
+		nestedNumber(container, "securityContext", "runAsUser") == 65532 &&
+		nestedNumber(container, "securityContext", "runAsGroup") == 65532 &&
+		exactStringSequence(nested(container, "securityContext", "capabilities", "drop"), "ALL")
+}
+
+func validateLonghornSnapshotBinding(binding map[string]any, roleKind, roleName string, labels map[string]string) bool {
+	if !exactMappingKeys(binding, "apiVersion", "kind", "metadata", "subjects", "roleRef") ||
+		nestedString(binding, "apiVersion") != "rbac.authorization.k8s.io/v1" ||
+		!exactStringMap(nested(binding, "metadata", "labels"), labels) {
+		return false
+	}
+	roleRef, ok := nested(binding, "roleRef").(map[string]any)
+	if !ok || !exactMappingKeys(roleRef, "apiGroup", "kind", "name") ||
+		stringValue(roleRef["apiGroup"]) != "rbac.authorization.k8s.io" || stringValue(roleRef["kind"]) != roleKind || stringValue(roleRef["name"]) != roleName {
+		return false
+	}
+	subjects, ok := nested(binding, "subjects").([]any)
+	if !ok || len(subjects) != 1 {
+		return false
+	}
+	subject, ok := subjects[0].(map[string]any)
+	return ok && exactMappingKeys(subject, "kind", "name", "namespace") &&
+		stringValue(subject["kind"]) == "ServiceAccount" && stringValue(subject["name"]) == "snapshot-controller" && stringValue(subject["namespace"]) == "kube-system"
+}
+
+func longhornSnapshotControllerContainer(deployment map[string]any) (map[string]any, bool) {
+	containers, ok := nested(deployment, "spec", "template", "spec", "containers").([]any)
+	if !ok || len(containers) != 1 {
+		return nil, false
+	}
+	container, ok := containers[0].(map[string]any)
+	return container, ok
 }
 
 func exactLonghornHelmChart(release map[string]any) bool {
