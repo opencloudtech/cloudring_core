@@ -70,9 +70,19 @@ Every decision must emit audit metadata with:
 - Correlation ID and optional ticket/support-grant references.
 - MFA and session expectation results.
 
-Audit entries record references and decisions only. Runtime audit storage,
-identity-provider discovery, key rotation, bootstrap admin setup, and live
-session validation remain outside CloudRING.
+Audit entries record references and decisions only. CloudRING provides the
+provider-neutral decision, audit-sink, OIDC/JWKS rotation, bootstrap-reference,
+session-cookie, and CSRF runtimes in `pkg/iam` and `pkg/identity`. Concrete
+identity-provider configuration, credential values, durable storage, and live
+installation evidence remain downstream inputs and operations.
+
+The in-process runtime never treats a subject or API-token reference as proof
+of authentication. A trusted consumer-supplied verifier must attest the bound
+subject from out-of-band transport context, credential class, MFA result, and
+fresh session state; bearer material never enters the decision request or
+audit. Missing, stale, revoked, mismatched, or insufficient assurance fails
+closed and is audited. Synthetic contract verification never claims
+installation readiness.
 
 ## Contract Artifacts
 
@@ -80,3 +90,7 @@ session validation remain outside CloudRING.
   and audit envelope.
 - `examples/authorization-decision.synthetic.json` is a synthetic allow example
   using symbolic identity references.
+- `pkg/iam` implements the fail-closed decision and audit boundary.
+- `pkg/identity` implements the asymmetric token and browser-session controls.
+- `cmd/cloudring-id` performs a non-readiness synthetic contract check and
+  validates protected-file JWT inputs.
