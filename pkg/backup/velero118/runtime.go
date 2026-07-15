@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -133,6 +134,91 @@ func (reader *KubectlReader) ListPage(ctx context.Context, gvr restoreproof.GVR,
 	return output, nil
 }
 
+// WatchPage resumes a raw Kubernetes watch from an exact list resourceVersion.
+// The API timeout bounds each stream; callers resume from the returned
+// resourceVersion. An expired or malformed stream fails closed instead of
+// relisting over a potential observation gap.
+func (reader *KubectlReader) WatchPage(ctx context.Context, gvr restoreproof.GVR, namespace, selector, resourceVersion string, timeoutSeconds int) ([]WatchEvent, string, error) {
+	if reader == nil || reader.executable == nil || !safeGVR(gvr) || namespace != "" && !safeName(namespace) || len(selector) > 2048 ||
+		resourceVersion == "" || len(resourceVersion) > 256 || timeoutSeconds < 1 || timeoutSeconds > 30 {
+		return nil, "", errors.New("invalid Kubernetes watch read")
+	}
+	query := url.Values{}
+	query.Set("watch", "true")
+	query.Set("allowWatchBookmarks", "true")
+	query.Set("resourceVersion", resourceVersion)
+	query.Set("timeoutSeconds", strconv.Itoa(timeoutSeconds))
+	if selector != "" {
+		query.Set("labelSelector", selector)
+	}
+	path := rawResourcePath(gvr, namespace) + "?" + query.Encode()
+	output, stderr, err := reader.run(ctx, []string{"get", "--raw", path}, strictjson.MaxDocumentBytes)
+	defer zeroBytes(stderr)
+	if err != nil {
+		zeroBytes(output)
+		return nil, "", errors.New("Kubernetes raw watch failed")
+	}
+	defer zeroBytes(output)
+	events, lastResourceVersion, err := decodeWatchStream(output, resourceVersion)
+	if err != nil {
+		return nil, "", err
+	}
+	return events, lastResourceVersion, nil
+}
+
+func decodeWatchStream(payload []byte, initialResourceVersion string) ([]WatchEvent, string, error) {
+	if len(payload) > strictjson.MaxDocumentBytes {
+		return nil, "", errors.New("Kubernetes watch stream is oversized")
+	}
+	lastResourceVersion := initialResourceVersion
+	lines := bytes.Split(payload, []byte{'\n'})
+	events := make([]WatchEvent, 0, len(lines))
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if len(events) >= 4096 || strictjson.Validate(line) != nil {
+			return nil, "", errors.New("Kubernetes watch event is invalid")
+		}
+		var envelope struct {
+			Type   string          `json:"type"`
+			Object json.RawMessage `json:"object"`
+		}
+		if strictjson.Decode(line, &envelope) != nil || len(envelope.Object) == 0 {
+			return nil, "", errors.New("Kubernetes watch envelope is invalid")
+		}
+		if envelope.Type == "ERROR" {
+			var status struct {
+				APIVersion string `json:"apiVersion"`
+				Kind       string `json:"kind"`
+				Reason     string `json:"reason"`
+				Code       int    `json:"code"`
+			}
+			if strictjson.Decode(envelope.Object, &status) == nil && status.APIVersion == "v1" && status.Kind == "Status" && (status.Code == 410 || status.Reason == "Expired") {
+				return nil, "", errors.New("Kubernetes watch resourceVersion expired")
+			}
+			return nil, "", errors.New("Kubernetes watch returned an error event")
+		}
+		if envelope.Type != "ADDED" && envelope.Type != "MODIFIED" && envelope.Type != "DELETED" && envelope.Type != "BOOKMARK" {
+			return nil, "", errors.New("Kubernetes watch event type is invalid")
+		}
+		var metadataOnly struct {
+			Metadata struct {
+				ResourceVersion string `json:"resourceVersion"`
+			} `json:"metadata"`
+		}
+		if strictjson.Decode(envelope.Object, &metadataOnly) != nil || metadataOnly.Metadata.ResourceVersion == "" {
+			return nil, "", errors.New("Kubernetes watch resourceVersion is missing")
+		}
+		lastResourceVersion = metadataOnly.Metadata.ResourceVersion
+		if envelope.Type != "BOOKMARK" {
+			events = append(events, WatchEvent{Type: envelope.Type, Object: append([]byte(nil), envelope.Object...)})
+		}
+	}
+	return events, lastResourceVersion, nil
+}
+
 // ConfirmAbsent proves an exact-object 404 against a successful list of the
 // same collection. A proxy or wrong-GVR 404 therefore cannot satisfy cleanup.
 func (reader *KubectlReader) ConfirmAbsent(ctx context.Context, gvr restoreproof.GVR, namespace, name string) (bool, error) {
@@ -173,6 +259,8 @@ func exactListGVK(gvr restoreproof.GVR) (string, string, bool) {
 		return "v1", "PersistentVolumeList", true
 	case restoreproof.CoreV1CMGVR:
 		return "v1", "ConfigMapList", true
+	case restoreproof.VeleroV1RestoreGVR:
+		return "velero.io/v1", "RestoreList", true
 	case restoreproof.DataDownloadGVR:
 		return "velero.io/v2alpha1", "DataDownloadList", true
 	default:
@@ -196,15 +284,35 @@ func possibleNotFound(output, stderr []byte) bool {
 }
 
 // ExecProbeObserver invokes a downstream read-only probe adapter. Object refs
-// enter through stdin and adapter stderr is never reflected.
-type ExecProbeObserver struct{ executable *secureexec.Executable }
+// enter through stdin and adapter stderr is never reflected. Ambient
+// credentials are removed; an optional kubeconfig is replayed through a fresh
+// anonymous descriptor for each invocation.
+type ExecProbeObserver struct {
+	executable  *secureexec.Executable
+	environment []string
+	kubeconfig  *kubeconfigpipe.Replay
+}
 
 func NewExecProbeObserver(path string) (*ExecProbeObserver, error) {
+	return newExecProbeObserver(path, nil, restrictedAdapterEnvironment(os.Environ()))
+}
+
+// NewExecProbeObserverForKubectlReader shares only the reader's anonymous
+// kubeconfig replay with the adapter; it never exposes the parent credential
+// environment.
+func NewExecProbeObserverForKubectlReader(path string, reader *KubectlReader) (*ExecProbeObserver, error) {
+	if reader == nil {
+		return nil, errors.New("data probe Kubernetes reader is missing")
+	}
+	return newExecProbeObserver(path, reader.kubeconfig, restrictedAdapterEnvironment(os.Environ()))
+}
+
+func newExecProbeObserver(path string, kubeconfig *kubeconfigpipe.Replay, environment []string) (*ExecProbeObserver, error) {
 	executable, err := secureexec.PinAbsolute(path, defaultProbeTimeout)
 	if err != nil {
 		return nil, errors.New("pin data probe adapter")
 	}
-	return &ExecProbeObserver{executable: executable}, nil
+	return &ExecProbeObserver{executable: executable, environment: append([]string(nil), environment...), kubeconfig: kubeconfig}, nil
 }
 
 func (observer *ExecProbeObserver) IdentitySHA256() string {
@@ -231,7 +339,7 @@ func (observer *ExecProbeObserver) Observe(ctx context.Context, request ProbeReq
 		return ProbeObservation{}, errors.New("encode data probe request")
 	}
 	requestSHA256 := restoreproof.SHA256(string(input))
-	output, childError, err := runCommand(ctx, observer.executable, nil, input, maxAdapterResponseBytes)
+	output, childError, err := observer.executable.RunWithEnvironment(ctx, nil, input, maxAdapterResponseBytes, 64<<10, observer.environment, observer.kubeconfig)
 	zeroBytes(input)
 	zeroBytes(childError)
 	if err != nil {
@@ -248,15 +356,23 @@ func (observer *ExecProbeObserver) Observe(ctx context.Context, request ProbeReq
 }
 
 // ExecBackendObserver invokes a provider adapter with the raw handle only on
-// stdin. The handle is zeroed from the request buffer after execution.
-type ExecBackendObserver struct{ executable *secureexec.Executable }
+// stdin. The handle is zeroed from the request buffer after execution and
+// ambient credentials are never inherited.
+type ExecBackendObserver struct {
+	executable  *secureexec.Executable
+	environment []string
+}
 
 func NewExecBackendObserver(path string) (*ExecBackendObserver, error) {
+	return newExecBackendObserver(path, restrictedAdapterEnvironment(os.Environ()))
+}
+
+func newExecBackendObserver(path string, environment []string) (*ExecBackendObserver, error) {
 	executable, err := secureexec.PinAbsolute(path, defaultBackendTimeout)
 	if err != nil {
 		return nil, errors.New("pin provider observer adapter")
 	}
-	return &ExecBackendObserver{executable: executable}, nil
+	return &ExecBackendObserver{executable: executable, environment: append([]string(nil), environment...)}, nil
 }
 
 func (observer *ExecBackendObserver) IdentitySHA256() string {
@@ -284,7 +400,7 @@ func (observer *ExecBackendObserver) Observe(ctx context.Context, request Backen
 		return BackendObservation{}, errors.New("encode provider observation request")
 	}
 	requestSHA256 := restoreproof.SHA256(string(input))
-	output, childError, err := runCommand(ctx, observer.executable, nil, input, maxAdapterResponseBytes)
+	output, childError, err := observer.executable.RunWithEnvironment(ctx, nil, input, maxAdapterResponseBytes, 64<<10, observer.environment, nil)
 	zeroBytes(input)
 	zeroBytes(childError)
 	if err != nil {
@@ -348,6 +464,21 @@ func runCommandWithKubeconfig(ctx context.Context, executable *pinnedExecutable,
 		return nil, nil, errors.New("pipe-backed command is incomplete")
 	}
 	return executable.Run(ctx, arguments, nil, maximum, 64<<10, kubeconfig)
+}
+
+func restrictedAdapterEnvironment(environment []string) []string {
+	clean := make([]string, 0, len(environment)+1)
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		allowed := name == "PATH" || name == "LANG" || name == "SSL_CERT_FILE" || name == "SSL_CERT_DIR" || strings.HasPrefix(name, "LC_")
+		if allowed {
+			clean = append(clean, entry)
+		}
+	}
+	return append(clean, "GIT_TERMINAL_PROMPT=0")
 }
 
 func zeroBytes(value []byte) {

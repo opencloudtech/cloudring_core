@@ -42,6 +42,8 @@ func run(ctx context.Context, arguments []string, stdout io.Writer) error {
 	switch arguments[0] {
 	case "baseline":
 		return runBaseline(ctx, arguments[1:], stdout)
+	case "observe-data-upload-result":
+		return runObserveDataUploadResult(ctx, arguments[1:], stdout)
 	case "collect":
 		return runCollect(ctx, arguments[1:], stdout)
 	case "verify":
@@ -49,6 +51,43 @@ func run(ctx context.Context, arguments []string, stdout io.Writer) error {
 	default:
 		return errors.New("unknown command")
 	}
+}
+
+func runObserveDataUploadResult(ctx context.Context, arguments []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("observe-data-upload-result", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	requestPath := flags.String("request", "", "DataUploadResult observation request JSON")
+	outputPath := flags.String("output", "", "new private DataUploadResult observation file")
+	readyPath := flags.String("ready", "", "new private ready-for-Restore marker")
+	kubectl := flags.String("kubectl", "kubectl", "kubectl executable")
+	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
+	timeout := flags.Duration("timeout", 30*time.Minute, "maximum observation duration")
+	pollInterval := flags.Duration("poll-interval", 200*time.Millisecond, "observation polling interval")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *requestPath == "" || *outputPath == "" || *readyPath == "" || samePath(*readyPath, *outputPath) || *timeout <= 0 || *pollInterval <= 0 || *pollInterval > *timeout {
+		return errors.New("invalid DataUploadResult observation arguments")
+	}
+	if err := validateNewArtifactDestinations(*readyPath, *outputPath); err != nil {
+		return errors.New("DataUploadResult observation destination is unavailable")
+	}
+	var request velero118.DataUploadResultObservationRequest
+	if err := readStrictJSON(*requestPath, &request); err != nil {
+		return errors.New("read DataUploadResult observation request")
+	}
+	reader, err := newCollectorKubectlReader(*kubectl, *kubeconfigFD)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	observation, err := velero118.ObserveDataUploadResult(ctx, reader, fileObservationReadyBarrier{path: *readyPath}, request, *timeout, *pollInterval, velero118.SystemClock())
+	if err != nil {
+		return err
+	}
+	defer zeroBytes(observation.Object)
+	if err := writePrivateJSON(*outputPath, observation); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(stdout, "status=data_upload_result_observation_written")
+	return nil
 }
 
 func runBaseline(ctx context.Context, arguments []string, stdout io.Writer) error {
@@ -90,6 +129,7 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 	requestPath := flags.String("request", "", "collection request JSON")
 	baselinePath := flags.String("baseline", "", "private source baseline JSON")
 	archivePath := flags.String("archive", "", "Velero BackupContents tar.gz")
+	resultObservationPath := flags.String("data-upload-result-observation", "", "private pre-terminal DataUploadResult observation JSON")
 	probeAdapterPath := flags.String("data-probe-adapter", "", "absolute probe adapter executable")
 	providerAdapterPath := flags.String("provider-adapter", "", "absolute provider observer executable")
 	cleanupReadyPath := flags.String("cleanup-ready", "", "new atomic ready-for-cleanup marker")
@@ -98,7 +138,7 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
 	cleanupTimeout := flags.Duration("cleanup-timeout", 30*time.Minute, "maximum wait for downstream cleanup")
 	pollInterval := flags.Duration("poll-interval", 2*time.Second, "cleanup observation interval")
-	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *requestPath == "" || *baselinePath == "" || *archivePath == "" ||
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *requestPath == "" || *baselinePath == "" || *archivePath == "" || *resultObservationPath == "" ||
 		*probeAdapterPath == "" || *providerAdapterPath == "" || *cleanupReadyPath == "" || *outputPath == "" || *cleanupTimeout <= 0 || *pollInterval <= 0 || samePath(*cleanupReadyPath, *outputPath) {
 		return errors.New("invalid collect arguments")
 	}
@@ -111,6 +151,12 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 	}
 	request.CleanupTimeout = *cleanupTimeout
 	request.PollInterval = *pollInterval
+	var resultObservation velero118.DataUploadResultObservation
+	if err := readStrictJSON(*resultObservationPath, &resultObservation); err != nil {
+		return errors.New("read DataUploadResult observation")
+	}
+	defer zeroBytes(resultObservation.Object)
+	request.DataUploadResultObservation = &resultObservation
 	var baseline restoreproof.SourceBaseline
 	if err := readStrictJSON(*baselinePath, &baseline); err != nil {
 		return errors.New("read source baseline")
@@ -131,7 +177,7 @@ func runCollect(ctx context.Context, arguments []string, stdout io.Writer) error
 		return err
 	}
 	defer reader.Close()
-	probeObserver, err := velero118.NewExecProbeObserver(*probeAdapterPath)
+	probeObserver, err := velero118.NewExecProbeObserverForKubectlReader(*probeAdapterPath, reader)
 	if err != nil {
 		return err
 	}
@@ -240,6 +286,21 @@ func writePrivateJSON(path string, value any) error {
 }
 
 type fileCleanupBarrier struct{ path string }
+
+type fileObservationReadyBarrier struct{ path string }
+
+func (barrier fileObservationReadyBarrier) ReadyForRestore(ctx context.Context, notice velero118.DataUploadResultObservationReady) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	parsed, timeErr := time.Parse(time.RFC3339Nano, notice.WatchStartedAt)
+	_, digestErr := hex.DecodeString(notice.RequestSHA256)
+	if notice.SchemaVersion != velero118.DataUploadResultObservationReadySchemaVersion || notice.Status != velero118.DataUploadResultObservationReadyStatus ||
+		timeErr != nil || parsed.UTC().Format(time.RFC3339Nano) != notice.WatchStartedAt || len(notice.RequestSHA256) != 64 || digestErr != nil {
+		return errors.New("DataUploadResult observation readiness notice is invalid")
+	}
+	return writePrivateJSON(barrier.path, notice)
+}
 
 func (barrier fileCleanupBarrier) ReadyForCleanup(ctx context.Context, notice velero118.CleanupReady) error {
 	if err := ctx.Err(); err != nil {

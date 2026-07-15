@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/backup-proof/data-upload-result-observation-request.schema.json",
+  "title": "CloudRING pre-Restore Velero DataUploadResult observation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "veleroNamespace",
+    "restoreName",
+    "sourceNamespace",
+    "sourcePvc",
+    "dataUploadName",
+    "evidencePrefix"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cloudring.restore-proof.data-upload-result-observation-request/v1" },
+    "veleroNamespace": { "$ref": "#/$defs/name" },
+    "restoreName": { "$ref": "#/$defs/name" },
+    "sourceNamespace": { "$ref": "#/$defs/name" },
+    "sourcePvc": { "$ref": "#/$defs/name" },
+    "dataUploadName": { "$ref": "#/$defs/name" },
+    "evidencePrefix": { "$ref": "#/$defs/evidencePrefix" }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "evidencePrefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 229,
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._/+:-]*[A-Za-z0-9])?$",
+      "not": { "pattern": "\\.\\." }
+    }
+  }
+}

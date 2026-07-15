@@ -259,9 +259,11 @@ func DataUploadResultEvidenceSHA256(result *DataUploadResultProof) string {
 		return ""
 	}
 	return digest(struct {
-		ObjectSHA256  string `json:"objectSha256"`
-		PayloadSHA256 string `json:"payloadSha256"`
-	}{result.Object.ValidatedStateSHA256, result.ResultPayloadSHA256})
+		ObjectSHA256      string `json:"objectSha256"`
+		PayloadSHA256     string `json:"payloadSha256"`
+		ObservedAt        string `json:"observedAt"`
+		VeleroAutoDeleted string `json:"veleroAutoDeletedAt"`
+	}{result.Object.ValidatedStateSHA256, result.ResultPayloadSHA256, result.ObservedAt, result.VeleroAutoDeletedAt})
 }
 
 func DataDownloadEvidenceSHA256(helper *AsyncHelper) string {

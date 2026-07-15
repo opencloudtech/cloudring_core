@@ -150,7 +150,7 @@
     "cleanup": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["validationCompletedAt", "cleanupStartedAt", "cleanupCompletedAt", "verifiedAt", "targetResources", "sourceResources"],
+      "required": ["validationCompletedAt", "cleanupStartedAt", "cleanupCompletedAt", "verifiedAt", "targetResources", "veleroAutoCleanedResources", "sourceResources"],
       "properties": {
         "validationCompletedAt": { "$ref": "#/$defs/timestamp" },
         "cleanupStartedAt": { "$ref": "#/$defs/timestamp" },
@@ -160,6 +160,13 @@
           "type": "array",
           "minItems": 4,
           "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/targetResource" }
+        },
+        "veleroAutoCleanedResources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/targetResource" }
         },
@@ -546,11 +553,13 @@
         "snapshotSize",
         "nodeOs",
         "resultPayloadSha256",
+        "observedAt",
+        "veleroAutoDeletedAt",
         "evidenceRef",
         "evidenceSha256"
       ],
       "properties": {
-        "status": { "const": "generated-consumed-cleaned" },
+        "status": { "const": "generated-consumed-velero-cleaned" },
         "gvr": { "$ref": "#/$defs/gvr" },
         "object": { "$ref": "#/$defs/targetResource" },
         "dataUploadUidSha256": { "$ref": "#/$defs/digest" },
@@ -570,6 +579,8 @@
         "nodeOs": { "const": "linux" },
         "dataMoverResultSha256": { "$ref": "#/$defs/digest" },
         "resultPayloadSha256": { "$ref": "#/$defs/digest" },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "veleroAutoDeletedAt": { "$ref": "#/$defs/timestamp" },
         "evidenceRef": { "$ref": "#/$defs/runtimeId" },
         "evidenceSha256": { "$ref": "#/$defs/digest" }
       }

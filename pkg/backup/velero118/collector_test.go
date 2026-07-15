@@ -343,7 +343,7 @@ func TestCollectorEnforcesExactVelero118Derivations(t *testing.T) {
 			object["spec"].(map[string]any)["csiSnapshot"].(map[string]any)["volumeSnapshot"] = ""
 		})},
 		{name: "data upload result prefix", mutate: func(t *testing.T, reader *fakeReader, archive []byte) []byte {
-			mutateListedObject(t, reader, restoreproof.CoreV1CMGVR, "velero", "backup-volume-1-result", "v1", "ConfigMapList", "52", func(object map[string]any) {
+			mutateObservedDataUploadResult(t, reader, func(object map[string]any) {
 				object["metadata"].(map[string]any)["name"] = "unrelated-result"
 			})
 			return archive
@@ -453,6 +453,7 @@ func TestCleanupBarrierRejectsPreMarkerStateDrift(t *testing.T) {
 			reader.objects[readerKey(restoreproof.CoreV1PVCGVR, "target", "volume")] = kubeObject(t, "v1", "PersistentVolumeClaim", metadata("volume", "target", "replacement-uid", "99", nil, nil), map[string]any{"volumeName": "target-pv"}, nil, nil)
 		}},
 		{name: "same-UID ConfigMap mutation", mutate: func(t *testing.T, reader *fakeReader) {
+			reader.autoDeletedResult = false
 			mutateObject(t, reader, restoreproof.CoreV1CMGVR, "velero", "backup-volume-1-result", func(object map[string]any) {
 				object["metadata"].(map[string]any)["resourceVersion"] = "60"
 				object["data"].(map[string]any)["restore-uid"] = `{"changed":true}`
@@ -487,6 +488,7 @@ func TestCleanupBarrierRejectsStateDriftDuringProviderObservation(t *testing.T) 
 	reader, archive, request, baseline, clock := preparedCollectionFixture(t)
 	provider := &fakeBackendObserver{clock: clock, onCall: func(call int) {
 		if call == 1 {
+			reader.autoDeletedResult = false
 			mutateObject(t, reader, restoreproof.CoreV1CMGVR, "velero", "backup-volume-1-result", func(object map[string]any) {
 				object["metadata"].(map[string]any)["resourceVersion"] = "61"
 			})
@@ -734,11 +736,16 @@ type fakeReader struct {
 	terminatingTargetOnce  bool
 	terminatingReturned    bool
 	getCalls               int
+	autoDeletedResult      bool
+	observation            *DataUploadResultObservation
 }
 
 func (reader *fakeReader) Get(_ context.Context, gvr restoreproof.GVR, namespace, name string) ([]byte, error) {
 	reader.getCalls++
 	key := readerKey(gvr, namespace, name)
+	if reader.autoDeletedResult && gvr == restoreproof.CoreV1CMGVR && namespace == "velero" && name == "backup-volume-1-result" {
+		return nil, ErrNotFound
+	}
 	if reader.deleted && isCleanupKey(gvr, namespace, name) {
 		if reader.replaceTargetOnCleanup && gvr == restoreproof.CoreV1PVCGVR {
 			replaced := kubeObject(nil, "v1", "PersistentVolumeClaim", metadata(name, namespace, "replacement-uid", "99", nil, nil), map[string]any{"volumeName": "target-pv"}, nil, nil)
@@ -773,6 +780,9 @@ func (reader *fakeReader) ListPage(_ context.Context, gvr restoreproof.GVR, name
 }
 
 func (reader *fakeReader) ConfirmAbsent(_ context.Context, gvr restoreproof.GVR, namespace, name string) (bool, error) {
+	if reader.autoDeletedResult && gvr == restoreproof.CoreV1CMGVR && namespace == "velero" && name == "backup-volume-1-result" {
+		return true, nil
+	}
 	return reader.deleted && isCleanupKey(gvr, namespace, name), nil
 }
 
@@ -941,6 +951,7 @@ func validRuntimeFixture(t *testing.T) (*fakeReader, []byte) {
 		"sourceNamespace": "source", "dataMoverConfig": map[string]string{}, "cancel": false, "operationTimeout": "10m", "nodeOS": "linux", "snapshotSize": 4096,
 	}, map[string]any{"phase": "Completed", "startTimestamp": "2026-07-14T12:01:10Z", "completionTimestamp": "2026-07-14T12:01:50Z", "progress": map[string]any{"bytesDone": 4096, "totalBytes": 4096}}, nil)
 	reader := &fakeReader{
+		autoDeletedResult: true,
 		objects: map[string][]byte{
 			readerKey(restoreproof.VeleroV1RestoreGVR, "velero", "restore-copy"):                 restore,
 			readerKey(restoreproof.VeleroV1BackupGVR, "velero", "backup-direct"):                 backup,
@@ -966,6 +977,7 @@ func preparedCollectionFixture(t *testing.T) (*fakeReader, []byte, CollectionReq
 	t.Helper()
 	reader, archive := validRuntimeFixture(t)
 	request := validCollectionRequest()
+	reader.observation = request.DataUploadResultObservation
 	clock := &fakeClock{now: mustTime(t, "2026-07-14T12:00:00Z")}
 	baseline, err := BuildSourceBaseline(t.Context(), reader, baselineRequestFromCollection(request), clock)
 	if err != nil {
@@ -997,6 +1009,21 @@ func mutateObject(t *testing.T, reader *fakeReader, gvr restoreproof.GVR, namesp
 	updated := mustJSON(t, object)
 	reader.objects[key] = updated
 	return updated
+}
+
+func mutateObservedDataUploadResult(t *testing.T, reader *fakeReader, mutate func(map[string]any)) {
+	t.Helper()
+	if reader.observation == nil {
+		t.Fatal("missing DataUploadResult observation fixture")
+	}
+	var object map[string]any
+	if err := json.Unmarshal(reader.observation.Object, &object); err != nil {
+		t.Fatal(err)
+	}
+	mutate(object)
+	reader.observation.Object = mustJSON(t, object)
+	reader.observation.ObjectSHA256 = canonicalJSONSHA256(reader.observation.Object)
+	reader.observation.EvidenceSHA256 = dataUploadResultObservationEvidenceSHA256(*reader.observation)
 }
 
 func mutateListedObject(t *testing.T, reader *fakeReader, gvr restoreproof.GVR, namespace, name, apiVersion, kind, resourceVersion string, mutate func(map[string]any)) []byte {
@@ -1041,7 +1068,36 @@ func validCollectionRequest() CollectionRequest {
 		SchemaVersion: CollectionRequestSchemaVersion, VeleroNamespace: "velero", RestoreName: "restore-copy", SourceNamespace: "source", SourcePVC: "volume",
 		TargetNamespace: "target", TargetPVC: "volume", DataUploadName: "backup-volume-1", EvidencePrefix: "runtime/task22a", CleanupTimeout: time.Minute, PollInterval: time.Second,
 		ServerStatusRequestName: "cloudring-status", ServerStatusRequestUIDSHA256: digest("server-status-uid"), CleanupRunNonceSHA256: digest("cleanup-run-nonce"),
+		DataUploadResultObservation: validDataUploadResultObservation(),
 	}
+}
+
+func validDataUploadResultObservation() *DataUploadResultObservation {
+	resultMetadata := metadata("backup-volume-1-result", "velero", "result-cm-uid", "6", nil, map[string]string{
+		"velero.io/restore-uid": "restore-uid", "velero.io/pvc-namespace-name": "source.volume", "velero.io/resource-usage": "DataUpload",
+	})
+	resultMetadata["creationTimestamp"] = "2026-07-14T12:01:30Z"
+	raw := kubeObject(nil, "v1", "ConfigMap", resultMetadata, nil, nil, map[string]string{"restore-uid": string(mustJSON(nil, map[string]any{
+		"backupStorageLocation": "offcell", "datamover": "", "snapshotID": "snapshot-id", "sourceNamespace": "source", "dataMoverResult": map[string]string{}, "nodeOS": "linux", "snapshotSize": 4096,
+	}))})
+	request := DataUploadResultObservationRequest{
+		SchemaVersion:   DataUploadResultObservationRequestSchemaVersion,
+		VeleroNamespace: "velero", RestoreName: "restore-copy", SourceNamespace: "source", SourcePVC: "volume",
+		DataUploadName: "backup-volume-1", EvidencePrefix: "runtime/task22a",
+	}
+	observation := &DataUploadResultObservation{
+		SchemaVersion:  DataUploadResultObservationSchemaVersion,
+		WatchStartedAt: "2026-07-14T12:00:30Z",
+		ObservedAt:     "2026-07-14T12:01:30Z",
+		CapturedAt:     "2026-07-14T12:01:31Z",
+		RequestSHA256:  adapterRequestSHA256(request),
+		EventType:      "ADDED",
+		Object:         raw,
+		ObjectSHA256:   canonicalJSONSHA256(raw),
+		EvidenceRef:    "runtime/task22a/velero-data-upload-result-observation",
+	}
+	observation.EvidenceSHA256 = dataUploadResultObservationEvidenceSHA256(*observation)
+	return observation
 }
 
 func baselineRequestFromCollection(request CollectionRequest) BaselineRequest {

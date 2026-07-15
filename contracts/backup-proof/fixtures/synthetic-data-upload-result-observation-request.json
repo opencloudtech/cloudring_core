@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "cloudring.restore-proof.data-upload-result-observation-request/v1",
+  "veleroNamespace": "velero",
+  "restoreName": "synthetic-copy-restore",
+  "sourceNamespace": "synthetic-source",
+  "sourcePvc": "example-volume",
+  "dataUploadName": "synthetic-backup-volume-1",
+  "evidencePrefix": "runtime/synthetic-drill"
+}

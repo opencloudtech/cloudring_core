@@ -60,6 +60,13 @@ func runKubectl(arguments []string) error {
 		return err
 	}
 	cleanup := fileExists(os.Getenv(cleanupEnvironment))
+	if parsed.Path == "/api/v1/namespaces/velero/configmaps/backup-volume-1-result" {
+		_, _ = io.WriteString(os.Stdout, `{"apiVersion":"v1","kind":"Status","reason":"NotFound","code":404}`)
+		return errors.New("synthetic Velero auto-cleaned result")
+	}
+	if parsed.Path == "/api/v1/namespaces/velero/configmaps" && parsed.Query().Get("fieldSelector") != "" {
+		return json.NewEncoder(os.Stdout).Encode(listObject("v1", "ConfigMapList", "auto-cleaned", nil))
+	}
 	if cleanup && cleanupResource(parsed.Path) {
 		if parsed.Query().Get("fieldSelector") != "" {
 			apiVersion, kind := cleanupListGVK(parsed.Path)

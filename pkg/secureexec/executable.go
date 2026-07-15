@@ -154,6 +154,21 @@ func (executable *Executable) IdentitySHA256() string {
 // Run executes the pinned identity with bounded output. The optional replay is
 // attached after the executable descriptor, so its fd is calculated safely.
 func (executable *Executable) Run(ctx context.Context, arguments []string, input []byte, maximumStdout, maximumStderr int64, replay *kubeconfigpipe.Replay) ([]byte, []byte, error) {
+	return executable.run(ctx, arguments, input, maximumStdout, maximumStderr, nil, replay)
+}
+
+// RunWithEnvironment executes the pinned identity with an explicit environment.
+// A non-nil environment prevents ambient credentials from being inherited by
+// installation-provided adapters. Kubeconfig replay applies its own further
+// allowlist and anonymous descriptor after this boundary.
+func (executable *Executable) RunWithEnvironment(ctx context.Context, arguments []string, input []byte, maximumStdout, maximumStderr int64, environment []string, replay *kubeconfigpipe.Replay) ([]byte, []byte, error) {
+	if environment == nil || !validEnvironment(environment) {
+		return nil, nil, errors.New("invalid pinned command environment")
+	}
+	return executable.run(ctx, arguments, input, maximumStdout, maximumStderr, append([]string(nil), environment...), replay)
+}
+
+func (executable *Executable) run(ctx context.Context, arguments []string, input []byte, maximumStdout, maximumStderr int64, environment []string, replay *kubeconfigpipe.Replay) ([]byte, []byte, error) {
 	if executable == nil || ctx == nil || maximumStdout <= 0 || maximumStdout > maxCapturedOutputBytes ||
 		maximumStderr <= 0 || maximumStderr > maxCapturedOutputBytes {
 		return nil, nil, errors.New("invalid pinned command")
@@ -174,6 +189,9 @@ func (executable *Executable) Run(ctx context.Context, arguments []string, input
 	command := exec.CommandContext(invocationContext, executable.invocationPath, arguments...)
 	if executable.useDescriptor {
 		command.ExtraFiles = []*os.File{executable.file}
+	}
+	if environment != nil {
+		command.Env = environment
 	}
 	if input != nil {
 		command.Stdin = bytes.NewReader(input)
@@ -202,6 +220,21 @@ func (executable *Executable) Run(ctx context.Context, arguments []string, input
 	}
 	zero(errorOutput)
 	return output, nil, nil
+}
+
+func validEnvironment(environment []string) bool {
+	seen := make(map[string]struct{}, len(environment))
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok || name == "" || strings.ContainsAny(name, "=\x00\r\n") || strings.ContainsRune(entry, '\x00') {
+			return false
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return false
+		}
+		seen[name] = struct{}{}
+	}
+	return true
 }
 
 func (executable *Executable) verifySnapshot() error {
