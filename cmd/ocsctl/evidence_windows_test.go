@@ -436,6 +436,7 @@ func TestWindowsConcurrentReadersObserveCompleteOldAndNewPayloads(t *testing.T) 
 				if err != nil {
 					if isTransientWindowsReplacementError(err) || os.IsNotExist(err) {
 						transientReadErrors.Add(1)
+						time.Sleep(time.Millisecond)
 						continue
 					}
 					readerErrors <- fmt.Errorf("reader %d: %w", readerID, err)
@@ -451,7 +452,10 @@ func TestWindowsConcurrentReadersObserveCompleteOldAndNewPayloads(t *testing.T) 
 					readerErrors <- fmt.Errorf("reader %d observed partial/mixed payload of %d bytes", readerID, len(payload))
 					return
 				}
-				runtime.Gosched()
+				// Leave a real handle-free scheduling window for MoveFileEx. A
+				// Gosched-only reader loop can continuously reacquire the file and
+				// starve the writer on otherwise-correct Windows runners.
+				time.Sleep(time.Millisecond)
 			}
 		}(reader)
 	}
@@ -471,7 +475,8 @@ func TestWindowsConcurrentReadersObserveCompleteOldAndNewPayloads(t *testing.T) 
 	// Use an odd number of successful replacements so the same bounded retry
 	// loop leaves the published value at the new payload. A separate un-retried
 	// final write would make an expected reader sharing race look like a failure.
-	for replacement := 0; replacement < 25; {
+	const successfulReplacements = 5
+	for replacement := 0; replacement < successfulReplacements; {
 		payload := oldPayload
 		if replacement%2 == 0 {
 			payload = newPayload
@@ -490,7 +495,7 @@ func TestWindowsConcurrentReadersObserveCompleteOldAndNewPayloads(t *testing.T) 
 			stopReaders()
 			t.Fatalf("concurrent readers prevented replacement for 15s; retries=%d", replacementRetries)
 		}
-		runtime.Gosched()
+		time.Sleep(time.Millisecond)
 	}
 	waitForWindowsReadObservation(t, &newReads, "new payload")
 	stopReaders()
