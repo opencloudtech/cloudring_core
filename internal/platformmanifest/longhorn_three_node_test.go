@@ -30,6 +30,7 @@ func TestLonghornThreeNodeProfileRejectsUnsafeChanges(t *testing.T) {
 		{"chart default class", "      defaultClass: false\n", "      defaultClass: true\n"},
 		{"two replicas", "      defaultReplicaCount: '{\"v1\":\"3\",\"v2\":\"3\"}'\n", "      defaultReplicaCount: '{\"v1\":\"2\",\"v2\":\"2\"}'\n"},
 		{"soft node anti-affinity", "      replicaSoftAntiAffinity: false\n", "      replicaSoftAntiAffinity: true\n"},
+		{"hard zone anti-affinity", "      replicaZoneSoftAntiAffinity: true\n", "      replicaZoneSoftAntiAffinity: false\n"},
 		{"degraded creation", "      allowVolumeCreationWithDegradedAvailability: false\n", "      allowVolumeCreationWithDegradedAvailability: true\n"},
 		{"usage metrics", "      allowCollectingLonghornUsageMetrics: false\n", "      allowCollectingLonghornUsageMetrics: true\n"},
 		{"revision counter disabled", "      disableRevisionCounter: '{\"v1\":\"false\"}'\n", "      disableRevisionCounter: '{\"v1\":\"true\"}'\n"},
