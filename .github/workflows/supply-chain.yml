@@ -131,7 +131,7 @@ jobs:
               type == "string" and
               (. == "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" or
                . == "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16" or
-               . == "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" or
+               . == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" or
                . == "actions/attest@a1948c3f048ba23858d222213b7c278aabede763" or
                test("^github/codeql-action/(init|autobuild|analyze)@99df26d4f13ea111d4ec1a7dddef6063f76b97e9$") or
                test("^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$"));
