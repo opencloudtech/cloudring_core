@@ -69,7 +69,7 @@ spec:
       defaultDataPath: /var/lib/longhorn
       defaultReplicaCount: '{"v1":"3","v2":"3"}'
       replicaSoftAntiAffinity: false
-      replicaZoneSoftAntiAffinity: false
+      replicaZoneSoftAntiAffinity: true
       replicaDiskSoftAntiAffinity: false
       replicaAutoBalance: best-effort
       storageOverProvisioningPercentage: 100

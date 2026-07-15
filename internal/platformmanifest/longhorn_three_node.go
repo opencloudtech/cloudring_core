@@ -200,7 +200,7 @@ func validateLonghornValues(release map[string]any) bool {
 		exactBool(values, false, "preUpgradeChecker", "jobEnabled") && exactBool(values, false, "preUpgradeChecker", "upgradeVersionCheck") &&
 		exactBool(values, false, "defaultSettings", "createDefaultDiskLabeledNodes") && nestedString(values, "defaultSettings", "defaultDataPath") == "/var/lib/longhorn" &&
 		nestedString(values, "defaultSettings", "defaultReplicaCount") == `{"v1":"3","v2":"3"}` &&
-		exactBool(values, false, "defaultSettings", "replicaSoftAntiAffinity") && exactBool(values, false, "defaultSettings", "replicaZoneSoftAntiAffinity") && exactBool(values, false, "defaultSettings", "replicaDiskSoftAntiAffinity") &&
+		exactBool(values, false, "defaultSettings", "replicaSoftAntiAffinity") && exactBool(values, true, "defaultSettings", "replicaZoneSoftAntiAffinity") && exactBool(values, false, "defaultSettings", "replicaDiskSoftAntiAffinity") &&
 		nestedString(values, "defaultSettings", "replicaAutoBalance") == "best-effort" && nestedNumber(values, "defaultSettings", "storageOverProvisioningPercentage") == 100 &&
 		nestedNumber(values, "defaultSettings", "storageMinimalAvailablePercentage") == 25 && nestedNumber(values, "defaultSettings", "storageReservedPercentageForDefaultDisk") == 25 &&
 		nestedString(values, "defaultSettings", "taintToleration") == "node-role.kubernetes.io/control-plane:NoSchedule" &&

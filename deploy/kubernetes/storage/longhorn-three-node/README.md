@@ -12,11 +12,22 @@ suspended by default and the Longhorn UI is not exposed by an Ingress.
 
 Before a downstream overlay activates the release, it must prove all intended
 storage nodes are Linux nodes with adequate independent capacity, mount
-propagation, supported ext4 or XFS storage, and the Longhorn host tools. The V1
-data engine requires `open-iscsi`, a usable `iscsiadm`, and a running or
-socket-activated `iscsid`. The default data path is `/var/lib/longhorn`; do not
-activate this profile where that path shares an undersized operating-system
-filesystem.
+propagation, supported ext4 or XFS storage, and the Longhorn host tools. On
+Debian-family hosts the V1 data engine requires `open-iscsi`, `nfs-common`, a
+usable `iscsiadm`, an enabled and running `iscsid.service`, and the required
+kernel modules including `iscsi_tcp` and `dm_crypt`. An active
+`iscsid.socket` alone is not a readiness gate. Disable `multipathd` when it is
+not required; otherwise configure it to exclude Longhorn devices according to
+the upstream Longhorn guidance and prove the warning is absent. The default
+data path is `/var/lib/longhorn`; do not activate this profile where that path
+shares an undersized operating-system filesystem.
+
+The compact profile keeps node- and disk-level replica anti-affinity hard, so
+the three replicas require three schedulable nodes and disks. Zone-level
+anti-affinity is soft because compact provider cells commonly place all three
+nodes in one Kubernetes zone, and Longhorn treats nodes without a
+`topology.kubernetes.io/zone` label as the same zone. Multi-zone sites should
+label their real failure domains; Longhorn will still prefer separate zones.
 
 Activation is not readiness. Before promotion, prove the exact CSIDriver,
 three healthy replicas on separate nodes, PVC checksum continuity, Retain
