@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/one-server-loss/receipt.schema.json",
+  "title": "CloudRING one-server-loss unsigned receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "status", "requestSha256", "runNonceSha256", "targetNodeUidSha256",
+    "kubectlExecutableSha256", "probeAdapterSha256", "startedAt", "readyMarkerAt", "completedAt",
+    "pollInterval", "faultArrivalTimeout", "minimumLossWindow", "recoveryTimeout",
+    "recoveryStabilityWindow", "maximumVmUnavailable", "minimumControlPlane", "baseline",
+    "preLoss", "loss", "recovered", "receiptSha256"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cloudring.one-server-loss.receipt/v1" },
+    "status": { "const": "completed" },
+    "requestSha256": { "$ref": "#/$defs/digest" },
+    "runNonceSha256": { "$ref": "#/$defs/digest" },
+    "targetNodeUidSha256": { "$ref": "#/$defs/digest" },
+    "kubectlExecutableSha256": { "$ref": "#/$defs/digest" },
+    "probeAdapterSha256": { "$ref": "#/$defs/digest" },
+    "startedAt": { "$ref": "#/$defs/timestamp" },
+    "readyMarkerAt": { "$ref": "#/$defs/timestamp" },
+    "completedAt": { "$ref": "#/$defs/timestamp" },
+    "pollInterval": { "$ref": "#/$defs/duration" },
+    "faultArrivalTimeout": { "$ref": "#/$defs/duration" },
+    "minimumLossWindow": { "$ref": "#/$defs/duration" },
+    "recoveryTimeout": { "$ref": "#/$defs/duration" },
+    "recoveryStabilityWindow": { "$ref": "#/$defs/duration" },
+    "maximumVmUnavailable": { "$ref": "#/$defs/duration" },
+    "minimumControlPlane": { "type": "integer", "minimum": 3 },
+    "baseline": { "$ref": "#/$defs/baseline" },
+    "preLoss": { "$ref": "#/$defs/phase" },
+    "loss": { "$ref": "#/$defs/phase" },
+    "recovered": { "$ref": "#/$defs/phase" },
+    "receiptSha256": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "duration": { "type": "string", "minLength": 2, "maxLength": 32 },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?$"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[A-Za-z0-9][-+._A-Za-z0-9]*$"
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlPlaneNodes", "etcdMembers", "apiServerMembers", "vmUidSha256", "dataSha256", "validatedBytes", "baselineSha256"],
+      "properties": {
+        "controlPlaneNodes": { "type": "integer", "minimum": 3 },
+        "etcdMembers": { "type": "integer", "minimum": 3 },
+        "apiServerMembers": { "type": "integer", "minimum": 3 },
+        "vmUidSha256": { "$ref": "#/$defs/digest" },
+        "dataSha256": { "$ref": "#/$defs/digest" },
+        "validatedBytes": { "type": "integer", "minimum": 1 },
+        "baselineSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "startedAt", "completedAt", "samples", "samplesSha256"],
+      "properties": {
+        "phase": { "enum": ["pre-loss", "loss", "recovered"] },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/sample" }
+        },
+        "samplesSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence", "phase", "startedAt", "observedAt", "targetNodePresent", "targetNodeReady",
+        "readyzPassed", "controlPlaneReadyNodes", "etcdReadyMembers", "apiServerReadyMembers",
+        "targetHostsEtcd", "targetHostsApiServer", "workloads", "vm", "dataProbe", "sampleSha256"
+      ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "phase": { "enum": ["pre-loss", "loss", "recovered"] },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "observedAt": { "$ref": "#/$defs/timestamp" },
+        "targetNodePresent": { "type": "boolean" },
+        "targetNodeReady": { "type": "boolean" },
+        "targetNodeUidSha256": { "$ref": "#/$defs/digest" },
+        "readyzPassed": { "const": true },
+        "controlPlaneReadyNodes": { "type": "integer", "minimum": 0 },
+        "etcdReadyMembers": { "type": "integer", "minimum": 0 },
+        "apiServerReadyMembers": { "type": "integer", "minimum": 0 },
+        "targetHostsEtcd": { "type": "boolean" },
+        "targetHostsApiServer": { "type": "boolean" },
+        "workloads": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/workload" }
+        },
+        "vm": { "$ref": "#/$defs/vm" },
+        "dataProbe": { "$ref": "#/$defs/dataProbe" },
+        "sampleSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "bindingSha256", "readyPods", "distinctReadyNodes", "minimumReadyPods", "minimumReadyNodes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "bindingSha256": { "$ref": "#/$defs/digest" },
+        "readyPods": { "type": "integer", "minimum": 0 },
+        "distinctReadyNodes": { "type": "integer", "minimum": 0 },
+        "minimumReadyPods": { "type": "integer", "minimum": 1 },
+        "minimumReadyNodes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "vm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "bindingSha256", "vmUidSha256", "vmReady", "vmiReady", "vmiOnTarget"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "bindingSha256": { "$ref": "#/$defs/digest" },
+        "vmUidSha256": { "$ref": "#/$defs/digest" },
+        "vmiUidSha256": { "$ref": "#/$defs/digest" },
+        "vmReady": { "type": "boolean" },
+        "vmiReady": { "type": "boolean" },
+        "vmiOnTarget": { "type": "boolean" }
+      }
+    },
+    "dataProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "bindingSha256", "implementation", "version", "requestSha256", "adapterExecutableSha256",
+        "hashAlgorithm", "dataSha256", "validatedBytes", "startedAt", "completedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "bindingSha256": { "$ref": "#/$defs/digest" },
+        "implementation": { "$ref": "#/$defs/runtimeId" },
+        "version": { "$ref": "#/$defs/runtimeId" },
+        "requestSha256": { "$ref": "#/$defs/digest" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
+        "hashAlgorithm": { "const": "sha256" },
+        "dataSha256": { "$ref": "#/$defs/digest" },
+        "validatedBytes": { "type": "integer", "minimum": 1 },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    }
+  }
+}

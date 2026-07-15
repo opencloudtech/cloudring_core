@@ -59,6 +59,8 @@ full platform extraction or a production installation is complete.
 - Use evidence and readiness contracts before making operational claims.
 - Use `docs/restore-proof-collector.md` for the public Velero 1.18.2 CSI
   data-mover proof workflow and its explicit non-claims.
+- Use `docs/one-server-loss-drill.md` for the provider-neutral, read-only
+  continuity observer and exact fault/recovery evidence boundary.
 - Use `docs/provider-site-installation.md` for the strict provider-neutral site
   inventory preflight and deterministic installation plan contract.
 

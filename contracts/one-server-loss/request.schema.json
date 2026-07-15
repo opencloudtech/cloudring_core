@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/one-server-loss/request.schema.json",
+  "title": "CloudRING one-server-loss observation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runNonceSha256",
+    "targetNodeName",
+    "pollInterval",
+    "faultArrivalTimeout",
+    "minimumLossWindow",
+    "recoveryTimeout",
+    "recoveryStabilityWindow",
+    "minimumControlPlaneMembers",
+    "workloads",
+    "vm",
+    "dataProbe"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cloudring.one-server-loss.observation-request/v1" },
+    "runNonceSha256": { "$ref": "#/$defs/digest" },
+    "targetNodeName": { "$ref": "#/$defs/name" },
+    "pollInterval": { "$ref": "#/$defs/duration" },
+    "faultArrivalTimeout": { "$ref": "#/$defs/duration" },
+    "minimumLossWindow": { "$ref": "#/$defs/duration" },
+    "recoveryTimeout": { "$ref": "#/$defs/duration" },
+    "recoveryStabilityWindow": { "$ref": "#/$defs/duration" },
+    "minimumControlPlaneMembers": { "type": "integer", "minimum": 3, "maximum": 99 },
+    "workloads": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/workload" }
+    },
+    "vm": { "$ref": "#/$defs/vm" },
+    "dataProbe": { "$ref": "#/$defs/dataProbe" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "duration": { "type": "string", "minLength": 2, "maxLength": 32 },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$",
+      "not": { "pattern": "\\.\\." }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "namespace", "matchLabels", "minimumReadyPods", "minimumDistinctReadyNodes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "namespace": { "$ref": "#/$defs/name" },
+        "matchLabels": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": { "minLength": 1, "maxLength": 253 },
+          "additionalProperties": { "type": "string", "maxLength": 63 }
+        },
+        "minimumReadyPods": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "minimumDistinctReadyNodes": { "type": "integer", "minimum": 1, "maximum": 10000 }
+      }
+    },
+    "vm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "namespace", "name", "requirePreLossOnTarget", "maximumUnavailableDuration"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "namespace": { "$ref": "#/$defs/name" },
+        "name": { "$ref": "#/$defs/name" },
+        "requirePreLossOnTarget": { "const": true },
+        "maximumUnavailableDuration": { "$ref": "#/$defs/duration" }
+      }
+    },
+    "dataProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "queryRef", "minimumValidatedBytes"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "queryRef": { "$ref": "#/$defs/id" },
+        "minimumValidatedBytes": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
