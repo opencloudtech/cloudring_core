@@ -137,6 +137,42 @@ func TestCleanupReadyBarrierIsPrivateAtomicAndNonOverwriting(t *testing.T) {
 	}
 }
 
+func TestObservationReadyBarrierIsPrivateAtomicAndRequestBound(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "observation-ready.json")
+	notice := velero118.DataUploadResultObservationReady{
+		SchemaVersion:  velero118.DataUploadResultObservationReadySchemaVersion,
+		Status:         velero118.DataUploadResultObservationReadyStatus,
+		WatchStartedAt: "2026-07-14T12:00:00Z",
+		RequestSHA256:  strings.Repeat("a", 64),
+	}
+	barrier := fileObservationReadyBarrier{path: path}
+	if err := barrier.ReadyForRestore(t.Context(), notice); err != nil {
+		t.Fatalf("ReadyForRestore() error = %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("observation marker info = %#v, %v", info, err)
+	}
+	// #nosec G304 -- path is a test-owned artifact inside t.TempDir().
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded velero118.DataUploadResultObservationReady
+	if err := json.Unmarshal(payload, &decoded); err != nil || decoded != notice {
+		t.Fatalf("observation marker = %#v, %v", decoded, err)
+	}
+	if err := barrier.ReadyForRestore(t.Context(), notice); err == nil {
+		t.Fatal("existing observation marker was overwritten")
+	}
+	invalid := notice
+	invalid.RequestSHA256 = strings.Repeat("z", 64)
+	if err := (fileObservationReadyBarrier{path: filepath.Join(t.TempDir(), "invalid.json")}).ReadyForRestore(t.Context(), invalid); err == nil {
+		t.Fatal("invalid observation marker was published")
+	}
+}
+
 func TestSamePathResolvesSymlinkedParents(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -163,12 +199,29 @@ func TestCollectRejectsExistingOutputBeforeReadingInputs(t *testing.T) {
 	arguments := []string{
 		"collect", "--request", filepath.Join(directory, "missing-request.json"),
 		"--baseline", filepath.Join(directory, "missing-baseline.json"), "--archive", filepath.Join(directory, "missing-archive.tar.gz"),
+		"--data-upload-result-observation", filepath.Join(directory, "missing-result-observation.json"),
 		"--data-probe-adapter", filepath.Join(directory, "missing-probe"), "--provider-adapter", filepath.Join(directory, "missing-provider"),
 		"--cleanup-ready", filepath.Join(directory, "cleanup-ready.json"), "--output", outputPath,
 	}
 	err := run(t.Context(), arguments, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "artifact destination") {
 		t.Fatalf("existing output preflight error = %v", err)
+	}
+}
+
+func TestObserveRejectsExistingOutputBeforeReadingInputs(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	outputPath := filepath.Join(directory, "observation.json")
+	if err := os.WriteFile(outputPath, []byte("reserved"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := run(t.Context(), []string{
+		"observe-data-upload-result", "--request", filepath.Join(directory, "missing-request.json"),
+		"--ready", filepath.Join(directory, "ready.json"), "--output", outputPath,
+	}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "destination") {
+		t.Fatalf("existing observation preflight error = %v", err)
 	}
 }
 

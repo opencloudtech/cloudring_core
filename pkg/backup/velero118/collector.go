@@ -140,7 +140,7 @@ func CollectCSIDataMoverVolumeLineage(
 	if err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
-	resultConfigMap, resultPayload, result, err := findDataUploadResult(ctx, reader, request, restoreObject, sourceProof)
+	resultConfigMap, resultPayload, result, resultObservedAt, err := readObservedDataUploadResult(request, restoreObject, sourceProof)
 	if err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
@@ -149,6 +149,10 @@ func CollectCSIDataMoverVolumeLineage(
 		return restoreproof.VolumeReceipt{}, err
 	}
 	if err := crossValidateDataPath(request, restoreObject, backupObject, sourcePVC, sourcePV, targetPVC, targetPV, liveUpload, archivedUpload, resultConfigMap, result, dataDownload); err != nil {
+		return restoreproof.VolumeReceipt{}, err
+	}
+	resultAutoDeletedAt, err := confirmVeleroAutoDeletedDataUploadResult(ctx, reader, request, resultConfigMap, restoreObject, resultObservedAt, clock)
+	if err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
 
@@ -178,13 +182,17 @@ func CollectCSIDataMoverVolumeLineage(
 		SourceArtifactHandleSHA256: restoreproof.SHA256(sourcePV.Spec.CSI.VolumeHandle),
 		EvidenceRef:                request.EvidencePrefix + "/provider-volume-lineage",
 	}
-	targets := []observedTarget{
+	cleanupTargets := []observedTarget{
 		{GVR: restoreproof.CoreV1PVCGVR, Namespace: request.TargetNamespace, Name: request.TargetPVC, Proof: targetPVC.Identity.Target("persistentvolumeclaims")},
 		{GVR: restoreproof.CoreV1PVGVR, Name: targetPV.Identity.Metadata.Name, Proof: targetPV.Identity.Target("persistentvolumes")},
 		{GVR: restoreproof.DataDownloadGVR, Namespace: request.VeleroNamespace, Name: dataDownload.Identity.Metadata.Name, Proof: dataDownload.Identity.Target("datadownloads.velero.io")},
-		{GVR: restoreproof.CoreV1CMGVR, Namespace: request.VeleroNamespace, Name: resultConfigMap.Identity.Metadata.Name, Proof: resultConfigMap.Identity.Target("configmaps")},
 	}
-	if err := fenceExactCleanupTargets(ctx, reader, targets); err != nil {
+	autoCleanedTarget := observedTarget{GVR: restoreproof.CoreV1CMGVR, Namespace: request.VeleroNamespace, Name: resultConfigMap.Identity.Metadata.Name, Proof: resultConfigMap.Identity.Target("configmaps")}
+	allTargets := append(append([]observedTarget(nil), cleanupTargets...), autoCleanedTarget)
+	if err := fenceExactCleanupTargets(ctx, reader, cleanupTargets); err != nil {
+		return restoreproof.VolumeReceipt{}, err
+	}
+	if err := requireExactAbsentObservedTarget(ctx, reader, autoCleanedTarget); err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
 	if err := sourceStillUnchanged(ctx, reader, request, baseline, sourcePVProof); err != nil {
@@ -199,7 +207,10 @@ func CollectCSIDataMoverVolumeLineage(
 	backend.LineageSHA256 = restoreproof.BackendLineageSHA256(restoreproof.MethodCSIDataMover, &backend)
 	querySHA256 := restoreproof.ProviderAbsenceQuerySHA256(&backend)
 	backend.PresenceObservation = providerObservationProof(presentObservation, "present", querySHA256)
-	if err := fenceExactCleanupTargets(ctx, reader, targets); err != nil {
+	if err := fenceExactCleanupTargets(ctx, reader, cleanupTargets); err != nil {
+		return restoreproof.VolumeReceipt{}, err
+	}
+	if err := requireExactAbsentObservedTarget(ctx, reader, autoCleanedTarget); err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
 	if err := sourceStillUnchanged(ctx, reader, request, baseline, sourcePVProof); err != nil {
@@ -207,6 +218,9 @@ func CollectCSIDataMoverVolumeLineage(
 	}
 
 	validationCompletedAt := probeObservation.CompletedAt
+	if timestampAfter(validationCompletedAt, resultAutoDeletedAt) {
+		validationCompletedAt = resultAutoDeletedAt
+	}
 	cleanupReady := CleanupReady{
 		SchemaVersion:         CleanupReadySchemaVersion,
 		Status:                CleanupReadyStatus,
@@ -220,8 +234,11 @@ func CollectCSIDataMoverVolumeLineage(
 	if err := cleanupBarrier.ReadyForCleanup(ctx, cleanupReady); err != nil {
 		return restoreproof.VolumeReceipt{}, errors.New("publish cleanup readiness barrier")
 	}
-	cleanupCompletedAt, err := waitForExactCleanup(ctx, reader, targets, request, clock)
+	cleanupCompletedAt, err := waitForExactCleanup(ctx, reader, cleanupTargets, request, clock)
 	if err != nil {
+		return restoreproof.VolumeReceipt{}, err
+	}
+	if err := requireExactAbsentObservedTarget(ctx, reader, autoCleanedTarget); err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
 	if err := sourceStillUnchanged(ctx, reader, request, baseline, sourcePVProof); err != nil {
@@ -240,7 +257,7 @@ func CollectCSIDataMoverVolumeLineage(
 	if err := clock.Wait(ctx, providerAbsenceMinimumInterval); err != nil {
 		return restoreproof.VolumeReceipt{}, errors.New("provider absence interval interrupted")
 	}
-	if _, err := requireExactCleanup(ctx, reader, targets); err != nil {
+	if _, err := requireExactCleanup(ctx, reader, cleanupTargets); err != nil {
 		return restoreproof.VolumeReceipt{}, errors.New("Kubernetes cleanup quiet fence failed")
 	}
 	if err := sourceStillUnchanged(ctx, reader, request, baseline, sourcePVProof); err != nil {
@@ -268,8 +285,11 @@ func CollectCSIDataMoverVolumeLineage(
 		timestampTooFarInFuture(backend.SourcePresenceObservation.ObservedAt, clock.Now(), 30*time.Second) {
 		return restoreproof.VolumeReceipt{}, errors.New("source provider artifact continuity timestamp is invalid")
 	}
-	if allAbsent, err := requireExactCleanup(ctx, reader, targets); err != nil || !allAbsent {
+	if allAbsent, err := requireExactCleanup(ctx, reader, cleanupTargets); err != nil || !allAbsent {
 		return restoreproof.VolumeReceipt{}, errors.New("final Kubernetes cleanup fence failed")
+	}
+	if err := requireExactAbsentObservedTarget(ctx, reader, autoCleanedTarget); err != nil {
+		return restoreproof.VolumeReceipt{}, errors.New("final Velero auto-cleaned resource fence failed")
 	}
 	if err := sourceStillUnchanged(ctx, reader, request, baseline, sourcePVProof); err != nil {
 		return restoreproof.VolumeReceipt{}, err
@@ -305,18 +325,19 @@ func CollectCSIDataMoverVolumeLineage(
 		DataMoverConfigSHA256:        optionalMapSHA256(dataDownload.Spec.DataMoverConfig),
 		SourceBaseline:               baseline,
 		Cleanup: restoreproof.CleanupContext{
-			ValidationCompletedAt: validationCompletedAt,
-			CleanupStartedAt:      cleanupStartedAt,
-			CleanupCompletedAt:    cleanupCompletedAt,
-			VerifiedAt:            verifiedAt,
-			TargetResources:       targetProofs(targets),
-			SourceResources:       []restoreproof.SourceResource{sourceProof, sourcePVProof},
+			ValidationCompletedAt:      validationCompletedAt,
+			CleanupStartedAt:           cleanupStartedAt,
+			CleanupCompletedAt:         cleanupCompletedAt,
+			VerifiedAt:                 verifiedAt,
+			TargetResources:            targetProofs(allTargets),
+			VeleroAutoCleanedResources: []restoreproof.TargetResource{autoCleanedTarget.Proof},
+			SourceResources:            []restoreproof.SourceResource{sourceProof, sourcePVProof},
 		},
 	}
 	resultPayloadSHA256 := canonicalJSONSHA256([]byte(resultPayload))
 	archivedObjectSHA256 := canonicalJSONSHA256(archivedDataUpload)
 	dataUploadProof := buildDataUploadProof(request, backupObject, sourceProof, archivedObjectSHA256, retainedUpload, verifiedAt)
-	resultProof := buildDataUploadResultProof(request, restoreObject, sourceProof, resultConfigMap, result, dataUploadProof, resultPayloadSHA256)
+	resultProof := buildDataUploadResultProof(request, restoreObject, sourceProof, resultConfigMap, result, dataUploadProof, resultPayloadSHA256, resultObservedAt, resultAutoDeletedAt)
 	probeProof := buildProbeProof(sourceProof, sourcePVC, targetPVC, targetPV, probeObservation)
 	helperProof := buildHelperProof(request, restoreObject, sourceProof, targetPVC, targetPV, dataDownload, resultProof, dataUploadProof)
 	lineage := restoreproof.DataLineage{
@@ -486,30 +507,71 @@ func findDataUpload(ctx context.Context, reader KubernetesReader, request Collec
 	return matches[0], nil
 }
 
-func findDataUploadResult(ctx context.Context, reader KubernetesReader, request CollectionRequest, restoreObject Restore, sourceProof restoreproof.SourceResource) (ConfigMap, string, DataUploadResult, error) {
-	restoreUID := restoreObject.Identity.Metadata.UID
-	selector := strings.Join([]string{
-		"velero.io/restore-uid=" + veleroValidLabelName(restoreUID),
-		"velero.io/pvc-namespace-name=" + veleroValidLabelName(request.SourceNamespace+"."+request.SourcePVC),
-		"velero.io/resource-usage=DataUpload",
-	}, ",")
-	items, err := listAll(ctx, reader, restoreproof.CoreV1CMGVR, request.VeleroNamespace, selector, "v1", "ConfigMapList")
-	if err != nil || len(items) != 1 {
-		return ConfigMap{}, "", DataUploadResult{}, errors.New("find exact Velero DataUploadResult ConfigMap")
+func readObservedDataUploadResult(request CollectionRequest, restoreObject Restore, sourceProof restoreproof.SourceResource) (ConfigMap, string, DataUploadResult, string, error) {
+	if request.DataUploadResultObservation == nil {
+		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("Velero DataUploadResult observation is missing")
 	}
-	configMap, err := DecodeConfigMap(items[0])
+	observation := *request.DataUploadResultObservation
+	if err := validateDataUploadResultObservation(observation); err != nil {
+		return ConfigMap{}, "", DataUploadResult{}, "", err
+	}
+	observationRequest := DataUploadResultObservationRequest{
+		SchemaVersion:   DataUploadResultObservationRequestSchemaVersion,
+		VeleroNamespace: request.VeleroNamespace, RestoreName: request.RestoreName,
+		SourceNamespace: request.SourceNamespace, SourcePVC: request.SourcePVC,
+		DataUploadName: request.DataUploadName, EvidencePrefix: request.EvidencePrefix,
+	}
+	if observation.RequestSHA256 != adapterRequestSHA256(observationRequest) || observation.EvidenceRef != request.EvidencePrefix+"/velero-data-upload-result-observation" {
+		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("Velero DataUploadResult observation request binding is invalid")
+	}
+	restoreUID := restoreObject.Identity.Metadata.UID
+	configMap, err := DecodeConfigMap(observation.Object)
 	if err != nil || configMap.Identity.Metadata.Namespace != request.VeleroNamespace || len(configMap.Data) != 1 {
-		return ConfigMap{}, "", DataUploadResult{}, errors.New("decode exact Velero DataUploadResult ConfigMap")
+		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("decode observed Velero DataUploadResult ConfigMap")
 	}
 	payload, exists := configMap.Data[restoreUID]
 	if !exists {
-		return ConfigMap{}, "", DataUploadResult{}, errors.New("Velero DataUploadResult key is missing")
+		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("observed Velero DataUploadResult key is missing")
 	}
 	result, err := DecodeDataUploadResult([]byte(payload))
 	if err != nil || sourceProof.Namespace != result.SourceNamespace {
-		return ConfigMap{}, "", DataUploadResult{}, errors.New("decode exact Velero DataUploadResult payload")
+		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("decode observed Velero DataUploadResult payload")
 	}
-	return configMap, payload, result, nil
+	watchStartedAt, watchStartedErr := time.Parse(time.RFC3339Nano, observation.WatchStartedAt)
+	observedAt, observedErr := time.Parse(time.RFC3339Nano, observation.ObservedAt)
+	restoreStarted, startedErr := time.Parse(time.RFC3339Nano, restoreObject.Status.StartTimestamp)
+	restoreCompleted, completedErr := time.Parse(time.RFC3339Nano, restoreObject.Status.CompletionTimestamp)
+	if watchStartedErr != nil || observedErr != nil || startedErr != nil || completedErr != nil || watchStartedAt.After(restoreStarted) ||
+		observedAt.Before(restoreStarted) || observedAt.After(restoreCompleted) || configMap.Identity.Metadata.CreationTimestamp != observation.ObservedAt {
+		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("Velero DataUploadResult observation is outside the Restore timeline")
+	}
+	return configMap, payload, result, observation.ObservedAt, nil
+}
+
+func confirmVeleroAutoDeletedDataUploadResult(ctx context.Context, reader KubernetesReader, request CollectionRequest, configMap ConfigMap, restoreObject Restore, observedAt string, clock Clock) (string, error) {
+	target := observedTarget{GVR: restoreproof.CoreV1CMGVR, Namespace: request.VeleroNamespace, Name: configMap.Identity.Metadata.Name, Proof: configMap.Identity.Target("configmaps")}
+	if err := requireExactAbsentObservedTarget(ctx, reader, target); err != nil {
+		return "", errors.New("Velero DataUploadResult auto-deletion was not confirmed")
+	}
+	confirmedAt := canonicalTimestamp(clock.Now())
+	observed, observedErr := time.Parse(time.RFC3339Nano, observedAt)
+	completed, completedErr := time.Parse(time.RFC3339Nano, restoreObject.Status.CompletionTimestamp)
+	confirmed, confirmedErr := time.Parse(time.RFC3339Nano, confirmedAt)
+	if observedErr != nil || completedErr != nil || confirmedErr != nil || observed.After(completed) || confirmed.Before(completed) {
+		return "", errors.New("Velero DataUploadResult auto-deletion timeline is invalid")
+	}
+	return confirmedAt, nil
+}
+
+func requireExactAbsentObservedTarget(ctx context.Context, reader KubernetesReader, target observedTarget) error {
+	if _, err := reader.Get(ctx, target.GVR, target.Namespace, target.Name); !errors.Is(err, ErrNotFound) {
+		return errors.New("auto-cleaned Kubernetes object is present or unreadable")
+	}
+	absent, err := reader.ConfirmAbsent(ctx, target.GVR, target.Namespace, target.Name)
+	if err != nil || !absent {
+		return errors.New("auto-cleaned Kubernetes object absence is unconfirmed")
+	}
+	return nil
 }
 
 func findDataDownload(ctx context.Context, reader KubernetesReader, request CollectionRequest, restoreObject Restore, targetPVC PersistentVolumeClaim, result DataUploadResult) (DataDownload, error) {
@@ -824,9 +886,9 @@ func buildDataUploadProof(request CollectionRequest, backup Backup, source resto
 	return proof
 }
 
-func buildDataUploadResultProof(request CollectionRequest, restoreObject Restore, source restoreproof.SourceResource, configMap ConfigMap, result DataUploadResult, upload restoreproof.DataUploadProof, payloadSHA string) restoreproof.DataUploadResultProof {
+func buildDataUploadResultProof(request CollectionRequest, restoreObject Restore, source restoreproof.SourceResource, configMap ConfigMap, result DataUploadResult, upload restoreproof.DataUploadProof, payloadSHA, observedAt, autoDeletedAt string) restoreproof.DataUploadResultProof {
 	proof := restoreproof.DataUploadResultProof{
-		Status:                   "generated-consumed-cleaned",
+		Status:                   "generated-consumed-velero-cleaned",
 		GVR:                      restoreproof.CoreV1CMGVR,
 		Object:                   targetPointer(configMap.Identity.Target("configmaps")),
 		DataUploadUIDSHA256:      upload.UIDSHA256,
@@ -846,6 +908,8 @@ func buildDataUploadResultProof(request CollectionRequest, restoreObject Restore
 		NodeOS:                   result.NodeOS,
 		DataMoverResultSHA256:    optionalMapSHA256(result.DataMoverResult),
 		ResultPayloadSHA256:      payloadSHA,
+		ObservedAt:               observedAt,
+		VeleroAutoDeletedAt:      autoDeletedAt,
 		EvidenceRef:              request.EvidencePrefix + "/velero-data-upload-result",
 	}
 	proof.EvidenceSHA256 = restoreproof.DataUploadResultEvidenceSHA256(&proof)
@@ -1001,7 +1065,7 @@ func validateRequest(request CollectionRequest) error {
 		!safeName(request.SourceNamespace) || !safeName(request.SourcePVC) || !safeName(request.TargetNamespace) || !safeName(request.TargetPVC) ||
 		!safeName(request.DataUploadName) || !safeName(request.ServerStatusRequestName) || !validSHA256(request.ServerStatusRequestUIDSHA256) ||
 		!validSHA256(request.CleanupRunNonceSHA256) ||
-		request.SourceNamespace == request.TargetNamespace || request.SourcePVC != request.TargetPVC || !safeEvidencePrefix(request.EvidencePrefix) {
+		request.SourceNamespace == request.TargetNamespace || request.SourcePVC != request.TargetPVC || !safeEvidencePrefix(request.EvidencePrefix) || request.DataUploadResultObservation == nil {
 		return errors.New("restore proof collection request is invalid")
 	}
 	return nil

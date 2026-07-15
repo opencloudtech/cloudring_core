@@ -69,12 +69,13 @@ type SourceBaseline struct {
 // CleanupContext binds the proof to exact source and restored inventories and
 // to the observed cleanup timeline.
 type CleanupContext struct {
-	ValidationCompletedAt string           `json:"validationCompletedAt"`
-	CleanupStartedAt      string           `json:"cleanupStartedAt"`
-	CleanupCompletedAt    string           `json:"cleanupCompletedAt"`
-	VerifiedAt            string           `json:"verifiedAt"`
-	TargetResources       []TargetResource `json:"targetResources"`
-	SourceResources       []SourceResource `json:"sourceResources"`
+	ValidationCompletedAt      string           `json:"validationCompletedAt"`
+	CleanupStartedAt           string           `json:"cleanupStartedAt"`
+	CleanupCompletedAt         string           `json:"cleanupCompletedAt"`
+	VerifiedAt                 string           `json:"verifiedAt"`
+	TargetResources            []TargetResource `json:"targetResources"`
+	VeleroAutoCleanedResources []TargetResource `json:"veleroAutoCleanedResources"`
+	SourceResources            []SourceResource `json:"sourceResources"`
 }
 
 // VolumeRestoreContext is the minimum signed parent context required to
@@ -297,6 +298,8 @@ type DataUploadResultProof struct {
 	NodeOS                   string          `json:"nodeOs"`
 	DataMoverResultSHA256    string          `json:"dataMoverResultSha256,omitempty"`
 	ResultPayloadSHA256      string          `json:"resultPayloadSha256"`
+	ObservedAt               string          `json:"observedAt"`
+	VeleroAutoDeletedAt      string          `json:"veleroAutoDeletedAt"`
 	EvidenceRef              string          `json:"evidenceRef"`
 	EvidenceSHA256           string          `json:"evidenceSha256"`
 }

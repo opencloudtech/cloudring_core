@@ -141,7 +141,7 @@ func validateContext(context *VolumeRestoreContext) error {
 	}
 	cleanup := &context.Cleanup
 	if !canonicalTime(cleanup.ValidationCompletedAt) || !canonicalTime(cleanup.CleanupStartedAt) || !canonicalTime(cleanup.CleanupCompletedAt) || !canonicalTime(cleanup.VerifiedAt) ||
-		len(cleanup.SourceResources) != 2 || len(cleanup.TargetResources) != 4 {
+		len(cleanup.SourceResources) != 2 || len(cleanup.TargetResources) != 4 || len(cleanup.VeleroAutoCleanedResources) != 1 {
 		return errors.New("restore proof cleanup context is invalid")
 	}
 	validation, _ := time.Parse(time.RFC3339Nano, cleanup.ValidationCompletedAt)
@@ -196,6 +196,10 @@ func validateContext(context *VolumeRestoreContext) error {
 		if remaining != 0 {
 			return errors.New("restore proof target inventory is incomplete")
 		}
+	}
+	autoCleaned := cleanup.VeleroAutoCleanedResources[0]
+	if autoCleaned.Resource != "configmaps" || !containsTarget(cleanup.TargetResources, &autoCleaned) {
+		return errors.New("restore proof Velero auto-cleaned inventory is invalid")
 	}
 	return nil
 }
@@ -436,7 +440,8 @@ func validateDataUploadBindings(receipt *VolumeReceipt) error {
 		!uploadStarted.Before(uploadCompleted) || uploadCompleted.After(backupCompleted) || retainedAt.Before(verifiedAt) {
 		return errors.New("Velero DataUpload proof timeline is invalid")
 	}
-	if result.Status != "generated-consumed-cleaned" || result.GVR != CoreV1CMGVR || result.Object == nil || result.Object.Namespace != receipt.Context.VeleroNamespace || !containsTarget(receipt.Context.Cleanup.TargetResources, result.Object) ||
+	if result.Status != "generated-consumed-velero-cleaned" || result.GVR != CoreV1CMGVR || result.Object == nil || result.Object.Namespace != receipt.Context.VeleroNamespace || !containsTarget(receipt.Context.Cleanup.TargetResources, result.Object) ||
+		len(receipt.Context.Cleanup.VeleroAutoCleanedResources) != 1 || receipt.Context.Cleanup.VeleroAutoCleanedResources[0] != *result.Object ||
 		result.DataUploadUIDSHA256 != upload.UIDSHA256 || result.DataUploadName != upload.Name || result.ArchivedDataUploadSHA256 != upload.ArchivedObjectSHA256 ||
 		result.RestoreUIDSHA256 != receipt.Context.RestoreUIDSHA256 || result.RestoreUIDLabelSHA256 != receipt.Context.RestoreUIDSHA256 ||
 		result.RestoreUIDDataKeySHA256 != receipt.Context.RestoreUIDSHA256 || result.PVCNamespaceNameLabel != validLabelValue(upload.SourcePVC.Namespace+"."+upload.SourcePVC.Name) ||
@@ -447,6 +452,15 @@ func validateDataUploadBindings(receipt *VolumeReceipt) error {
 		result.DataMoverResultSHA256 != upload.DataMoverResultSHA256 || !validDigest(result.ResultPayloadSHA256) || !validEvidence(result.EvidenceRef, result.EvidenceSHA256) ||
 		result.EvidenceSHA256 != DataUploadResultEvidenceSHA256(result) {
 		return errors.New("Velero DataUploadResult proof is invalid")
+	}
+	resultObserved, observedErr := time.Parse(time.RFC3339Nano, result.ObservedAt)
+	resultAutoDeleted, autoDeletedErr := time.Parse(time.RFC3339Nano, result.VeleroAutoDeletedAt)
+	restoreStarted, _ := time.Parse(time.RFC3339Nano, receipt.Context.RestoreStartedAt)
+	restoreCompleted, _ := time.Parse(time.RFC3339Nano, receipt.Context.CompletedAt)
+	validationCompleted, _ := time.Parse(time.RFC3339Nano, receipt.Context.Cleanup.ValidationCompletedAt)
+	if observedErr != nil || autoDeletedErr != nil || resultObserved.Before(restoreStarted) || resultObserved.After(restoreCompleted) ||
+		resultAutoDeleted.Before(restoreCompleted) || resultAutoDeleted.After(validationCompleted) {
+		return errors.New("Velero DataUploadResult observation and auto-deletion timeline is invalid")
 	}
 	if len(lineage.Helpers) != 1 || lineage.Helpers[0].DataDownload == nil {
 		return errors.New("Velero DataUploadResult is not linked to one DataDownload")

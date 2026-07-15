@@ -43,11 +43,15 @@ contract, negative tests, and downstream acceptance.
 ## Trust and mutation boundary
 
 The collector uses `kubectl get --raw` against exact API paths. It does not
-create, patch, or delete Kubernetes resources. It waits for the downstream
-restore workflow to remove the restored PVC, PV, DataDownload, and
-DataUploadResult ConfigMap. It fails closed if it observes a name under a
-different UID, but polling cannot prove that a short-lived replacement never
-existed between observations.
+create, patch, or delete Kubernetes resources. Before Restore creation, its
+observation command establishes an empty exact LIST fence and resumes WATCH
+from that resourceVersion. This is required because Velero creates and deletes
+the DataUploadResult ConfigMap before publishing terminal Restore status;
+post-completion polling cannot observe it. Expired resourceVersions, malformed
+streams, multiple `ADDED` events, replacement, or ambiguity fail closed. The
+terminal collector waits for the downstream workflow to remove only the
+restored PVC, PV, and DataDownload and separately confirms that Velero removed
+the exact observed ConfigMap.
 
 Two executable adapters are required:
 
@@ -63,6 +67,12 @@ Two executable adapters are required:
 The runtime copies each adapter into a private pinned executable snapshot,
 hashes it, and binds every invocation to a fresh nonce and exact request digest.
 Each invocation has a hard timeout and Unix process-tree termination.
+Adapters receive an explicit minimal environment. When collection uses
+`--kubeconfig-fd`, only the data-probe adapter receives the same in-memory
+kubeconfig through a fresh anonymous replay pipe. The provider observer receives
+the exact raw CSI handle on stdin and no Kubernetes credentials. Ambient
+Bitwarden, cloud-provider, object-store, and other credential variables are not
+inherited by either adapter.
 Adapters remain installation trust roots: operators must review them and
 separately sign accepted receipts. An unsigned receipt proves internal
 consistency; it is not sufficient by itself for a release claim.
@@ -78,8 +88,27 @@ go run ./cmd/cloudring-backup baseline \
 ```
 
 Create the private baseline request from
-`contracts/backup-proof/fixtures/synthetic-baseline-request.json`. After the
-Restore completes, the downstream workflow creates an official
+`contracts/backup-proof/fixtures/synthetic-baseline-request.json`. Next create
+a private observation request from
+`synthetic-data-upload-result-observation-request.json`, start the observer,
+and wait for its unique readiness marker before creating the Restore:
+
+```sh
+go run ./cmd/cloudring-backup observe-data-upload-result \
+  --request /protected/data-upload-result-observation-request.json \
+  --ready /protected/run-unique.observation-ready.json \
+  --output /protected/data-upload-result-observation.json \
+  --timeout 30m
+```
+
+Validate the marker against
+`data-upload-result-observation-ready.schema.json` and compare its
+`requestSha256` with the current observation request. Only then create the
+Restore. Keep the observer running until it atomically writes the non-overwriting
+`0600` observation artifact. If it exits without that artifact, abandon the
+restore proof run rather than relisting or synthesizing the ConfigMap.
+
+After the Restore completes, the downstream workflow creates an official
 `velero.io/v1` `ServerStatusRequest`, waits for `status.phase: Processed`, and
 records its exact name plus SHA-256 of its UID in a separate collection request
 derived from `synthetic-collection-request.json`. Start collection while that
@@ -98,6 +127,7 @@ go run ./cmd/cloudring-backup collect \
   --request /protected/collection-request.json \
   --baseline /protected/source-baseline.json \
   --archive /protected/backup-contents.tar.gz \
+  --data-upload-result-observation /protected/data-upload-result-observation.json \
   --data-probe-adapter /opt/cloudring/bin/volume-probe \
   --provider-adapter /opt/cloudring/bin/provider-observer \
   --cleanup-ready /protected/run-unique.cleanup-ready.json \
@@ -106,14 +136,18 @@ go run ./cmd/cloudring-backup collect \
 ```
 
 The collection process first proves that the source is unchanged, validates
-the live Velero object lineage, and proves that the retained DataUpload matches
+the captured result plus terminal live Velero lineage, confirms Velero's exact
+result-ConfigMap deletion, and proves that the retained DataUpload matches
 its exact archived copy. It then invokes the data probe and verifies the
 provider artifact is present. Only after both checks succeed, it atomically
 creates the non-overwriting `0600` cleanup-ready marker. A downstream workflow
 must wait for that run-unique marker, validate it against
 `contracts/backup-proof/cleanup-ready.schema.json`, and compare its
 `cleanupRunNonceSha256` with the current request before performing
-isolated-restore cleanup. Every delete must use both the exact original UID and
+isolated-restore cleanup. Only the restored PVC, PV, and DataDownload are
+downstream cleanup targets; the DataUploadResult ConfigMap is a recorded
+Velero-auto-cleaned target and must not be deleted by that workflow. Every
+downstream delete must use both the exact original UID and
 resourceVersion through Kubernetes `DeleteOptions.preconditions`, stop on
 either precondition conflict, and prevent re-creation of those names until the
 collector emits a valid receipt or the run is abandoned. These raw UIDs and
@@ -160,10 +194,17 @@ cloudring-backup baseline \
   --output /protected/source-baseline.json \
   --kubeconfig-fd 3
 
+cloudring-backup observe-data-upload-result \
+  --request /protected/data-upload-result-observation-request.json \
+  --ready /protected/run-unique.observation-ready.json \
+  --output /protected/data-upload-result-observation.json \
+  --kubeconfig-fd 3
+
 cloudring-backup collect \
   --request /protected/collection-request.json \
   --baseline /protected/source-baseline.json \
   --archive /protected/backup-contents.tar.gz \
+  --data-upload-result-observation /protected/data-upload-result-observation.json \
   --data-probe-adapter /opt/cloudring/bin/volume-probe \
   --provider-adapter /opt/cloudring/bin/provider-observer \
   --cleanup-ready /protected/run-unique.cleanup-ready.json \
@@ -175,10 +216,14 @@ cloudring-backup collect \
 The collector consumes that pipe once, keeps the bounded kubeconfig only in
 process memory, and gives every `kubectl` invocation a fresh anonymous replay
 pipe. It rejects regular-file descriptors, never places kubeconfig bytes in
-argv or the environment, and removes unrelated credential variables from the
-`kubectl` environment. This pipe mode is supported on Linux and macOS; no
-native Windows claim is made. The default mode without `--kubeconfig-fd`
-continues to use the operator's normal Kubernetes client configuration.
+argv or the environment, and removes unrelated credential variables from both
+the `kubectl` and adapter environments. This pipe mode is supported on Linux
+and macOS; no native Windows claim is made. The default mode without
+`--kubeconfig-fd` continues to use the operator's normal Kubernetes client
+configuration for collector reads, but does not expose that ambient
+configuration or other parent credentials to adapters. A data-probe adapter
+that queries Kubernetes therefore requires pipe-backed mode; the provider
+observer intentionally has no Kubernetes credential mode.
 
 Consumers that build additional multi-query collectors must pin the executable
 once with `secureexec.Pin` and invoke it through `Executable.Run`. That boundary
@@ -192,7 +237,9 @@ collector.
 The collector needs only `get` on the exact named Backup, Restore,
 ServerStatusRequest, source and target PVC, and source and target PV, plus `get/list` on
 PVCs, PVs, DataUploads, DataDownloads, and ConfigMaps used for exact reads,
-bounded selection, and 404 confirmation. It does not need create, update,
+bounded selection, and 404 confirmation. The pre-Restore observer additionally
+needs `watch` on ConfigMaps and `get/list` on the exact Restore/ConfigMap
+collections. It does not need create, update,
 patch, or delete permission. Creation of the short-lived ServerStatusRequest
 belongs to the downstream workflow, not this collector. The BackupContents
 archive is supplied as an existing protected file; its acquisition policy
@@ -212,10 +259,11 @@ concatenated gzip members, and trailing tar data.
 
 The collector makes no live mutation, so interruption requires no rollback.
 After confirming that the collector has exited and no downstream cleanup is
-still active, remove a stale cleanup-ready marker. Delete any incomplete
+still active, remove stale observation-ready and cleanup-ready markers. Delete any incomplete
 private output, confirm the source baseline still matches, obtain a fresh
 BackupContents archive if its identity changed, and repeat collection with a
-new isolated restore and new marker path. Existing output or marker paths are
+new isolated restore and new marker paths. Never restart observation after the
+Restore exists. Existing output or marker paths are
 never reused; a stale path makes a new run fail closed.
 
 ## Non-claims
@@ -226,8 +274,9 @@ readiness. It does not deploy an object store, create a backup, sign evidence,
 prove five restore targets, or validate tenant isolation beyond the selected
 volume path. It proves that source and target PV identities and handles are
 distinct and observes the source handle present after target cleanup, but does not replace a full source
-workload/application consistency check. It also does not prove an unobserved
-create-delete interval or downstream compliance with preconditioned deletion.
+workload/application consistency check. The result ConfigMap is covered by a
+gap-free LIST+WATCH, but other cleanup targets still rely on exact fences and
+downstream compliance with preconditioned deletion.
 Those claims require the real off-cell immutable store, a complete
 backup, signed multi-target restore drill, cleanup, tenant-isolation, and
 downstream release gates.

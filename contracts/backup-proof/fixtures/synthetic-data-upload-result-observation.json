@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "cloudring.restore-proof.data-upload-result-observation/v1",
+  "watchStartedAt": "2026-07-14T12:00:00Z",
+  "observedAt": "2026-07-14T12:01:30Z",
+  "capturedAt": "2026-07-14T12:01:31Z",
+  "requestSha256": "a76b2c098b79c743bc21bfe88eec5bbd5e3a3b84398373b134a8e4a2fc482017",
+  "eventType": "ADDED",
+  "object": {
+    "apiVersion": "v1",
+    "kind": "ConfigMap",
+    "metadata": {
+      "name": "synthetic-backup-volume-1-result",
+      "namespace": "velero",
+      "uid": "synthetic-result-uid",
+      "resourceVersion": "12345",
+      "creationTimestamp": "2026-07-14T12:01:30Z",
+      "labels": {
+        "velero.io/restore-uid": "synthetic-restore-uid",
+        "velero.io/pvc-namespace-name": "synthetic-source.example-volume",
+        "velero.io/resource-usage": "DataUpload"
+      },
+      "ownerReferences": []
+    },
+    "data": {
+      "synthetic-restore-uid": "{\"backupStorageLocation\":\"offcell\",\"datamover\":\"\",\"snapshotID\":\"synthetic-snapshot\",\"sourceNamespace\":\"synthetic-source\",\"dataMoverResult\":{},\"nodeOS\":\"linux\",\"snapshotSize\":4096}"
+    }
+  },
+  "objectSha256": "7bcaef189edf515c371b85c070f5a5653bea4174ec57f6aea6670244e68b2c16",
+  "evidenceRef": "runtime/synthetic-drill/velero-data-upload-result-observation",
+  "evidenceSha256": "49b0bda6dcac4bd52d625f75521f5f1eefba06ea77ccbf605fca3af95400d5bb"
+}

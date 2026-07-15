@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,23 +24,14 @@ import (
 	"github.com/opencloudtech/CloudRING/pkg/backup/velero118"
 )
 
-const (
-	cliStateEnvironment   = "CLOUDRING_BACKUP_TEST_STATE"
-	cliCleanupEnvironment = "CLOUDRING_BACKUP_TEST_CLEANUP"
-)
-
 func TestCollectAndVerifyCLIWithCleanupBarrier(t *testing.T) {
 	directory := t.TempDir()
 	statePath := filepath.Join(directory, "cluster-state.json")
 	simulatedCleanupPath := filepath.Join(directory, "simulated-cleanup")
-	t.Setenv(cliStateEnvironment, statePath)
-	t.Setenv(cliCleanupEnvironment, simulatedCleanupPath)
-
 	helperBinary := buildCLIHelper(t, directory)
-	t.Setenv("CLOUDRING_BACKUP_TEST_HELPER_BINARY", helperBinary)
-	kubectl := writeCLIHelperExecutable(t, directory, "kubectl", "kubectl")
-	probe := writeCLIHelperExecutable(t, directory, "probe", "probe")
-	provider := writeCLIHelperExecutable(t, directory, "provider", "provider")
+	kubectl := writeCLIHelperExecutable(t, directory, "kubectl", "kubectl", helperBinary, statePath, simulatedCleanupPath)
+	probe := writeCLIHelperExecutable(t, directory, "probe", "probe", helperBinary, statePath, simulatedCleanupPath)
+	provider := writeCLIHelperExecutable(t, directory, "provider", "provider", helperBinary, statePath, simulatedCleanupPath)
 
 	sourcePVC := cliKubeObject("v1", "PersistentVolumeClaim", cliMetadata("volume", "source", "source-pvc-uid", "10", nil, nil),
 		map[string]any{"volumeName": "source-pv", "storageClassName": "fast"}, map[string]any{"phase": "Bound"}, nil)
@@ -70,13 +62,15 @@ func TestCollectAndVerifyCLIWithCleanupBarrier(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	request, state, archivedUpload := cliCollectionFixture(t, baselineAt, sourcePVC)
+	request, state, archivedUpload, resultObservation := cliCollectionFixture(t, baselineAt, sourcePVC)
 	writeCLIState(t, statePath, state)
 	requestPath := filepath.Join(directory, "collection-request.json")
+	resultObservationPath := filepath.Join(directory, "data-upload-result-observation.json")
 	archivePath := filepath.Join(directory, "backup-contents.tar.gz")
 	cleanupReadyPath := filepath.Join(directory, "cleanup-ready.json")
 	receiptPath := filepath.Join(directory, "receipt.json")
 	writeJSON(t, requestPath, request, 0o600)
+	writeJSON(t, resultObservationPath, resultObservation, 0o600)
 	writeCLIArchive(t, archivePath, archivedUpload)
 
 	readyResult := make(chan error, 1)
@@ -87,6 +81,7 @@ func TestCollectAndVerifyCLIWithCleanupBarrier(t *testing.T) {
 	var collectOutput bytes.Buffer
 	arguments := []string{
 		"collect", "--request", requestPath, "--baseline", baselinePath, "--archive", archivePath,
+		"--data-upload-result-observation", resultObservationPath,
 		"--data-probe-adapter", probe, "--provider-adapter", provider,
 		"--cleanup-ready", cleanupReadyPath, "--cleanup-timeout", "45s", "--poll-interval", "10ms", "--output", receiptPath, "--kubectl", kubectl,
 	}
@@ -168,7 +163,7 @@ func simulateDownstreamCleanup(ctx context.Context, readyPath, cleanupPath, nonc
 	}
 }
 
-func cliCollectionFixture(t *testing.T, baselineAt time.Time, sourcePVC []byte) (velero118.CollectionRequest, cliHelperState, []byte) {
+func cliCollectionFixture(t *testing.T, baselineAt time.Time, sourcePVC []byte) (velero118.CollectionRequest, cliHelperState, []byte, velero118.DataUploadResultObservation) {
 	t.Helper()
 	trueValue := true
 	restoreUID := "restore-uid"
@@ -210,9 +205,11 @@ func cliCollectionFixture(t *testing.T, baselineAt time.Time, sourcePVC []byte) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	resultCM := cliKubeObject("v1", "ConfigMap", cliMetadata("backup-volume-1-result", "velero", "result-cm-uid", "6", map[string]string{
+	resultMetadata := cliMetadata("backup-volume-1-result", "velero", "result-cm-uid", "6", map[string]string{
 		"velero.io/restore-uid": restoreUID, "velero.io/pvc-namespace-name": "source.volume", "velero.io/resource-usage": "DataUpload",
-	}, nil), nil, nil, map[string]string{restoreUID: string(resultPayload)})
+	}, nil)
+	resultMetadata["creationTimestamp"] = timestamp(2 * time.Millisecond)
+	resultCM := cliKubeObject("v1", "ConfigMap", resultMetadata, nil, nil, map[string]string{restoreUID: string(resultPayload)})
 	downloadLabels := map[string]string{
 		"velero.io/restore-name": "restore-copy", "velero.io/restore-uid": restoreUID, "velero.io/async-operation-id": "dd-operation",
 	}
@@ -233,12 +230,11 @@ func cliCollectionFixture(t *testing.T, baselineAt time.Time, sourcePVC []byte) 
 			"/api/v1/persistentvolumes/target-pv":                                          targetPV,
 			"/apis/velero.io/v2alpha1/namespaces/velero/datauploads/backup-volume-1":       dataUpload,
 			"/apis/velero.io/v2alpha1/namespaces/velero/datadownloads/restore-copy-volume": dataDownload,
-			"/api/v1/namespaces/velero/configmaps/backup-volume-1-result":                  resultCM,
 		},
 		Lists: map[string]json.RawMessage{
 			"/apis/velero.io/v2alpha1/namespaces/velero/datauploads":   cliListObject("velero.io/v2alpha1", "DataUploadList", "50", []json.RawMessage{dataUpload}),
 			"/apis/velero.io/v2alpha1/namespaces/velero/datadownloads": cliListObject("velero.io/v2alpha1", "DataDownloadList", "51", []json.RawMessage{dataDownload}),
-			"/api/v1/namespaces/velero/configmaps":                     cliListObject("v1", "ConfigMapList", "52", []json.RawMessage{resultCM}),
+			"/api/v1/namespaces/velero/configmaps":                     cliListObject("v1", "ConfigMapList", "52", nil),
 		},
 	}
 	request := velero118.CollectionRequest{
@@ -247,10 +243,46 @@ func cliCollectionFixture(t *testing.T, baselineAt time.Time, sourcePVC []byte) 
 		ServerStatusRequestName: "cloudring-status", ServerStatusRequestUIDSHA256: restoreproof.SHA256("server-status-uid"),
 		CleanupRunNonceSHA256: restoreproof.SHA256("cli-e2e-cleanup-run-nonce"), EvidencePrefix: "runtime/task22a-cli",
 	}
+	observationRequest := velero118.DataUploadResultObservationRequest{
+		SchemaVersion:   velero118.DataUploadResultObservationRequestSchemaVersion,
+		VeleroNamespace: request.VeleroNamespace, RestoreName: request.RestoreName, SourceNamespace: request.SourceNamespace,
+		SourcePVC: request.SourcePVC, DataUploadName: request.DataUploadName, EvidencePrefix: request.EvidencePrefix,
+	}
+	resultObservation := velero118.DataUploadResultObservation{
+		SchemaVersion:  velero118.DataUploadResultObservationSchemaVersion,
+		WatchStartedAt: timestamp(0), ObservedAt: timestamp(2 * time.Millisecond), CapturedAt: timestamp(3 * time.Millisecond),
+		RequestSHA256: cliJSONSHA256(t, observationRequest), EventType: "ADDED", Object: resultCM,
+		ObjectSHA256: cliCanonicalJSONSHA256(t, resultCM), EvidenceRef: request.EvidencePrefix + "/velero-data-upload-result-observation",
+	}
+	resultObservation.EvidenceSHA256 = cliObservationEvidenceSHA256(t, resultObservation)
 	if wait := time.Until(baselineAt.Add(6 * time.Millisecond)); wait > 0 {
 		time.Sleep(wait)
 	}
-	return request, state, dataUpload
+	return request, state, dataUpload, resultObservation
+}
+
+func cliJSONSHA256(t *testing.T, value any) string {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return restoreproof.SHA256(string(payload))
+}
+
+func cliCanonicalJSONSHA256(t *testing.T, payload []byte) string {
+	t.Helper()
+	var value any
+	if err := json.Unmarshal(payload, &value); err != nil {
+		t.Fatal(err)
+	}
+	return cliJSONSHA256(t, value)
+}
+
+func cliObservationEvidenceSHA256(t *testing.T, observation velero118.DataUploadResultObservation) string {
+	t.Helper()
+	observation.EvidenceSHA256 = ""
+	return cliJSONSHA256(t, observation)
 }
 
 func cliMetadata(name, namespace, uid, resourceVersion string, labels map[string]string, owners []map[string]any) map[string]any {
@@ -297,10 +329,12 @@ func writeCLIState(t *testing.T, path string, state cliHelperState) {
 	writeJSON(t, path, state, 0o600)
 }
 
-func writeCLIHelperExecutable(t *testing.T, directory, name, mode string) string {
+func writeCLIHelperExecutable(t *testing.T, directory, name, mode, helperBinary, statePath, cleanupPath string) string {
 	t.Helper()
 	path := filepath.Join(directory, name)
-	body := "#!/bin/sh\nexec \"$CLOUDRING_BACKUP_TEST_HELPER_BINARY\" " + mode + " \"$@\"\n"
+	body := "#!/bin/sh\nCLOUDRING_BACKUP_TEST_STATE=" + strconv.Quote(statePath) +
+		" CLOUDRING_BACKUP_TEST_CLEANUP=" + strconv.Quote(cleanupPath) +
+		" exec " + strconv.Quote(helperBinary) + " " + mode + " \"$@\"\n"
 	// #nosec G306 -- test-only executable in a per-test private directory.
 	if err := os.WriteFile(path, []byte(body), 0o700); err != nil {
 		t.Fatal(err)

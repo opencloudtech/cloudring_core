@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "cloudring.restore-proof.data-upload-result-observation-ready/v1",
+  "status": "ready-for-restore",
+  "watchStartedAt": "2026-07-14T12:00:00Z",
+  "requestSha256": "a76b2c098b79c743bc21bfe88eec5bbd5e3a3b84398373b134a8e4a2fc482017"
+}

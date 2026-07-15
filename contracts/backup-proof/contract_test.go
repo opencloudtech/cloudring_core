@@ -13,12 +13,17 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
+	"github.com/opencloudtech/CloudRING/pkg/backup/restoreproof"
 	"github.com/opencloudtech/CloudRING/pkg/backup/velero118"
 )
 
 func TestBackupProofContractsAreStrictJSONAndFixtureMatchesRuntime(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{"baseline-request.schema.json", "collection-request.schema.json", "adapter-protocol.schema.json", "cleanup-ready.schema.json", "restore-proof.schema.json"} {
+	for _, path := range []string{
+		"baseline-request.schema.json", "collection-request.schema.json", "data-upload-result-observation-request.schema.json",
+		"data-upload-result-observation-ready.schema.json", "data-upload-result-observation.schema.json", "adapter-protocol.schema.json",
+		"cleanup-ready.schema.json", "restore-proof.schema.json",
+	} {
 		// #nosec G304 -- paths are a closed repository-owned fixture list.
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -33,9 +38,12 @@ func TestBackupProofContractsAreStrictJSONAndFixtureMatchesRuntime(t *testing.T)
 		}
 	}
 	for fixture, schemaPath := range map[string]string{
-		"fixtures/synthetic-baseline-request.json":   "baseline-request.schema.json",
-		"fixtures/synthetic-collection-request.json": "collection-request.schema.json",
-		"fixtures/synthetic-cleanup-ready.json":      "cleanup-ready.schema.json",
+		"fixtures/synthetic-baseline-request.json":                       "baseline-request.schema.json",
+		"fixtures/synthetic-collection-request.json":                     "collection-request.schema.json",
+		"fixtures/synthetic-data-upload-result-observation-request.json": "data-upload-result-observation-request.schema.json",
+		"fixtures/synthetic-data-upload-result-observation-ready.json":   "data-upload-result-observation-ready.schema.json",
+		"fixtures/synthetic-data-upload-result-observation.json":         "data-upload-result-observation.schema.json",
+		"fixtures/synthetic-cleanup-ready.json":                          "cleanup-ready.schema.json",
 	} {
 		schema, err := jsonschema.NewCompiler().Compile(schemaPath)
 		if err != nil {
@@ -88,13 +96,61 @@ func TestBackupProofContractsAreStrictJSONAndFixtureMatchesRuntime(t *testing.T)
 		ready.Status != velero118.CleanupReadyStatus || ready.CleanupRunNonceSHA256 != request.CleanupRunNonceSHA256 {
 		t.Fatal("synthetic cleanup marker does not match the runtime contract")
 	}
+	observationRequestFixture, err := os.ReadFile("fixtures/synthetic-data-upload-result-observation-request.json") // #nosec G304 -- repository-owned test fixture path.
+	if err != nil {
+		t.Fatal(err)
+	}
+	var observationRequest velero118.DataUploadResultObservationRequest
+	if err := strictjson.DecodeExact(observationRequestFixture, &observationRequest); err != nil ||
+		observationRequest.SchemaVersion != velero118.DataUploadResultObservationRequestSchemaVersion || observationRequest.RestoreName == "" {
+		t.Fatal("synthetic DataUploadResult observation request does not match the runtime contract")
+	}
+	requestPayload, err := json.Marshal(observationRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestSHA256 := restoreproof.SHA256(string(requestPayload))
+	observationReadyFixture, err := os.ReadFile("fixtures/synthetic-data-upload-result-observation-ready.json") // #nosec G304 -- repository-owned test fixture path.
+	if err != nil {
+		t.Fatal(err)
+	}
+	var observationReady velero118.DataUploadResultObservationReady
+	if err := strictjson.DecodeExact(observationReadyFixture, &observationReady); err != nil ||
+		observationReady.SchemaVersion != velero118.DataUploadResultObservationReadySchemaVersion || observationReady.Status != velero118.DataUploadResultObservationReadyStatus ||
+		observationReady.RequestSHA256 != requestSHA256 {
+		t.Fatal("synthetic DataUploadResult observation readiness marker is not request-bound")
+	}
+	observationFixture, err := os.ReadFile("fixtures/synthetic-data-upload-result-observation.json") // #nosec G304 -- repository-owned test fixture path.
+	if err != nil {
+		t.Fatal(err)
+	}
+	var observation velero118.DataUploadResultObservation
+	if err := strictjson.DecodeExact(observationFixture, &observation); err != nil || observation.SchemaVersion != velero118.DataUploadResultObservationSchemaVersion ||
+		observation.RequestSHA256 != requestSHA256 || observation.EventType != "ADDED" {
+		t.Fatal("synthetic DataUploadResult observation does not match the runtime envelope")
+	}
+	var canonicalObject any
+	if err := strictjson.Decode(observation.Object, &canonicalObject); err != nil {
+		t.Fatal(err)
+	}
+	canonicalObjectPayload, err := json.Marshal(canonicalObject)
+	if err != nil || observation.ObjectSHA256 != restoreproof.SHA256(string(canonicalObjectPayload)) {
+		t.Fatal("synthetic DataUploadResult object digest is invalid")
+	}
+	claimedEvidenceSHA256 := observation.EvidenceSHA256
+	observation.EvidenceSHA256 = ""
+	observationPayload, err := json.Marshal(observation)
+	if err != nil || claimedEvidenceSHA256 != restoreproof.SHA256(string(observationPayload)) {
+		t.Fatal("synthetic DataUploadResult observation evidence digest is invalid")
+	}
 }
 
 func TestRequestEvidencePrefixBoundaryMatchesSchema(t *testing.T) {
 	t.Parallel()
 	for fixturePath, schemaPath := range map[string]string{
-		"fixtures/synthetic-baseline-request.json":   "baseline-request.schema.json",
-		"fixtures/synthetic-collection-request.json": "collection-request.schema.json",
+		"fixtures/synthetic-baseline-request.json":                       "baseline-request.schema.json",
+		"fixtures/synthetic-collection-request.json":                     "collection-request.schema.json",
+		"fixtures/synthetic-data-upload-result-observation-request.json": "data-upload-result-observation-request.schema.json",
 	} {
 		schema, err := jsonschema.NewCompiler().Compile(schemaPath)
 		if err != nil {

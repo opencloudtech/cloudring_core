@@ -7,18 +7,23 @@ package velero118
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/opencloudtech/CloudRING/pkg/backup/restoreproof"
 )
 
 const (
-	BaselineRequestSchemaVersion   = "cloudring.restore-proof.baseline-request/v1"
-	CollectionRequestSchemaVersion = "cloudring.restore-proof.collection-request/v1"
-	AdapterRequestSchemaVersion    = "cloudring.restore-proof.adapter-request/v1"
-	AdapterResponseSchemaVersion   = "cloudring.restore-proof.adapter-response/v1"
-	CleanupReadySchemaVersion      = "cloudring.restore-proof.cleanup-ready/v1"
-	CleanupReadyStatus             = "ready-for-cleanup"
+	BaselineRequestSchemaVersion                    = "cloudring.restore-proof.baseline-request/v1"
+	CollectionRequestSchemaVersion                  = "cloudring.restore-proof.collection-request/v1"
+	AdapterRequestSchemaVersion                     = "cloudring.restore-proof.adapter-request/v1"
+	AdapterResponseSchemaVersion                    = "cloudring.restore-proof.adapter-response/v1"
+	CleanupReadySchemaVersion                       = "cloudring.restore-proof.cleanup-ready/v1"
+	CleanupReadyStatus                              = "ready-for-cleanup"
+	DataUploadResultObservationRequestSchemaVersion = "cloudring.restore-proof.data-upload-result-observation-request/v1"
+	DataUploadResultObservationSchemaVersion        = "cloudring.restore-proof.data-upload-result-observation/v1"
+	DataUploadResultObservationReadySchemaVersion   = "cloudring.restore-proof.data-upload-result-observation-ready/v1"
+	DataUploadResultObservationReadyStatus          = "ready-for-restore"
 )
 
 type OwnerReference struct {
@@ -34,6 +39,7 @@ type Metadata struct {
 	Namespace         string            `json:"namespace"`
 	UID               string            `json:"uid"`
 	ResourceVersion   string            `json:"resourceVersion"`
+	CreationTimestamp string            `json:"creationTimestamp"`
 	DeletionTimestamp *string           `json:"deletionTimestamp,omitempty"`
 	Labels            map[string]string `json:"labels"`
 	OwnerReferences   []OwnerReference  `json:"ownerReferences"`
@@ -163,6 +169,18 @@ type KubernetesReader interface {
 	ConfirmAbsent(context.Context, restoreproof.GVR, string, string) (bool, error)
 }
 
+// KubernetesWatchReader adds an exact resourceVersion-bound watch for the
+// short-lived resources whose lifecycle cannot be proven by terminal polling.
+type KubernetesWatchReader interface {
+	KubernetesReader
+	WatchPage(context.Context, restoreproof.GVR, string, string, string, int) ([]WatchEvent, string, error)
+}
+
+type WatchEvent struct {
+	Type   string
+	Object []byte
+}
+
 type BaselineRequest struct {
 	SchemaVersion   string `json:"schemaVersion"`
 	SourceNamespace string `json:"sourceNamespace"`
@@ -171,20 +189,62 @@ type BaselineRequest struct {
 }
 
 type CollectionRequest struct {
-	SchemaVersion                string        `json:"schemaVersion"`
-	VeleroNamespace              string        `json:"veleroNamespace"`
-	RestoreName                  string        `json:"restoreName"`
-	SourceNamespace              string        `json:"sourceNamespace"`
-	SourcePVC                    string        `json:"sourcePvc"`
-	TargetNamespace              string        `json:"targetNamespace"`
-	TargetPVC                    string        `json:"targetPvc"`
-	DataUploadName               string        `json:"dataUploadName"`
-	ServerStatusRequestName      string        `json:"serverStatusRequestName"`
-	ServerStatusRequestUIDSHA256 string        `json:"serverStatusRequestUidSha256"`
-	CleanupRunNonceSHA256        string        `json:"cleanupRunNonceSha256,omitempty"`
-	EvidencePrefix               string        `json:"evidencePrefix"`
-	CleanupTimeout               time.Duration `json:"-"`
-	PollInterval                 time.Duration `json:"-"`
+	SchemaVersion                string                       `json:"schemaVersion"`
+	VeleroNamespace              string                       `json:"veleroNamespace"`
+	RestoreName                  string                       `json:"restoreName"`
+	SourceNamespace              string                       `json:"sourceNamespace"`
+	SourcePVC                    string                       `json:"sourcePvc"`
+	TargetNamespace              string                       `json:"targetNamespace"`
+	TargetPVC                    string                       `json:"targetPvc"`
+	DataUploadName               string                       `json:"dataUploadName"`
+	ServerStatusRequestName      string                       `json:"serverStatusRequestName"`
+	ServerStatusRequestUIDSHA256 string                       `json:"serverStatusRequestUidSha256"`
+	CleanupRunNonceSHA256        string                       `json:"cleanupRunNonceSha256,omitempty"`
+	EvidencePrefix               string                       `json:"evidencePrefix"`
+	CleanupTimeout               time.Duration                `json:"-"`
+	PollInterval                 time.Duration                `json:"-"`
+	DataUploadResultObservation  *DataUploadResultObservation `json:"-"`
+}
+
+// DataUploadResultObservationRequest identifies the short-lived ConfigMap
+// Velero creates and consumes while a restore is running. Observation must be
+// started before the Restore is created because Velero deletes this object
+// before publishing the terminal Restore status.
+type DataUploadResultObservationRequest struct {
+	SchemaVersion   string `json:"schemaVersion"`
+	VeleroNamespace string `json:"veleroNamespace"`
+	RestoreName     string `json:"restoreName"`
+	SourceNamespace string `json:"sourceNamespace"`
+	SourcePVC       string `json:"sourcePvc"`
+	DataUploadName  string `json:"dataUploadName"`
+	EvidencePrefix  string `json:"evidencePrefix"`
+}
+
+// DataUploadResultObservation is a private, exact copy of the ephemeral live
+// ConfigMap plus its observation time. Raw UIDs and payload remain outside the
+// source-safe receipt; the collector converts them to digests.
+type DataUploadResultObservation struct {
+	SchemaVersion  string          `json:"schemaVersion"`
+	WatchStartedAt string          `json:"watchStartedAt"`
+	ObservedAt     string          `json:"observedAt"`
+	CapturedAt     string          `json:"capturedAt"`
+	RequestSHA256  string          `json:"requestSha256"`
+	EventType      string          `json:"eventType"`
+	Object         json.RawMessage `json:"object"`
+	ObjectSHA256   string          `json:"objectSha256"`
+	EvidenceRef    string          `json:"evidenceRef"`
+	EvidenceSHA256 string          `json:"evidenceSha256"`
+}
+
+type DataUploadResultObservationReady struct {
+	SchemaVersion  string `json:"schemaVersion"`
+	Status         string `json:"status"`
+	WatchStartedAt string `json:"watchStartedAt"`
+	RequestSHA256  string `json:"requestSha256"`
+}
+
+type DataUploadResultObservationReadyBarrier interface {
+	ReadyForRestore(context.Context, DataUploadResultObservationReady) error
 }
 
 type ProbeRequest struct {
