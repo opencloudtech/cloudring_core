@@ -658,6 +658,12 @@ func (client *openBaoRESTClient) read(ctx context.Context, method, token, path s
 	if status == http.StatusBadRequest && exactMissingAuthMountRead(path, payload) {
 		return ReadResult{Found: false}, nil
 	}
+	// OpenBao 2.5.5 uses the same read-specific HTTP 400 pattern for an
+	// absent secret-engine mount. Accept only the exact mount-bound envelope so
+	// the state machine can authorize create-only KV-v2 initialization.
+	if status == http.StatusBadRequest && exactMissingSecretMountRead(path, payload) {
+		return ReadResult{Found: false}, nil
+	}
 	if status != http.StatusOK {
 		return ReadResult{}, errAPIUnavailable
 	}
@@ -674,6 +680,16 @@ func exactMissingAuthMountRead(path string, payload map[string]any) bool {
 	}
 	errors, ok := stringSlice(payload, "errors")
 	return ok && len(errors) == 1 && errors[0] == "No auth engine at "+mount+"/"
+}
+
+func exactMissingSecretMountRead(path string, payload map[string]any) bool {
+	const prefix = "sys/mounts/"
+	mount := strings.TrimPrefix(path, prefix)
+	if mount == path || !dnsLabel.MatchString(mount) || len(payload) != 1 {
+		return false
+	}
+	errors, ok := stringSlice(payload, "errors")
+	return ok && len(errors) == 1 && errors[0] == "No secret engine mount at "+mount+"/"
 }
 
 func (client *openBaoRESTClient) Write(ctx context.Context, token, path string, body any) (ReadResult, error) {

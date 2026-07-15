@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,6 +31,58 @@ func TestExecuteAppliesCompleteDedicatedIdentitySlice(t *testing.T) {
 	encoded, _ := json.Marshal(report)
 	if strings.Contains(string(encoded), "consumer-example") || strings.Contains(string(encoded), "secret-value") || report.InputMaterialEchoed {
 		t.Fatalf("report reflected request material: %s", encoded)
+	}
+}
+
+func TestExecuteInitializesAbsentKVV2MountInsideExclusiveLease(t *testing.T) {
+	request := validRequest(t)
+	kubernetes := newFakeKubernetes(request)
+	openBao := newFakeOpenBao(request)
+	openBao.kvMount = false
+	report := Execute(context.Background(), request, kubernetes, openBao)
+	path := "sys/mounts/" + request.Contract.KVV2Mount
+	if report.Status != StatusApplied || !report.MutationPerformed || !openBao.kvMount || openBao.writeCounts[path] != 1 || kubernetes.lease.HolderIdentity != "" {
+		t.Fatalf("Execute() report=%+v kvMount=%v writes=%d holder=%q", report, openBao.kvMount, openBao.writeCounts[path], kubernetes.lease.HolderIdentity)
+	}
+	if !slices.Contains(report.CompletedGates, "kv-v2-mount-ready") {
+		t.Fatalf("KV-v2 completion gate missing: %+v", report.CompletedGates)
+	}
+}
+
+func TestExecuteRetainsAmbiguouslyCreatedKVV2MountAndLease(t *testing.T) {
+	request := validRequest(t)
+	kubernetes := newFakeKubernetes(request)
+	openBao := newFakeOpenBao(request)
+	openBao.kvMount = false
+	openBao.commitThenFailPath = "sys/mounts/" + request.Contract.KVV2Mount
+	report := Execute(context.Background(), request, kubernetes, openBao)
+	if report.Status != StatusPartialManualInterventionRequired || !report.MutationPerformed || report.FailedGate != "kv-v2-mount-create-ambiguous" || !openBao.kvMount || kubernetes.lease.HolderIdentity == "" {
+		t.Fatalf("Execute() report=%+v kvMount=%v holder=%q", report, openBao.kvMount, kubernetes.lease.HolderIdentity)
+	}
+	for _, path := range openBao.deletePaths {
+		if path == "sys/mounts/"+request.Contract.KVV2Mount {
+			t.Fatal("ambiguous KV-v2 mount was deleted")
+		}
+	}
+}
+
+func TestExecuteRetainsInitializedKVV2MountWhenLaterMutationRollsBack(t *testing.T) {
+	request := validRequest(t)
+	kubernetes := newFakeKubernetes(request)
+	openBao := newFakeOpenBao(request)
+	openBao.kvMount = false
+	openBao.definitelyRejectPath = "sys/policies/acl/" + request.Contract.PolicyName
+	report := Execute(context.Background(), request, kubernetes, openBao)
+	if report.Status != StatusPartialManualInterventionRequired || !report.MutationPerformed || !report.RollbackAttempted || report.FailedGate != "policy-create-rejected" {
+		t.Fatalf("Execute() report=%+v", report)
+	}
+	if !openBao.kvMount || openBao.mount || openBao.config || openBao.policy || openBao.role || openBao.seed || kubernetes.lease.HolderIdentity != "" {
+		t.Fatalf("unexpected retained state: kvMount=%v mount=%v config=%v policy=%v role=%v seed=%v holder=%q", openBao.kvMount, openBao.mount, openBao.config, openBao.policy, openBao.role, openBao.seed, kubernetes.lease.HolderIdentity)
+	}
+	for _, path := range openBao.deletePaths {
+		if path == "sys/mounts/"+request.Contract.KVV2Mount {
+			t.Fatal("durable KV-v2 mount was deleted during workload-specific rollback")
+		}
 	}
 }
 
@@ -312,12 +365,12 @@ type fakeOpenBao struct {
 	request Request
 	plan    openbaoauth.Plan
 
-	mount, config, policy, role, seed                                                bool
+	kvMount, mount, config, policy, role, seed                                       bool
 	managementRevoked, workloadRevoked                                               bool
 	failPositiveLogin, failAllowedRead, rootManagementToken, driftSeedDuringRollback bool
 	seedReadCount                                                                    int
 	loginTTL                                                                         int64
-	commitThenFailPath, failWithoutCommitPath                                        string
+	commitThenFailPath, failWithoutCommitPath, definitelyRejectPath                  string
 	writeCounts                                                                      map[string]int
 	issueUnexpectedNegativeToken, unexpectedRevoked                                  bool
 	blockDeleteUntilLeaseLoss                                                        <-chan struct{}
@@ -333,7 +386,7 @@ const fakeSeedCreatedAt = "2026-07-13T12:00:00.123456789Z"
 
 func newFakeOpenBao(request Request) *fakeOpenBao {
 	plan, _ := openbaoauth.Build(request.Contract)
-	return &fakeOpenBao{request: request, plan: plan, loginTTL: 600, writeCounts: map[string]int{}, temporaryPolicy: true}
+	return &fakeOpenBao{request: request, plan: plan, kvMount: true, loginTTL: 600, writeCounts: map[string]int{}, temporaryPolicy: true}
 }
 
 func (client *fakeOpenBao) Health(context.Context) error { return nil }
@@ -411,6 +464,9 @@ func (client *fakeOpenBao) Read(_ context.Context, token, path string) (ReadResu
 		}
 		return ReadResult{Found: true, Data: desiredMap(client.plan.AuthConfigReadback)}, nil
 	case "sys/mounts/" + c.KVV2Mount:
+		if !client.kvMount {
+			return ReadResult{}, nil
+		}
 		return ReadResult{Found: true, Data: map[string]any{
 			"type": "kv", "description": "", "accessor": "kv-accessor", "uuid": "kv-uuid", "local": false, "seal_wrap": false, "external_entropy_access": false,
 			"options": map[string]any{"version": "2"}, "plugin_version": "", "running_plugin_version": "v2.5.5+builtin.bao", "running_sha256": "", "deprecation_status": "supported",
@@ -476,6 +532,9 @@ func (client *fakeOpenBao) List(_ context.Context, _ string, path string) (ReadR
 }
 func (client *fakeOpenBao) Write(_ context.Context, token, path string, body any) (ReadResult, error) {
 	client.writeCounts[path]++
+	if client.definitelyRejectPath == path {
+		return ReadResult{}, errDefinitelyRejected
+	}
 	if client.failWithoutCommitPath == path {
 		return ReadResult{}, errMutationAmbiguous
 	}
@@ -490,6 +549,11 @@ func (client *fakeOpenBao) Write(_ context.Context, token, path string, body any
 		client.rootTargetMutation = true
 	case "sys/auth/" + c.AuthMount:
 		client.mount = true
+	case "sys/mounts/" + c.KVV2Mount:
+		if !equalJSON(body, desiredMap(client.plan.KVV2Mount)) {
+			return ReadResult{}, errors.New("unexpected KV-v2 mount body")
+		}
+		client.kvMount = true
 	case "auth/" + c.AuthMount + "/config":
 		client.config = true
 	case "sys/policies/acl/" + c.PolicyName:

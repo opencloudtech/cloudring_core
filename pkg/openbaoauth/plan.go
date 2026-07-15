@@ -19,7 +19,9 @@ var requiredLiveGates = []string{
 	"mount-and-config-state-unchanged-under-exclusive-lock",
 	"static-reviewer-jwt-absent",
 	"deprecated-issuer-config-prestate-captured",
-	"kv-v2-mount-and-policy-cas-prestate-captured",
+	"kv-v2-mount-absent-or-exact-prestate-captured",
+	"kv-v2-mount-create-only-initialization-and-readback-proven",
+	"policy-cas-prestate-captured",
 	"role-prestate-captured-and-drift-fails-closed",
 	"exclusive-operator-lock-covers-all-non-cas-writes-and-readbacks",
 	"existing-auth-mount-with-absent-or-drifted-config-blocks-before-mutation",
@@ -67,6 +69,7 @@ func Build(contract Contract) (Plan, []Problem) {
 		PEMKeys: []string{}, Issuer: config.Issuer, DisableISSValidation: config.DisableISSValidation,
 		DisableLocalCAJWT: config.DisableLocalCAJWT, TokenReviewerJWTSet: false,
 	}
+	kvV2Mount := KVV2MountDesired{Type: "kv", Description: "", Options: map[string]string{"version": "2"}}
 	aclPolicy := ACLPolicyDesired{Policy: policy, CAS: -1, CASRequired: true}
 	role := KubernetesRoleDesired{
 		BoundServiceAccountNames:             []string{contract.WorkloadIdentity.ServiceAccount},
@@ -87,6 +90,8 @@ func Build(contract Contract) (Plan, []Problem) {
 		{ID: "read-kv-v2-mount", Method: "GET", EndpointClass: "secret-mount", Target: contract.KVV2Mount, PreStateRequired: true, CASMode: "none", FailClosedPrecondition: "mount-type-must-be-kv-with-version-two"},
 		{ID: "read-acl-policy", Method: "GET", EndpointClass: "acl-policy", Target: contract.PolicyName, PreStateRequired: true, CASMode: "none"},
 		{ID: "read-kubernetes-auth-role", Method: "GET", EndpointClass: "kubernetes-auth-role", Target: contract.AuthMount + "\x00" + contract.RoleName, PreStateRequired: true, CASMode: "none"},
+		{ID: "initialize-kv-v2-mount-if-absent", Method: "POST", EndpointClass: "secret-mount", Target: contract.KVV2Mount, Mutates: true, Conditional: true, PreStateRequired: true, RunCondition: "kv-v2-mount-state-equals-absent", GlobalMutationGate: authMountLifecycleMutationGate, MutationGuard: "exclusive-lock-held-and-complete-prestate-unchanged", RollbackMode: "retain-current-run-created-empty-mount;automatic-delete-forbidden", CASMode: "api-cas-unavailable-exclusive-lock", DesiredState: kvV2Mount, FailClosedPrecondition: "mount-must-be-absent-or-exact-kv-version-two", ChangeRequiresApproval: true},
+		{ID: "readback-kv-v2-mount", Method: "GET", EndpointClass: "secret-mount", Target: contract.KVV2Mount, Conditional: true, PreStateRequired: true, CASMode: "exact-post-write-readback", DesiredState: kvV2Mount, FailClosedPrecondition: "mount-type-version-defaults-uuid-and-accessor-must-match"},
 		{ID: "create-dedicated-auth-mount-if-absent", Method: "POST", EndpointClass: "auth-mount", Target: contract.AuthMount, Mutates: true, Conditional: true, PreStateRequired: true, RollbackRequired: true, RunCondition: "auth-mount-state-equals-absent", GlobalMutationGate: authMountLifecycleMutationGate, MutationGuard: "exclusive-lock-held-and-prestate-unchanged", RollbackMode: "disable-only-current-run-created-mount-after-exact-ownership-readback", CASMode: "api-cas-unavailable-exclusive-lock", DesiredState: authMount, FailClosedPrecondition: "mount-must-be-absent-or-exact-dedicated-owned-state-with-exact-config", ChangeRequiresApproval: true},
 		{ID: "readback-auth-mount", Method: "GET", EndpointClass: "auth-mount", Target: contract.AuthMount, Conditional: true, PreStateRequired: true, CASMode: "exact-post-write-readback", DesiredState: authMount, FailClosedPrecondition: "mount-type-and-contract-bound-description-must-match"},
 		{ID: "configure-local-reviewer-only-on-created-mount", Method: "POST", EndpointClass: "kubernetes-auth-config", Target: contract.AuthMount, Mutates: true, Conditional: true, PreStateRequired: true, RollbackRequired: true, RunCondition: "create-dedicated-auth-mount-outcome-equals-created-by-current-execution", GlobalMutationGate: authMountLifecycleMutationGate, MutationGuard: "auth-mount-created-by-current-run", RollbackMode: "disable-auth-mount-only-if-created-by-current-execution", CASMode: "api-cas-unavailable-exclusive-lock", DesiredState: config, FailClosedPrecondition: "preexisting-config-must-be-exact;absent-on-preexisting-mount-blocks", ChangeRequiresApproval: true},
@@ -96,7 +101,7 @@ func Build(contract Contract) (Plan, []Problem) {
 		{ID: "create-role-if-absent", Method: "POST", EndpointClass: "kubernetes-auth-role", Target: contract.AuthMount + "\x00" + contract.RoleName, Mutates: true, Conditional: true, PreStateRequired: true, RollbackRequired: true, RunCondition: "all-prestate-and-prior-write-readbacks-succeeded", GlobalMutationGate: authMountLifecycleMutationGate, RollbackMode: "delete-only-current-run-created-role-after-exact-readback", CASMode: "api-cas-unavailable-exclusive-lock", DesiredState: role, FailClosedPrecondition: "existing-role-drift-must-block", ChangeRequiresApproval: true},
 		{ID: "readback-kubernetes-auth-role", Method: "GET", EndpointClass: "kubernetes-auth-role", Target: contract.AuthMount + "\x00" + contract.RoleName, Conditional: true, PreStateRequired: true, CASMode: "exact-post-write-readback", FailClosedPrecondition: "role-must-match-complete-desired-state"},
 	}
-	return Plan{AuthMountOwnership: contract.AuthMountOwnership, AuthMountStates: authMountStates, MutationGate: mutationGate, AuthMount: authMount, AuthConfig: config, AuthConfigReadback: configReadback, ACLPolicy: aclPolicy, Role: role, Actions: actions}, nil
+	return Plan{AuthMountOwnership: contract.AuthMountOwnership, AuthMountStates: authMountStates, MutationGate: mutationGate, KVV2Mount: kvV2Mount, AuthMount: authMount, AuthConfig: config, AuthConfigReadback: configReadback, ACLPolicy: aclPolicy, Role: role, Actions: actions}, nil
 }
 
 // DecideAuthMountLifecycle returns the fixed fail-closed decision for a

@@ -14,9 +14,11 @@ The profile is intentionally split into three reconciliation stages:
    service with TLS, anti-affinity, retained data volumes, a declarative local
    audit device backed by audit storage, and a disruption budget.
 3. `store` publishes the `platform-secrets` `ClusterSecretStore` only after an
-   operator has initialized and unsealed OpenBao, enabled Kubernetes auth,
-   created the least-privilege `cloudring-external-secrets` role, and loaded the
-   first versioned secret paths. The store is usable only by `ExternalSecret`
+   operator has initialized and unsealed OpenBao and the protected supervisor
+   has create-only initialized or exactly reused the shared KV-v2 mount,
+   enabled dedicated Kubernetes auth, created the least-privilege
+   `cloudring-external-secrets` role, and loaded the first versioned secret
+   paths. The store is usable only by `ExternalSecret`
    objects in the privileged `external-secrets` namespace; it is not a tenant
    credential gateway.
 

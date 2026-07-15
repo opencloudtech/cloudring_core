@@ -22,7 +22,7 @@ func TestBuildManagementDelegationIsExactAndSelfAuditable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(delegation.Paths) != 12 || !equal(delegation.Paths["sys/policies/acl/velero-bootstrap"], []string{"read"}) || !equal(delegation.Paths["auth/token/revoke-self"], []string{"update"}) || !equal(delegation.Paths["cloudring/metadata/services/velero/cloud-credentials"], []string{"read"}) {
+	if len(delegation.Paths) != 12 || !equal(delegation.Paths["sys/policies/acl/velero-bootstrap"], []string{"read"}) || !equal(delegation.Paths["auth/token/revoke-self"], []string{"update"}) || !equal(delegation.Paths["cloudring/metadata/services/velero/cloud-credentials"], []string{"read"}) || !equal(delegation.Paths["sys/mounts/cloudring"], []string{"read", "update", "sudo"}) {
 		t.Fatalf("unexpected paths: %#v", delegation.Paths)
 	}
 	if strings.Count(delegation.Body, "path \"") != len(delegation.Paths) || strings.Contains(delegation.Body, "*") {
