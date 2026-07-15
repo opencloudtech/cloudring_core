@@ -14,6 +14,13 @@ CSI snapshotter (`v8.5.0`), and its multi-architecture image is pinned by
 digest. The HelmRelease is suspended by default and the Longhorn UI is not
 exposed by an Ingress.
 
+The snapshot class fixes `parameters.type: snap`, so Velero's CSI data mover
+starts from a local Longhorn snapshot and copies the volume data to the
+configured off-cell backup store. Do not change this class to Longhorn's native
+backup mode: that is a separate workflow which requires a Longhorn backup
+target and would make this Velero restore path depend on redundant storage
+configuration.
+
 The Kubernetes CSI VolumeSnapshot v1 CRDs must already exist before this stage
 is activated. A cluster bootstrap or another explicitly selected storage
 profile may own those cluster-wide CRDs, but it must use schemas compatible

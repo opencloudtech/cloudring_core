@@ -300,3 +300,5 @@ metadata:
     snapshot.storage.kubernetes.io/is-default-class: "false"
 driver: driver.longhorn.io
 deletionPolicy: Retain
+parameters:
+  type: snap
