@@ -38,7 +38,7 @@ func BuildManagementDelegation(contract openbaoauth.Contract, managementPolicyNa
 		"auth/" + contract.AuthMount + "/config":                    {"read", "update"},
 		"auth/" + contract.AuthMount + "/role":                      {"list"},
 		"auth/" + contract.AuthMount + "/role/" + contract.RoleName: {"create", "read", "delete"},
-		"sys/mounts/" + contract.KVV2Mount:                          {"read"},
+		"sys/mounts/" + contract.KVV2Mount:                          {"read", "update", "sudo"},
 		"sys/policies/acl/" + contract.PolicyName:                   {"read", "update", "delete"},
 		"sys/policies/acl/" + managementPolicyName:                  {"read"},
 		contract.KVV2Mount + "/metadata/" + seed:                    {"read"},

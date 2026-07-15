@@ -81,6 +81,26 @@ func TestRESTClientRejectsDuplicateResponseFields(t *testing.T) {
 	}
 }
 
+func TestExactMissingSecretMountReadFailsClosed(t *testing.T) {
+	exact := map[string]any{"errors": []any{"No secret engine mount at cloudring/"}}
+	if !exactMissingSecretMountRead("sys/mounts/cloudring", exact) {
+		t.Fatal("exact OpenBao 2.5.5 missing-secret-mount envelope was rejected")
+	}
+	for _, test := range []struct {
+		path    string
+		payload map[string]any
+	}{
+		{"sys/mounts/cloudring-other", exact},
+		{"sys/mounts/cloudring", map[string]any{"errors": []any{"No secret engine mount at cloudring/"}, "extra": true}},
+		{"sys/mounts/cloudring", map[string]any{"errors": []any{"No secret engine mount at cloudring/", "unexpected"}}},
+		{"sys/mounts/cloudring", map[string]any{"errors": []any{"no secret engine mount"}}},
+	} {
+		if exactMissingSecretMountRead(test.path, test.payload) {
+			t.Fatalf("drifted missing-secret-mount envelope accepted: path=%q payload=%v", test.path, test.payload)
+		}
+	}
+}
+
 func TestLookupSelfAcceptsOpenBao255NullMetadataAndDetectsEffectiveAuthority(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -397,6 +417,12 @@ func TestOpenBaoRESTClientUsesExactStatusesAndResponseShapes(t *testing.T) {
 		case "/v1/sys/auth/kubernetes-drifted":
 			writer.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(writer).Encode(map[string]any{"errors": []string{"unexpected response"}})
+		case "/v1/sys/mounts/cloudring-absent":
+			writer.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(writer).Encode(map[string]any{"errors": []string{"No secret engine mount at cloudring-absent/"}})
+		case "/v1/sys/mounts/cloudring-drifted":
+			writer.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(writer).Encode(map[string]any{"errors": []string{"No secret engine mount at another-mount/"}})
 		case "/v1/synthetic/write", "/v1/synthetic/delete":
 			writer.WriteHeader(http.StatusNoContent)
 		case "/v1/auth/kubernetes-consumer-example/login":
@@ -442,6 +468,12 @@ func TestOpenBaoRESTClientUsesExactStatusesAndResponseShapes(t *testing.T) {
 	}
 	if _, err := client.Read(context.Background(), "bearer-value", "sys/auth/kubernetes-drifted"); err == nil {
 		t.Fatal("drifted missing-auth envelope accepted")
+	}
+	if result, err := client.Read(context.Background(), "bearer-value", "sys/mounts/cloudring-absent"); err != nil || result.Found {
+		t.Fatalf("missing secret mount=%+v err=%v", result, err)
+	}
+	if _, err := client.Read(context.Background(), "bearer-value", "sys/mounts/cloudring-drifted"); err == nil {
+		t.Fatal("drifted missing-secret-mount envelope accepted")
 	}
 	if _, err := client.Write(context.Background(), "bearer-value", "synthetic/write", map[string]any{"value": "synthetic"}); err != nil {
 		t.Fatal(err)

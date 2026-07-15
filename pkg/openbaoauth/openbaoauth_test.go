@@ -26,7 +26,7 @@ func TestEvaluateBuildsDeterministicSanitizedPlan(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("Evaluate() is not deterministic")
 	}
-	if first.Status != "planned" || first.Mode != "plan" || len(first.Actions) != 14 {
+	if first.Status != "planned" || first.Mode != "plan" || len(first.Actions) != 16 {
 		t.Fatalf("unexpected report status/mode/actions: %#v", first)
 	}
 	if first.MutationPerformed || first.ApplyAuthorized || !first.ApplyApprovalNeeded || first.InputMaterialEchoed ||
@@ -130,11 +130,17 @@ func TestBuildEnforcesExactLeastPrivilegeDesiredState(t *testing.T) {
 		role.TokenStrictlyBindIP {
 		t.Fatalf("role violates exact workload profile: %#v", role)
 	}
-	if len(plan.Actions) != 14 ||
+	if len(plan.Actions) != 16 ||
 		findAction(t, plan.Actions, "create-acl-policy-if-absent").CASMode != "create-only-cas-minus-one" ||
 		findAction(t, plan.Actions, "create-role-if-absent").CASMode != "api-cas-unavailable-exclusive-lock" ||
 		findAction(t, plan.Actions, "readback-kubernetes-auth-role").CASMode != "exact-post-write-readback" {
 		t.Fatalf("unexpected action ordering or concurrency contract: %#v", plan.Actions)
+	}
+	if got := findAction(t, plan.Actions, "initialize-kv-v2-mount-if-absent"); got.RollbackRequired || got.RollbackMode != "retain-current-run-created-empty-mount;automatic-delete-forbidden" || !reflect.DeepEqual(got.DesiredState, plan.KVV2Mount) {
+		t.Fatalf("unsafe KV-v2 initialization action: %#v", got)
+	}
+	if got := findAction(t, plan.Actions, "readback-kv-v2-mount"); got.CASMode != "exact-post-write-readback" || !reflect.DeepEqual(got.DesiredState, plan.KVV2Mount) {
+		t.Fatalf("incomplete KV-v2 readback action: %#v", got)
 	}
 	wantPreStateIDs := []string{"read-auth-mount", "read-kubernetes-auth-config", "list-kubernetes-auth-roles", "read-kv-v2-mount", "read-acl-policy", "read-kubernetes-auth-role"}
 	for index, id := range wantPreStateIDs {

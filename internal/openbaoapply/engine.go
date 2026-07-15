@@ -27,16 +27,19 @@ var reportNonClaims = []string{
 }
 
 type mutationState struct {
-	mountCreated   bool
-	mountUUID      string
-	mountAccessor  string
-	policyCreated  bool
-	policyVersion  int64
-	policyModified string
-	roleCreated    bool
-	seedCreated    bool
-	seedCreatedAt  string
-	mutated        bool
+	kvMountCreated  bool
+	kvMountUUID     string
+	kvMountAccessor string
+	mountCreated    bool
+	mountUUID       string
+	mountAccessor   string
+	policyCreated   bool
+	policyVersion   int64
+	policyModified  string
+	roleCreated     bool
+	seedCreated     bool
+	seedCreatedAt   string
+	mutated         bool
 }
 
 type preState struct {
@@ -112,13 +115,24 @@ func Execute(ctx context.Context, request Request, kubernetes KubernetesClient, 
 	}
 	completed = append(completed, "management-token-unwrapped")
 
+	mutations := mutationState{}
 	revokeManagement := func(callCtx context.Context) bool {
 		return revokeAndProve(callCtx, openBao, managementToken)
 	}
 	blockAfterManagement := func(failedGate string) Report {
+		if mutations.kvMountCreated && !kvV2MountStillOwned(guard.CleanupContext(), openBao, managementToken, request, mutations) {
+			guard.abandon()
+			return fixedReport(StatusPartialManualInterventionRequired, true, false, "kv-v2-mount-ownership", completed)
+		}
 		if !revokeManagement(guard.CleanupContext()) {
 			guard.abandon()
 			return fixedReport(StatusPartialManualInterventionRequired, false, false, "management-token-revoke", completed)
+		}
+		if mutations.kvMountCreated {
+			if err := guard.release(context.WithoutCancel(ctx)); err != nil {
+				return fixedReport(StatusPartialManualInterventionRequired, true, false, "lease-release", completed)
+			}
+			return fixedReport(StatusPartialManualInterventionRequired, true, false, failedGate, completed)
 		}
 		return releaseBlocked(failedGate)
 	}
@@ -163,7 +177,6 @@ func Execute(ctx context.Context, request Request, kubernetes KubernetesClient, 
 	}
 	completed = append(completed, "prestate-allows-mutation")
 
-	mutations := mutationState{}
 	holdForManualInspection := func(failedGate string, mutationPossible bool) Report {
 		if mutationPossible {
 			mutations.mutated = true
@@ -212,11 +225,45 @@ func Execute(ctx context.Context, request Request, kubernetes KubernetesClient, 
 		if err := guard.release(context.WithoutCancel(ctx)); err != nil {
 			return fixedReport(StatusPartialManualInterventionRequired, mutations.mutated, true, "lease-release", completed)
 		}
+		if mutations.kvMountCreated {
+			return fixedReport(StatusPartialManualInterventionRequired, true, true, failedGate, completed)
+		}
 		return fixedReport(StatusRolledBack, mutations.mutated, true, failedGate, completed)
 	}
 	failAfterMutation := func(failedGate string) Report {
 		return failAfterMutationWithCleanup(failedGate, false)
 	}
+
+	if !state.kvMount.Found {
+		if !guard.healthy() {
+			guard.abandon()
+			return fixedReport(StatusPartialManualInterventionRequired, false, false, "exclusive-lease-lost", completed)
+		}
+		if !completePreStateUnchanged(guard.Context(), openBao, managementToken, request, plan, state) {
+			return blockAfterManagement("prewrite-prestate-changed")
+		}
+		mountPath := "sys/mounts/" + request.Contract.KVV2Mount
+		_, writeErr := openBao.Write(guard.Context(), managementToken, mountPath, desiredMap(plan.KVV2Mount))
+		mount, readErr := openBao.Read(guard.Context(), managementToken, mountPath)
+		if readErr != nil {
+			return holdForManualInspection("kv-v2-mount-create-ambiguous", true)
+		}
+		if !mount.Found {
+			if definitelyRejected(writeErr) {
+				return blockAfterManagement("kv-v2-mount-create-rejected")
+			}
+			return holdForManualInspection("kv-v2-mount-create-ambiguous", true)
+		}
+		if writeErr != nil {
+			return holdForManualInspection("kv-v2-mount-create-ambiguous", true)
+		}
+		if !exactKVV2Mount(mount) {
+			return holdForManualInspection("kv-v2-mount-create-drifted", true)
+		}
+		mutations.kvMountCreated, mutations.kvMountUUID, mutations.kvMountAccessor = true, textValue(mount.Data, "uuid"), textValue(mount.Data, "accessor")
+		mutations.mutated = true
+	}
+	completed = append(completed, "kv-v2-mount-ready")
 
 	if !state.mount.Found {
 		if !guard.healthy() {
@@ -419,8 +466,26 @@ func capturePreState(ctx context.Context, client OpenBaoClient, token string, re
 	return state, ""
 }
 
+func completePreStateUnchanged(ctx context.Context, client OpenBaoClient, token string, request Request, plan openbaoauth.Plan, prior preState) bool {
+	current, gate := capturePreState(ctx, client, token, request, plan)
+	if gate != "" {
+		return false
+	}
+	return equalReadResult(current.mount, prior.mount) && equalReadResult(current.config, prior.config) &&
+		equalReadResult(current.roles, prior.roles) && equalReadResult(current.kvMount, prior.kvMount) &&
+		equalReadResult(current.policy, prior.policy) && equalReadResult(current.role, prior.role) &&
+		equalReadResult(current.metadata, prior.metadata) && equalReadResult(current.seed, prior.seed)
+}
+
+func equalReadResult(left, right ReadResult) bool {
+	return left.Found == right.Found && equalJSON(left.Data, right.Data) && equalJSON(left.Auth, right.Auth)
+}
+
 func validatePreState(request Request, plan openbaoauth.Plan, state preState) string {
-	if !exactKVV2Mount(state.kvMount) {
+	if state.kvMount.Found && !exactKVV2Mount(state.kvMount) {
+		return "kv-v2-mount-prestate"
+	}
+	if !state.kvMount.Found && (state.metadata.Found || state.seed.Found) {
 		return "kv-v2-mount-prestate"
 	}
 	seedData, _ := decodedSeed(request.Seed)
@@ -597,7 +662,18 @@ func authMountStillOwned(ctx context.Context, client OpenBaoClient, token string
 	if mutations.mountCreated && (textValue(mount.Data, "uuid") != mutations.mountUUID || textValue(mount.Data, "accessor") != mutations.mountAccessor) {
 		return false
 	}
+	if mutations.kvMountCreated && (textValue(kvMount.Data, "uuid") != mutations.kvMountUUID || textValue(kvMount.Data, "accessor") != mutations.kvMountAccessor) {
+		return false
+	}
 	return true
+}
+
+func kvV2MountStillOwned(ctx context.Context, client OpenBaoClient, token string, request Request, mutations mutationState) bool {
+	if !mutations.kvMountCreated {
+		return true
+	}
+	mount, err := client.Read(ctx, token, "sys/mounts/"+request.Contract.KVV2Mount)
+	return err == nil && exactKVV2Mount(mount) && textValue(mount.Data, "uuid") == mutations.kvMountUUID && textValue(mount.Data, "accessor") == mutations.kvMountAccessor
 }
 
 func provenNonRoot(facts TokenFacts) bool {
@@ -749,6 +825,9 @@ func rollback(ctx context.Context, client OpenBaoClient, token string, request R
 		return false
 	}
 	if state.seedCreated {
+		return false
+	}
+	if !kvV2MountStillOwned(ctx, client, token, request, state) {
 		return false
 	}
 	if state.roleCreated {

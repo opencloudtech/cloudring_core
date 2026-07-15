@@ -55,12 +55,22 @@ type Plan struct {
 	AuthMountOwnership string
 	AuthMountStates    []AuthMountStateRule
 	MutationGate       MutationGate
+	KVV2Mount          KVV2MountDesired
 	AuthMount          AuthMountDesired
 	AuthConfig         KubernetesConfigDesired
 	AuthConfigReadback KubernetesConfigReadbackExpected
 	ACLPolicy          ACLPolicyDesired
 	Role               KubernetesRoleDesired
 	Actions            []Action
+}
+
+// KVV2MountDesired is the only shared secret-engine shape the protected
+// supervisor may initialize. An absent mount may be enabled create-only; an
+// existing mount must match this shape exactly.
+type KVV2MountDesired struct {
+	Type        string            `json:"type"`
+	Description string            `json:"description"`
+	Options     map[string]string `json:"options"`
 }
 
 // MutationGate binds every mutating action to the normalized auth-mount

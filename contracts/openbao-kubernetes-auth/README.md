@@ -49,9 +49,13 @@ guard. The desired mount description binds the dedicated mount to the exact
 role name, and the pre-state includes the complete role inventory. Config
 absence alone never authorizes a write. Before the first write, the ordered
 plan reads the auth mount, complete auth config, auth role inventory, KV-v2
-mount, ACL policy, and target role. Any missing prerequisite or drift blocks
-before partial mutation. Every write is also bound to the plan-wide auth-mount
-lifecycle mutation gate.
+mount, ACL policy, target role, seed metadata, and seed data. An absent KV
+mount is the sole create-only platform initialization state: under the same
+exclusive Lease the supervisor repeats the complete pre-state, enables exactly
+`type=kv` with `options.version=2`, and requires the complete OpenBao 2.5.5
+readback including a non-empty UUID and accessor. An existing non-KV-v2 mount,
+any other missing prerequisite, or drift blocks before partial mutation. Every
+write is also bound to the plan-wide auth-mount lifecycle mutation gate.
 
 Post-create mount readback must match both type and contract-bound description.
 Config readback must match the complete desired state and explicitly prove
@@ -63,7 +67,11 @@ policy, stop on role or policy drift, capture rollback data, and perform exact
 post-write readbacks. Kubernetes auth config and role APIs have no CAS, so all
 preflight, write, and readback steps must run under one exclusive operator
 lock. The ACL policy path must not be created until the referenced secret mount
-is proven to be KV version 2. Login, capability denial, External Secrets
+is proven to be KV version 2. A mount created by this operation is durable
+platform initialization: automatic disable is forbidden because a concurrent
+or later writer could make deletion destructive. Any subsequent failure is
+therefore a partial result even when workload-specific auth objects are rolled
+back safely. Login, capability denial, External Secrets
 TokenRequest use, synchronization, rotation, revocation, and audit proof are
 mandatory before readiness can be claimed.
 
@@ -215,7 +223,9 @@ The executor performs this fixed transaction:
 3. Unwrap and verify the exact non-root management token, child accessor,
    canonical policy body, self-service token controls, and target capabilities.
 4. Capture all mount, config, role-inventory, KV mount, policy, role, metadata,
-   and secret pre-state before the first write.
+   and secret pre-state before the first write. If and only if the KV mount is
+   absent, repeat that complete pre-state under the Lease, enable the exact
+   KV-v2 mount create-only, and bind its UUID/accessor into subsequent checks.
 5. Apply the dedicated mount/config, create-only CAS policy, exact role, and
    CAS-0 KV-v2 seed with pre-write rereads and exact OpenBao 2.5.5 post-write
    readbacks, including the complete KV metadata version and timestamp shape.
@@ -226,15 +236,18 @@ The executor performs this fixed transaction:
    resourceVersion.
 
 Before the production seed exists, rollback runs in reverse order and removes
-only current-run objects after exact ownership/readback checks. KV-v2 has no
-atomic compare-and-delete for metadata, so successful creation of the fixed
-production seed is a commit point: later failures never automatically delete
-that data. They return `partial_manual_intervention_required`, revoke temporary
-authority where provable, preserve the target state, and keep the Lease for an
-owned manual recovery. Any drift, ambiguous API result, lost Lease, failed
-revocation, or failed cleanup has the same fail-closed result; automatic Lease
-takeover is forbidden. A fully cleaned supervisor pre-apply failure is
-`rolled_back`; the other statuses are `blocked_preflight` and `applied`.
+only current-run workload-specific objects after exact ownership/readback
+checks. A current-run-created shared KV-v2 mount is deliberately retained and
+never disabled automatically. KV-v2 also has no atomic compare-and-delete for
+metadata, so successful creation of the fixed production seed is a second
+commit point: later failures never automatically delete that data. Such runs
+return `partial_manual_intervention_required`, revoke temporary authority where
+provable, preserve the durable state, and retain or release the Lease according
+to whether mutation ownership is unambiguous. Any drift, ambiguous API result,
+lost Lease, failed revocation, or failed cleanup has the same fail-closed
+result; automatic Lease takeover is forbidden. A fully cleaned supervisor
+pre-apply failure is `rolled_back`; the other terminal statuses are
+`blocked_preflight` and `applied`.
 
 The apply report contains fixed gate names and non-claims only. `applied`
 proves the dedicated OpenBao workload identity plus one secret and its live
