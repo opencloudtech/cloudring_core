@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/one-server-loss/probe-protocol.schema.json",
+  "title": "CloudRING one-server-loss data-probe protocol",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/response" }
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?$"
+    },
+    "runtimeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[A-Za-z0-9][-+._A-Za-z0-9]*$"
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "runNonceSha256", "parentRequestSha256", "phase", "sequence",
+        "probeId", "queryRef", "adapterExecutableSha256"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "cloudring.one-server-loss.data-probe-request/v1" },
+        "runNonceSha256": { "$ref": "#/$defs/digest" },
+        "parentRequestSha256": { "$ref": "#/$defs/digest" },
+        "phase": { "enum": ["pre-loss", "loss", "recovered"] },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "probeId": { "$ref": "#/$defs/id" },
+        "queryRef": { "$ref": "#/$defs/id" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "implementation", "version", "requestSha256", "adapterExecutableSha256",
+        "hashAlgorithm", "dataSha256", "validatedBytes", "startedAt", "completedAt"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "cloudring.one-server-loss.data-probe-response/v1" },
+        "implementation": { "$ref": "#/$defs/runtimeId" },
+        "version": { "$ref": "#/$defs/runtimeId" },
+        "requestSha256": { "$ref": "#/$defs/digest" },
+        "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
+        "hashAlgorithm": { "const": "sha256" },
+        "dataSha256": { "$ref": "#/$defs/digest" },
+        "validatedBytes": { "type": "integer", "minimum": 1 },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" }
+      }
+    }
+  }
+}

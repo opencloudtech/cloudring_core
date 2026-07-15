@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "cloudring.one-server-loss.observation-request/v1",
+  "runNonceSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "targetNodeName": "synthetic-node-1",
+  "pollInterval": "2s",
+  "faultArrivalTimeout": "10m0s",
+  "minimumLossWindow": "2m0s",
+  "recoveryTimeout": "20m0s",
+  "recoveryStabilityWindow": "2m0s",
+  "minimumControlPlaneMembers": 3,
+  "workloads": [
+    {
+      "id": "control-surface",
+      "namespace": "synthetic-system",
+      "matchLabels": {
+        "app.kubernetes.io/name": "synthetic-control"
+      },
+      "minimumReadyPods": 2,
+      "minimumDistinctReadyNodes": 2
+    }
+  ],
+  "vm": {
+    "id": "continuity-vm",
+    "namespace": "synthetic-virtualization",
+    "name": "continuity-vm",
+    "requirePreLossOnTarget": true,
+    "maximumUnavailableDuration": "2m0s"
+  },
+  "dataProbe": {
+    "id": "business-state",
+    "queryRef": "canonical-business-state",
+    "minimumValidatedBytes": 1024
+  }
+}
