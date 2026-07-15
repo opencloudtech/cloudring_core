@@ -66,6 +66,7 @@ type Spec struct {
 type Availability struct {
 	MinimumControlPlaneNodes int `json:"minimumControlPlaneNodes" yaml:"minimumControlPlaneNodes"`
 	MinimumWorkerNodes       int `json:"minimumWorkerNodes" yaml:"minimumWorkerNodes"`
+	MinimumGatewayNodes      int `json:"minimumGatewayNodes" yaml:"minimumGatewayNodes"`
 	MinimumFailureDomains    int `json:"minimumFailureDomains" yaml:"minimumFailureDomains"`
 }
 
@@ -341,11 +342,12 @@ func allRefs(values ...string) bool {
 }
 
 func validAvailability(value Availability) bool {
-	return value.MinimumControlPlaneNodes >= 3 && value.MinimumWorkerNodes >= 3 && value.MinimumFailureDomains >= 3
+	return value.MinimumControlPlaneNodes >= 3 && value.MinimumWorkerNodes >= 3 &&
+		value.MinimumGatewayNodes >= 3 && value.MinimumFailureDomains >= 3
 }
 
 func validInventory(value Inventory, availability Availability) bool {
-	if len(value.Nodes) < max(availability.MinimumControlPlaneNodes, availability.MinimumWorkerNodes) {
+	if len(value.Nodes) < max(availability.MinimumControlPlaneNodes, availability.MinimumWorkerNodes, availability.MinimumGatewayNodes) {
 		return false
 	}
 	nodeIDs := map[string]bool{}
@@ -354,7 +356,8 @@ func validInventory(value Inventory, availability Availability) bool {
 	provisioningAddressRefs := map[string]bool{}
 	controlPlaneFailureDomains := map[string]bool{}
 	workerFailureDomains := map[string]bool{}
-	controlPlanes, workers := 0, 0
+	gatewayFailureDomains := map[string]bool{}
+	controlPlanes, workers, gateways := 0, 0, 0
 	allowedRoles := map[string]bool{"control-plane": true, "worker": true, "storage": true, "gateway": true}
 	for _, node := range value.Nodes {
 		if !validName(node.ID) || !validName(node.FailureDomain) || nodeIDs[node.ID] || len(node.Roles) == 0 ||
@@ -382,10 +385,15 @@ func validInventory(value Inventory, availability Availability) bool {
 			workers++
 			workerFailureDomains[node.FailureDomain] = true
 		}
+		if seenRoles["gateway"] {
+			gateways++
+			gatewayFailureDomains[node.FailureDomain] = true
+		}
 	}
-	return controlPlanes >= availability.MinimumControlPlaneNodes && workers >= availability.MinimumWorkerNodes &&
+	return controlPlanes >= availability.MinimumControlPlaneNodes && workers >= availability.MinimumWorkerNodes && gateways >= availability.MinimumGatewayNodes &&
 		len(controlPlaneFailureDomains) >= availability.MinimumFailureDomains &&
-		len(workerFailureDomains) >= availability.MinimumFailureDomains
+		len(workerFailureDomains) >= availability.MinimumFailureDomains &&
+		len(gatewayFailureDomains) >= availability.MinimumFailureDomains
 }
 
 func sortedRefs(values ...string) []string {

@@ -54,6 +54,18 @@ func TestSchemaRejectsInventoryWithoutBaselineControlPlaneAndWorkerRoles(t *test
 	}
 }
 
+func TestSchemaRejectsInventoryWithoutThreeGatewayNodes(t *testing.T) {
+	var document map[string]any
+	if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	nodes := document["spec"].(map[string]any)["inventory"].(map[string]any)["nodes"].([]any)
+	nodes[2].(map[string]any)["roles"] = []any{"control-plane", "worker"}
+	if schemaAccepts(t, document) {
+		t.Fatal("two-node Gateway inventory passed schema validation")
+	}
+}
+
 func schemaAccepts(t *testing.T, document any) bool {
 	t.Helper()
 	schema, err := jsonschema.NewCompiler().Compile("provider-site-profile.schema.json")
