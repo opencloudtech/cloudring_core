@@ -31,6 +31,16 @@ containerd configuration until the node is Ready again and a real raw-block
 DataVolume import succeeds. This is required for containerd config schemas v2
 and v3; changing the importer to run as root is not an acceptable substitute.
 
+KubeVirt's node handler also uses file watchers for certificate rotation while
+container runtimes consume inotify instances per sandbox. Before enabling VM
+workloads, the provider site profile must declare at least 1024
+`fs.inotify.max_user_instances` per eligible Linux host, persist it through the
+host provisioning mechanism, and verify the live value. A node is not ready
+for VM placement until its `virt-handler` is Ready and its KVM, TUN, and
+vhost-net device resources are non-zero. Increasing watcher capacity only in
+a temporary pod, or hiding a crashing handler by excluding the node, is not an
+acceptable fix.
+
 Structural verification is not a live durability claim. Before promotion,
 prove the controller and webhook health, a digest-pinned import, bound PVC/PV
 and backend replicas, VM restart/reattach continuity, retained snapshot,

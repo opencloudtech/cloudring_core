@@ -68,6 +68,34 @@ func TestSchemaRequiresDualStackIngressAddressesAndFailover(t *testing.T) {
 	}
 }
 
+func TestSchemaRequiresDurableHostRuntimeCapacity(t *testing.T) {
+	var document map[string]any
+	if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	baseline := document["spec"].(map[string]any)["hostRuntimeBaseline"].(map[string]any)
+	baseline["inotifyMaxUserInstances"] = float64(128)
+	if schemaAccepts(t, document) {
+		t.Fatal("host runtime baseline below 1024 inotify instances passed schema validation")
+	}
+}
+
+func TestSchemaRequiresHostRuntimePersistenceAndVerificationRefs(t *testing.T) {
+	for _, field := range []string{"persistenceRef", "verificationRef"} {
+		t.Run(field, func(t *testing.T) {
+			var document map[string]any
+			if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+				t.Fatal(err)
+			}
+			baseline := document["spec"].(map[string]any)["hostRuntimeBaseline"].(map[string]any)
+			delete(baseline, field)
+			if schemaAccepts(t, document) {
+				t.Fatalf("host runtime baseline without %s passed schema validation", field)
+			}
+		})
+	}
+}
+
 func TestSchemaRejectsInventoryWithoutBaselineControlPlaneAndWorkerRoles(t *testing.T) {
 	var document map[string]any
 	if err := json.Unmarshal(exampleJSON(t), &document); err != nil {

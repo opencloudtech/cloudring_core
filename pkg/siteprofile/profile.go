@@ -49,18 +49,19 @@ type Metadata struct {
 }
 
 type Spec struct {
-	ProviderAdapterRef string        `json:"providerAdapterRef" yaml:"providerAdapterRef"`
-	SiteClass          string        `json:"siteClass" yaml:"siteClass"`
-	RegionRef          string        `json:"regionRef" yaml:"regionRef"`
-	Availability       Availability  `json:"availability" yaml:"availability"`
-	Inventory          Inventory     `json:"inventory" yaml:"inventory"`
-	Network            Network       `json:"network" yaml:"network"`
-	Storage            Storage       `json:"storage" yaml:"storage"`
-	Identity           Identity      `json:"identity" yaml:"identity"`
-	Operations         Operations    `json:"operations" yaml:"operations"`
-	Observability      Observability `json:"observability" yaml:"observability"`
-	OCS                OCS           `json:"ocs" yaml:"ocs"`
-	NonClaim           string        `json:"nonClaim" yaml:"nonClaim"`
+	ProviderAdapterRef  string              `json:"providerAdapterRef" yaml:"providerAdapterRef"`
+	SiteClass           string              `json:"siteClass" yaml:"siteClass"`
+	RegionRef           string              `json:"regionRef" yaml:"regionRef"`
+	Availability        Availability        `json:"availability" yaml:"availability"`
+	Inventory           Inventory           `json:"inventory" yaml:"inventory"`
+	Network             Network             `json:"network" yaml:"network"`
+	HostRuntimeBaseline HostRuntimeBaseline `json:"hostRuntimeBaseline" yaml:"hostRuntimeBaseline"`
+	Storage             Storage             `json:"storage" yaml:"storage"`
+	Identity            Identity            `json:"identity" yaml:"identity"`
+	Operations          Operations          `json:"operations" yaml:"operations"`
+	Observability       Observability       `json:"observability" yaml:"observability"`
+	OCS                 OCS                 `json:"ocs" yaml:"ocs"`
+	NonClaim            string              `json:"nonClaim" yaml:"nonClaim"`
 }
 
 type Availability struct {
@@ -101,6 +102,15 @@ type PublicIngressHA struct {
 	IPv6AddressRef    string `json:"ipv6AddressRef" yaml:"ipv6AddressRef"`
 	HealthCheckRef    string `json:"healthCheckRef" yaml:"healthCheckRef"`
 	FailoverPolicyRef string `json:"failoverPolicyRef" yaml:"failoverPolicyRef"`
+}
+
+// HostRuntimeBaseline declares the minimum portable host capacity needed by
+// the container and virtualization runtimes. Downstream installers own the
+// operating-system-specific persistence and verification implementations.
+type HostRuntimeBaseline struct {
+	InotifyMaxUserInstances int    `json:"inotifyMaxUserInstances" yaml:"inotifyMaxUserInstances"`
+	PersistenceRef          string `json:"persistenceRef" yaml:"persistenceRef"`
+	VerificationRef         string `json:"verificationRef" yaml:"verificationRef"`
 }
 
 type Storage struct {
@@ -250,6 +260,10 @@ func Validate(profile Profile) Report {
 		profile.Spec.Network.PublicIngressRef,
 	))
 	record("public_ingress_ha", validPublicIngressHA(profile.Spec.Network.PublicIngressHA))
+	record("host_runtime_baseline", profile.Spec.HostRuntimeBaseline.InotifyMaxUserInstances >= 1024 && allRefs(
+		profile.Spec.HostRuntimeBaseline.PersistenceRef,
+		profile.Spec.HostRuntimeBaseline.VerificationRef,
+	))
 	record("snapshot_and_off_cell_storage", profile.Spec.Storage.OffCellBackup && allRefs(
 		profile.Spec.Storage.DefaultClassRef,
 		profile.Spec.Storage.SnapshotClassRef,
@@ -283,8 +297,13 @@ func BuildPlan(profile Profile) (Plan, error) {
 	if report.Status != "ready" {
 		return Plan{}, ErrProfileBlocked
 	}
-	nodeRefs := make([]string, 0, len(profile.Spec.Inventory.Nodes)*3+2)
-	nodeRefs = append(nodeRefs, profile.Spec.ProviderAdapterRef, profile.Spec.RegionRef)
+	nodeRefs := make([]string, 0, len(profile.Spec.Inventory.Nodes)*3+4)
+	nodeRefs = append(nodeRefs,
+		profile.Spec.ProviderAdapterRef,
+		profile.Spec.RegionRef,
+		profile.Spec.HostRuntimeBaseline.PersistenceRef,
+		profile.Spec.HostRuntimeBaseline.VerificationRef,
+	)
 	for _, node := range profile.Spec.Inventory.Nodes {
 		nodeRefs = append(nodeRefs, node.ProviderResourceRef, node.ManagementAddressRef, node.ProvisioningAddressRef)
 	}

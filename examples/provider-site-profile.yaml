@@ -43,6 +43,10 @@ spec:
       ipv6AddressRef: networks.ingress.ipv6
       healthCheckRef: networks.ingress.health-check
       failoverPolicyRef: networks.ingress.failover
+  hostRuntimeBaseline:
+    inotifyMaxUserInstances: 1024
+    persistenceRef: host-baseline.inotify-persistence
+    verificationRef: host-baseline.kubevirt-device-plugins
   storage:
     defaultClassRef: storage.default
     snapshotClassRef: storage.snapshots

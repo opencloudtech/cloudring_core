@@ -30,6 +30,11 @@ func TestSyntheticProfilePassesAndPlanIsDeterministic(t *testing.T) {
 	if !contains(first.Phases[0].InputRefs, profile.Spec.ProviderAdapterRef) || !contains(first.Phases[0].InputRefs, profile.Spec.RegionRef) {
 		t.Fatalf("inventory phase omits provider context: %#v", first.Phases[0].InputRefs)
 	}
+	for _, ref := range []string{profile.Spec.HostRuntimeBaseline.PersistenceRef, profile.Spec.HostRuntimeBaseline.VerificationRef} {
+		if !contains(first.Phases[0].InputRefs, ref) {
+			t.Fatalf("inventory phase omits host baseline reference %q: %#v", ref, first.Phases[0].InputRefs)
+		}
+	}
 	for _, ref := range []string{
 		profile.Spec.Network.PublicIngressHA.IPv4AddressRef,
 		profile.Spec.Network.PublicIngressHA.IPv6AddressRef,
@@ -52,6 +57,8 @@ func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
 		{name: "single stack", old: "dualStack: true", replacement: "dualStack: false", blocker: "dual_stack_network"},
 		{name: "DNS round robin ingress", old: "mode: l2-vip", replacement: "mode: dns-round-robin", blocker: "public_ingress_ha"},
 		{name: "missing ingress health check", old: "healthCheckRef: networks.ingress.health-check", replacement: "healthCheckRef: ''", blocker: "public_ingress_ha"},
+		{name: "weak inotify capacity", old: "inotifyMaxUserInstances: 1024", replacement: "inotifyMaxUserInstances: 128", blocker: "host_runtime_baseline"},
+		{name: "missing host persistence", old: "persistenceRef: host-baseline.inotify-persistence", replacement: "persistenceRef: ''", blocker: "host_runtime_baseline"},
 		{name: "no immutable backup", old: "offCellBackup: true", replacement: "offCellBackup: false", blocker: "snapshot_and_off_cell_storage"},
 		{name: "no rollback", old: "rollbackPlanRef: operations.rollback", replacement: "rollbackPlanRef: ''", blocker: "bootstrap_upgrade_rollback"},
 		{name: "weak gateway availability", old: "minimumGatewayNodes: 3", replacement: "minimumGatewayNodes: 2", blocker: "availability_policy"},
@@ -249,6 +256,10 @@ spec:
       ipv6AddressRef: networks.ingress.ipv6
       healthCheckRef: networks.ingress.health-check
       failoverPolicyRef: networks.ingress.failover
+  hostRuntimeBaseline:
+    inotifyMaxUserInstances: 1024
+    persistenceRef: host-baseline.inotify-persistence
+    verificationRef: host-baseline.kubevirt-device-plugins
   storage:
     defaultClassRef: storage.default
     snapshotClassRef: storage.snapshots

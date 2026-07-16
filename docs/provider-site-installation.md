@@ -22,6 +22,8 @@ stable IPv4 and IPv6 public-ingress addresses backed by an L2 VIP, BGP VIP,
 provider load balancer, or anycast implementation, plus provider-owned health
 check and failover-policy references (DNS round robin over node addresses is
 not an HA implementation);
+at least 1024 inotify instances per host, with provider-owned persistence and
+post-bootstrap verification references;
 snapshot-capable storage; immutable off-cell backup; OIDC, workload identity,
 and a provider-owned runtime-input broker backed by its secret store; GitOps
 bootstrap, upgrade, and rollback inputs; metrics,
@@ -35,6 +37,17 @@ CLI never applies the plan and never reads referenced values.
 The JSON Schema enforces structure and the baseline three-node role counts.
 The Go preflight is authoritative for cross-field rules, including declared
 availability values, per-role failure-domain spread, and reference uniqueness.
+
+The host-runtime baseline is a capacity contract, not a prescribed operating
+system. A Linux installer can satisfy it with a root-owned persistent sysctl
+configuration such as `fs.inotify.max_user_instances = 1024`; an immutable or
+API-managed operating system can use its native machine configuration. Apply
+host changes one node at a time, retain the previous value for rollback, and
+verify both the live value and persistence after restart. When KubeVirt is
+enabled, acceptance must additionally prove every intended node has a Ready
+`virt-handler`, is schedulable by KubeVirt, and advertises non-zero KVM, TUN,
+and vhost-net device resources. A permanently privileged Kubernetes workload
+that rewrites host sysctls is not a substitute for host provisioning.
 
 Downstream repositories own concrete site-class profiles and provider adapter
 implementations. They should validate their private profile in CI, bind each
