@@ -26,6 +26,7 @@
         "availability",
         "inventory",
         "network",
+        "hostRuntimeBaseline",
         "storage",
         "identity",
         "operations",
@@ -40,6 +41,7 @@
         "availability": {"$ref": "#/$defs/availability"},
         "inventory": {"$ref": "#/$defs/inventory"},
         "network": {"$ref": "#/$defs/network"},
+        "hostRuntimeBaseline": {"$ref": "#/$defs/hostRuntimeBaseline"},
         "storage": {"$ref": "#/$defs/storage"},
         "identity": {"$ref": "#/$defs/identity"},
         "operations": {"$ref": "#/$defs/operations"},
@@ -169,6 +171,16 @@
         "ipv6AddressRef": {"$ref": "#/$defs/reference"},
         "healthCheckRef": {"$ref": "#/$defs/reference"},
         "failoverPolicyRef": {"$ref": "#/$defs/reference"}
+      }
+    },
+    "hostRuntimeBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inotifyMaxUserInstances", "persistenceRef", "verificationRef"],
+      "properties": {
+        "inotifyMaxUserInstances": {"type": "integer", "minimum": 1024},
+        "persistenceRef": {"$ref": "#/$defs/reference"},
+        "verificationRef": {"$ref": "#/$defs/reference"}
       }
     },
     "storage": {
