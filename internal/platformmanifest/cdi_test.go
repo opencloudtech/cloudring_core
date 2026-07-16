@@ -6,6 +6,7 @@ package platformmanifest
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -56,6 +57,17 @@ func TestCDIProfileRejectsDuplicateYAMLKeys(t *testing.T) {
 	writeCDIFile(t, root, path, data)
 	if _, err := VerifyCDI(root); err == nil {
 		t.Fatal("duplicate YAML key was accepted")
+	}
+}
+
+func TestCDIProfileAcceptsGitWindowsLineEndings(t *testing.T) {
+	root := copyCDIProfile(t)
+	path := filepath.Join(cdiProfilePath, "controllers", cdiOperatorManifest)
+	data := readCDIFile(t, root, path)
+	data = []byte(strings.ReplaceAll(string(data), "\n", "\r\n"))
+	writeCDIFile(t, root, path, data)
+	if _, err := VerifyCDI(root); err != nil {
+		t.Fatalf("verify Git CRLF checkout: %v", err)
 	}
 }
 

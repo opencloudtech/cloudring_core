@@ -90,7 +90,8 @@ func readCDIControllers(root *os.Root) ([]object, error) {
 	if err != nil {
 		return nil, err
 	}
-	if fmt.Sprintf("%x", sha256.Sum256(data)) != cdiOperatorSHA256 {
+	checksumInput := bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	if bytes.Contains(checksumInput, []byte("\r")) || fmt.Sprintf("%x", sha256.Sum256(checksumInput)) != cdiOperatorSHA256 {
 		return nil, errors.New("CDI vendored operator differs from the reviewed release asset patch")
 	}
 	for _, forbidden := range [][]byte{[]byte(":latest"), []byte("REPLACE_WITH"), []byte("example.invalid")} {
