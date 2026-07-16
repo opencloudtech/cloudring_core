@@ -22,10 +22,12 @@ func TestKeyGenerateSignVerifyRoundTrip(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("derive public key: %v", err)
 	}
+	// #nosec G304 -- policyPath is a fixed basename below this test's t.TempDir().
 	policy, err := os.ReadFile(policyPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G304 -- derivedPolicyPath is a fixed basename below this test's t.TempDir().
 	derivedPolicy, err := os.ReadFile(derivedPolicyPath)
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +76,7 @@ func TestSignRejectsRegularFileKeyDescriptor(t *testing.T) {
 	if err := os.WriteFile(secretPath, keyDocument, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G304 -- secretPath is a fixed basename below this test's t.TempDir().
 	file, err := os.Open(secretPath)
 	if err != nil {
 		t.Fatal(err)
