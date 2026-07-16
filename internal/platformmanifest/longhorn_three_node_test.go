@@ -14,7 +14,7 @@ func TestLonghornThreeNodeProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify Longhorn three-node profile: %v", err)
 	}
-	if report.Status != "ready" || report.Files != 2 || report.Documents != 11 || len(report.Checks) != 9 {
+	if report.Status != "ready" || report.Files != 2 || report.Documents != 12 || len(report.Checks) != 10 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -37,6 +37,7 @@ func TestLonghornThreeNodeProfileRejectsUnsafeChanges(t *testing.T) {
 		{"v2 engine", "      v2DataEngine: false\n", "      v2DataEngine: true\n"},
 		{"wrong provisioner", "provisioner: driver.longhorn.io\n", "provisioner: forbidden.example.csi\n"},
 		{"immediate binding", "volumeBindingMode: WaitForFirstConsumer\n", "volumeBindingMode: Immediate\n"},
+		{"migratable mode disabled", "  migratable: \"true\"\n", "  migratable: \"false\"\n"},
 		{"delete snapshots", "deletionPolicy: Retain\n", "deletionPolicy: Delete\n"},
 		{"Longhorn native backup snapshot", "  type: snap\n", "  type: bak\n"},
 		{"mutable snapshot controller", "snapshot-controller:v8.5.0@sha256:74ca61ab13e978f03cf0f336a607281d15f04cda0a38a881306365473b28a3d8\n", "snapshot-controller:latest\n"},

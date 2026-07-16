@@ -5,14 +5,18 @@ compact three-node CloudRING cell that has sufficient filesystem capacity but
 no dedicated empty disks for Rook-Ceph. Sites with three independent raw
 devices should use the Rook-Ceph RBD profile instead.
 
-The `runtime` stage pins Longhorn `1.12.0`, defines a non-default three-replica
-`WaitForFirstConsumer` StorageClass, and publishes exactly one Velero-selected
-Retain VolumeSnapshotClass for `driver.longhorn.io`. It also installs the
-single cluster-wide, two-replica CSI snapshot controller that an upstream
-Kubernetes distribution requires. The controller version matches Longhorn's
-CSI snapshotter (`v8.5.0`), and its multi-architecture image is pinned by
-digest. The HelmRelease is suspended by default and the Longhorn UI is not
-exposed by an Ingress.
+The `runtime` stage pins Longhorn `1.12.0` and defines two non-default,
+three-replica `WaitForFirstConsumer` StorageClasses. Use
+`longhorn-replicated` for ordinary RWO volumes such as PostgreSQL data and WAL.
+Use `longhorn-migratable` only for KubeVirt disks whose PVC explicitly requests
+`ReadWriteMany` and `volumeMode: Block`; the class enables Longhorn's
+`migratable` volume mode needed by live migration. The profile also publishes
+exactly one Velero-selected Retain VolumeSnapshotClass for
+`driver.longhorn.io` and installs the single cluster-wide, two-replica CSI
+snapshot controller that an upstream Kubernetes distribution requires. The
+controller version matches Longhorn's CSI snapshotter (`v8.5.0`), and its
+multi-architecture image is pinned by digest. The HelmRelease is suspended by
+default and the Longhorn UI is not exposed by an Ingress.
 
 The snapshot class fixes `parameters.type: snap`, so Velero's CSI data mover
 starts from a local Longhorn snapshot and copies the volume data to the
@@ -50,6 +54,8 @@ Activation is not readiness. Before promotion, prove the v1 snapshot CRDs and
 both snapshot-controller replicas are Ready, the exact CSIDriver, three healthy
 replicas on separate nodes, PVC checksum continuity, Retain snapshot and
 isolated restore, off-cell Velero backup and restore, cleanup, and continuity
-through one storage-node loss and recovery. Keep the source HelmRelease
-suspended for templates and activate it only in an audited site Flux root after
-those host prerequisites are checked.
+through one storage-node loss and recovery. For a migratable VM, additionally
+prove that its disk PVC is RWX Block, the corresponding Longhorn volume reports
+three healthy replicas, and live migration plus node-loss recovery preserve
+guest data. Keep the source HelmRelease suspended for templates and activate it
+only in an audited site Flux root after those host prerequisites are checked.
