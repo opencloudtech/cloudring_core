@@ -50,14 +50,31 @@ func TestPoolConfigurationFailsClosedOnUnverifiedTLS(t *testing.T) {
 
 func TestPoolConfigurationRejectsExternalAuthenticationFallbacks(t *testing.T) {
 	verified := syntheticDatabaseURL(t, true, "verify-full")
-	for _, key := range []string{"PGPASS" + "WORD", "PGPASS" + "FILE", "PGSERVICE"} {
-		t.Run(key, func(t *testing.T) {
-			t.Setenv(key, "synthetic-reference")
-			if _, _, err := poolConfiguration(Config{DSN: verified}); err == nil {
-				t.Fatalf("external PostgreSQL setting %s was accepted", key)
-			}
-		})
+	parsedURL, err := url.Parse(verified)
+	if err != nil {
+		t.Fatal("parse synthetic database URL")
 	}
+	expectedAuthentication, _ := parsedURL.User.Password()
+	t.Run("environment password ignored", func(t *testing.T) {
+		t.Setenv("PGPASS"+"WORD", "external-auth-fixture")
+		config, _, err := poolConfiguration(Config{DSN: verified})
+		if err != nil || config.ConnConfig.Password != expectedAuthentication {
+			t.Fatal("environment authentication changed the protected URL")
+		}
+	})
+	t.Run("environment passfile ignored", func(t *testing.T) {
+		t.Setenv("PGPASS"+"FILE", t.TempDir()+"/external")
+		config, _, err := poolConfiguration(Config{DSN: verified})
+		if err != nil || config.ConnConfig.Password != expectedAuthentication {
+			t.Fatal("environment passfile changed the protected URL")
+		}
+	})
+	t.Run("environment service rejected", func(t *testing.T) {
+		t.Setenv("PGSERVICE", "external")
+		if _, _, err := poolConfiguration(Config{DSN: verified}); err == nil {
+			t.Fatal("environment service indirection was accepted")
+		}
+	})
 	if _, _, err := poolConfiguration(Config{DSN: syntheticDatabaseURL(t, false, "verify-full")}); err == nil {
 		t.Fatal("production database URL without inline authentication was accepted")
 	}
@@ -123,7 +140,7 @@ func syntheticDatabaseURL(t *testing.T, includeAuthentication bool, sslMode stri
 	value := &url.URL{
 		Scheme: "postgres",
 		User:   user,
-		Host:   "database.example",
+		Host:   "database.example:5432",
 		Path:   "/database",
 	}
 	query := value.Query()

@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,15 +39,9 @@ var (
 	ErrNotFound = errors.New("transactional state document not found")
 	ErrReadOnly = errors.New("transactional state database is read-only")
 
-	safeKeyPattern         = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{0,127}$`)
-	forbiddenKeywordDSNKey = regexp.MustCompile(`(?i)(^|[[:space:]])(passfile|service|servicefile|sslcert|sslkey|sslpassword)[[:space:]]*=`)
-	postgresEnvironment    = []string{
-		"PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD", "PGPASSFILE",
-		"PGAPPNAME", "PGCONNECT_TIMEOUT", "PGSSLMODE", "PGSSLKEY", "PGSSLCERT",
-		"PGSSNI", "PGSSLROOTCERT", "PGSSLPASSWORD", "PGSSLNEGOTIATION",
-		"PGTARGETSESSIONATTRS", "PGSERVICE", "PGSERVICEFILE", "PGTZ", "PGOPTIONS",
-		"PGMINPROTOCOLVERSION", "PGMAXPROTOCOLVERSION", "PGCHANNELBINDING", "PGREQUIREAUTH",
-	}
+	safeKeyPattern             = regexp.MustCompile(`^[a-z0-9][a-z0-9._:-]{0,127}$`)
+	forbiddenKeywordDSNKey     = regexp.MustCompile(`(?i)(^|[[:space:]])(passfile|service|servicefile|sslcert|sslkey|sslpassword)[[:space:]]*=`)
+	postgresServiceEnvironment = []string{"PGSERVICE", "PGSERVICEFILE"}
 )
 
 // Config is safe to construct from deployment-private secret material. DSN is
@@ -145,14 +140,14 @@ func isolatedConnectionString(config Config) (string, error) {
 	if dsn == "" {
 		return "", errors.New("database DSN is required")
 	}
-	for _, key := range postgresEnvironment {
+	for _, key := range postgresServiceEnvironment {
 		if value, present := os.LookupEnv(key); present && value != "" {
 			return "", errors.New("PostgreSQL environment fallback is forbidden")
 		}
 	}
 	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 		parsed, err := url.Parse(dsn)
-		if err != nil || parsed.Fragment != "" || parsed.User == nil || parsed.User.Username() == "" || parsed.Host == "" || strings.Trim(parsed.Path, "/") == "" {
+		if err != nil || parsed.Fragment != "" || parsed.User == nil || parsed.User.Username() == "" || parsed.Host == "" || parsed.Port() == "" || strings.Trim(parsed.Path, "/") == "" {
 			return "", errors.New("database URL is incomplete")
 		}
 		query := parsed.Query()
@@ -181,8 +176,34 @@ func isolatedConnectionString(config Config) (string, error) {
 		query.Set("sslcert", "")
 		query.Set("sslkey", "")
 		query.Set("sslpassword", "")
+		query.Set("application_name", "")
+		query.Set("options", "")
+		query.Set("timezone", "UTC")
+		query.Set("min_protocol_version", "")
+		query.Set("max_protocol_version", "")
+		connectTimeout := positiveOrDefault(config.ConnectTimeout, defaultConnectTimeout)
+		connectTimeoutSeconds := max(int64(1), int64((connectTimeout+time.Second-1)/time.Second))
+		query.Set("connect_timeout", strconv.FormatInt(connectTimeoutSeconds, 10))
+		if !query.Has("channel_binding") {
+			query.Set("channel_binding", "prefer")
+		}
+		if !query.Has("require_auth") {
+			query.Set("require_auth", "")
+		}
+		if !query.Has("sslmode") {
+			query.Set("sslmode", "verify-full")
+		}
+		if !query.Has("sslnegotiation") {
+			query.Set("sslnegotiation", "")
+		}
+		if !query.Has("sslsni") {
+			query.Set("sslsni", "1")
+		}
 		if !query.Has("sslrootcert") {
 			query.Set("sslrootcert", "")
+		}
+		if !query.Has("target_session_attrs") {
+			query.Set("target_session_attrs", "any")
 		}
 		parsed.RawQuery = query.Encode()
 		return parsed.String(), nil
@@ -194,7 +215,7 @@ func isolatedConnectionString(config Config) (string, error) {
 	// syntax. Explicit neutral values prevent ~/.pgpass and default client-key
 	// discovery while preserving the test-supplied host, user, and database.
 	authenticationKey := "pass" + "word"
-	return authenticationKey + "='cloudring-isolated-test-auth' passfile='' sslcert='' sslkey='' sslrootcert='' sslpassword='' " + dsn, nil
+	return authenticationKey + "='cloudring-isolated-test-auth' passfile='' sslcert='' sslkey='' sslrootcert='' sslpassword='' application_name='' options='' timezone='UTC' target_session_attrs='any' channel_binding='prefer' " + dsn, nil
 }
 
 func verifiedTLS(config *tls.Config) bool {
