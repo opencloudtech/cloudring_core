@@ -149,13 +149,26 @@
     "network": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dualStack", "managementPlaneRef", "provisioningPlaneRef", "tenantPlaneRef", "publicIngressRef"],
+      "required": ["dualStack", "managementPlaneRef", "provisioningPlaneRef", "tenantPlaneRef", "publicIngressRef", "publicIngressHA"],
       "properties": {
         "dualStack": {"const": true},
         "managementPlaneRef": {"$ref": "#/$defs/reference"},
         "provisioningPlaneRef": {"$ref": "#/$defs/reference"},
         "tenantPlaneRef": {"$ref": "#/$defs/reference"},
-        "publicIngressRef": {"$ref": "#/$defs/reference"}
+        "publicIngressRef": {"$ref": "#/$defs/reference"},
+        "publicIngressHA": {"$ref": "#/$defs/publicIngressHA"}
+      }
+    },
+    "publicIngressHA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "ipv4AddressRef", "ipv6AddressRef", "healthCheckRef", "failoverPolicyRef"],
+      "properties": {
+        "mode": {"enum": ["l2-vip", "bgp-vip", "provider-load-balancer", "anycast"]},
+        "ipv4AddressRef": {"$ref": "#/$defs/reference"},
+        "ipv6AddressRef": {"$ref": "#/$defs/reference"},
+        "healthCheckRef": {"$ref": "#/$defs/reference"},
+        "failoverPolicyRef": {"$ref": "#/$defs/reference"}
       }
     },
     "storage": {
