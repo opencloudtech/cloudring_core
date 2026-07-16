@@ -40,6 +40,34 @@ func TestSchemaRejectsReadinessOverclaim(t *testing.T) {
 	}
 }
 
+func TestSchemaRejectsDNSRoundRobinOnlyPublicIngress(t *testing.T) {
+	var document map[string]any
+	if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	network := document["spec"].(map[string]any)["network"].(map[string]any)
+	network["publicIngressHA"].(map[string]any)["mode"] = "dns-round-robin"
+	if schemaAccepts(t, document) {
+		t.Fatal("DNS round robin over node addresses passed HA ingress validation")
+	}
+}
+
+func TestSchemaRequiresDualStackIngressAddressesAndFailover(t *testing.T) {
+	for _, field := range []string{"ipv4AddressRef", "ipv6AddressRef", "healthCheckRef", "failoverPolicyRef"} {
+		t.Run(field, func(t *testing.T) {
+			var document map[string]any
+			if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+				t.Fatal(err)
+			}
+			ha := document["spec"].(map[string]any)["network"].(map[string]any)["publicIngressHA"].(map[string]any)
+			delete(ha, field)
+			if schemaAccepts(t, document) {
+				t.Fatalf("HA ingress without %s passed schema validation", field)
+			}
+		})
+	}
+}
+
 func TestSchemaRejectsInventoryWithoutBaselineControlPlaneAndWorkerRoles(t *testing.T) {
 	var document map[string]any
 	if err := json.Unmarshal(exampleJSON(t), &document); err != nil {

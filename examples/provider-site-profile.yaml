@@ -37,6 +37,12 @@ spec:
     provisioningPlaneRef: networks.provisioning
     tenantPlaneRef: networks.tenant
     publicIngressRef: networks.ingress
+    publicIngressHA:
+      mode: l2-vip
+      ipv4AddressRef: networks.ingress.ipv4
+      ipv6AddressRef: networks.ingress.ipv6
+      healthCheckRef: networks.ingress.health-check
+      failoverPolicyRef: networks.ingress.failover
   storage:
     defaultClassRef: storage.default
     snapshotClassRef: storage.snapshots

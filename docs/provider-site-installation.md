@@ -18,6 +18,10 @@ nodes, three workers, and three public Gateway nodes, with every role spread
 across at least three failure domains;
 unique provider-resource, management-address, and provisioning-address
 references; dual-stack networking;
+stable IPv4 and IPv6 public-ingress addresses backed by an L2 VIP, BGP VIP,
+provider load balancer, or anycast implementation, plus provider-owned health
+check and failover-policy references (DNS round robin over node addresses is
+not an HA implementation);
 snapshot-capable storage; immutable off-cell backup; OIDC, workload identity,
 and a provider-owned runtime-input broker backed by its secret store; GitOps
 bootstrap, upgrade, and rollback inputs; metrics,
@@ -43,9 +47,12 @@ kubeadm control-plane node, bootstrap must explicitly reconcile
 `node.kubernetes.io/exclude-from-external-load-balancers`. Remove that label
 only from the profile's declared `gateway` nodes, after a server-side dry-run
 and a captured pre-state. Retain an exact rollback that restores the label.
-Acceptance must fail closed unless the LoadBalancer advertises one IPv4 and one
-IPv6 address per declared Gateway node, every advertised address answers from
-each failure domain, all nodes remain Ready, and temporary probes are removed.
+Acceptance must fail closed unless the LoadBalancer advertises the declared
+stable IPv4 and IPv6 service addresses, health checks remove or fail over an
+unhealthy failure domain, both addresses remain reachable during that loss,
+all surviving nodes remain Ready, and temporary probes are removed. Per-node
+addresses published through DNS are useful discovery inputs but do not satisfy
+this HA contract on their own.
 
 Provider-neutral storage bases live under `deploy/kubernetes/storage`. Use the
 Rook-Ceph RBD profile when three independent, dedicated raw devices are

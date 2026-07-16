@@ -84,11 +84,23 @@ type Node struct {
 }
 
 type Network struct {
-	DualStack            bool   `json:"dualStack" yaml:"dualStack"`
-	ManagementPlaneRef   string `json:"managementPlaneRef" yaml:"managementPlaneRef"`
-	ProvisioningPlaneRef string `json:"provisioningPlaneRef" yaml:"provisioningPlaneRef"`
-	TenantPlaneRef       string `json:"tenantPlaneRef" yaml:"tenantPlaneRef"`
-	PublicIngressRef     string `json:"publicIngressRef" yaml:"publicIngressRef"`
+	DualStack            bool            `json:"dualStack" yaml:"dualStack"`
+	ManagementPlaneRef   string          `json:"managementPlaneRef" yaml:"managementPlaneRef"`
+	ProvisioningPlaneRef string          `json:"provisioningPlaneRef" yaml:"provisioningPlaneRef"`
+	TenantPlaneRef       string          `json:"tenantPlaneRef" yaml:"tenantPlaneRef"`
+	PublicIngressRef     string          `json:"publicIngressRef" yaml:"publicIngressRef"`
+	PublicIngressHA      PublicIngressHA `json:"publicIngressHA" yaml:"publicIngressHA"`
+}
+
+// PublicIngressHA describes stable dual-stack service addresses and the
+// provider-owned mechanisms that keep them healthy during a failure-domain
+// loss. DNS round robin over node addresses is deliberately not a valid mode.
+type PublicIngressHA struct {
+	Mode              string `json:"mode" yaml:"mode"`
+	IPv4AddressRef    string `json:"ipv4AddressRef" yaml:"ipv4AddressRef"`
+	IPv6AddressRef    string `json:"ipv6AddressRef" yaml:"ipv6AddressRef"`
+	HealthCheckRef    string `json:"healthCheckRef" yaml:"healthCheckRef"`
+	FailoverPolicyRef string `json:"failoverPolicyRef" yaml:"failoverPolicyRef"`
 }
 
 type Storage struct {
@@ -237,6 +249,7 @@ func Validate(profile Profile) Report {
 		profile.Spec.Network.TenantPlaneRef,
 		profile.Spec.Network.PublicIngressRef,
 	))
+	record("public_ingress_ha", validPublicIngressHA(profile.Spec.Network.PublicIngressHA))
 	record("snapshot_and_off_cell_storage", profile.Spec.Storage.OffCellBackup && allRefs(
 		profile.Spec.Storage.DefaultClassRef,
 		profile.Spec.Storage.SnapshotClassRef,
@@ -288,6 +301,10 @@ func BuildPlan(profile Profile) (Plan, error) {
 				profile.Spec.Network.ProvisioningPlaneRef,
 				profile.Spec.Network.TenantPlaneRef,
 				profile.Spec.Network.PublicIngressRef,
+				profile.Spec.Network.PublicIngressHA.IPv4AddressRef,
+				profile.Spec.Network.PublicIngressHA.IPv6AddressRef,
+				profile.Spec.Network.PublicIngressHA.HealthCheckRef,
+				profile.Spec.Network.PublicIngressHA.FailoverPolicyRef,
 			), Mutation: false},
 			{ID: "identity", DependsOn: []string{"inventory", "network"}, InputRefs: sortedRefs(
 				profile.Spec.Identity.OIDCProviderRef,
@@ -344,6 +361,15 @@ func allRefs(values ...string) bool {
 func validAvailability(value Availability) bool {
 	return value.MinimumControlPlaneNodes >= 3 && value.MinimumWorkerNodes >= 3 &&
 		value.MinimumGatewayNodes >= 3 && value.MinimumFailureDomains >= 3
+}
+
+func validPublicIngressHA(value PublicIngressHA) bool {
+	switch value.Mode {
+	case "l2-vip", "bgp-vip", "provider-load-balancer", "anycast":
+	default:
+		return false
+	}
+	return allRefs(value.IPv4AddressRef, value.IPv6AddressRef, value.HealthCheckRef, value.FailoverPolicyRef)
 }
 
 func validInventory(value Inventory, availability Availability) bool {

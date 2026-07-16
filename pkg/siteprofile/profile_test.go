@@ -30,6 +30,16 @@ func TestSyntheticProfilePassesAndPlanIsDeterministic(t *testing.T) {
 	if !contains(first.Phases[0].InputRefs, profile.Spec.ProviderAdapterRef) || !contains(first.Phases[0].InputRefs, profile.Spec.RegionRef) {
 		t.Fatalf("inventory phase omits provider context: %#v", first.Phases[0].InputRefs)
 	}
+	for _, ref := range []string{
+		profile.Spec.Network.PublicIngressHA.IPv4AddressRef,
+		profile.Spec.Network.PublicIngressHA.IPv6AddressRef,
+		profile.Spec.Network.PublicIngressHA.HealthCheckRef,
+		profile.Spec.Network.PublicIngressHA.FailoverPolicyRef,
+	} {
+		if !contains(first.Phases[1].InputRefs, ref) {
+			t.Fatalf("network phase omits HA ingress reference %q: %#v", ref, first.Phases[1].InputRefs)
+		}
+	}
 }
 
 func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
@@ -40,6 +50,8 @@ func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
 		blocker     string
 	}{
 		{name: "single stack", old: "dualStack: true", replacement: "dualStack: false", blocker: "dual_stack_network"},
+		{name: "DNS round robin ingress", old: "mode: l2-vip", replacement: "mode: dns-round-robin", blocker: "public_ingress_ha"},
+		{name: "missing ingress health check", old: "healthCheckRef: networks.ingress.health-check", replacement: "healthCheckRef: ''", blocker: "public_ingress_ha"},
 		{name: "no immutable backup", old: "offCellBackup: true", replacement: "offCellBackup: false", blocker: "snapshot_and_off_cell_storage"},
 		{name: "no rollback", old: "rollbackPlanRef: operations.rollback", replacement: "rollbackPlanRef: ''", blocker: "bootstrap_upgrade_rollback"},
 		{name: "weak gateway availability", old: "minimumGatewayNodes: 3", replacement: "minimumGatewayNodes: 2", blocker: "availability_policy"},
@@ -231,6 +243,12 @@ spec:
     provisioningPlaneRef: networks.provisioning
     tenantPlaneRef: networks.tenant
     publicIngressRef: networks.ingress
+    publicIngressHA:
+      mode: l2-vip
+      ipv4AddressRef: networks.ingress.ipv4
+      ipv6AddressRef: networks.ingress.ipv6
+      healthCheckRef: networks.ingress.health-check
+      failoverPolicyRef: networks.ingress.failover
   storage:
     defaultClassRef: storage.default
     snapshotClassRef: storage.snapshots
