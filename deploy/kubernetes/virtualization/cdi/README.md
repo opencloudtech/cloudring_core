@@ -21,6 +21,16 @@ explicit capacity and access mode, and an immutable source. Keep VM root disks
 as standalone DataVolumes rather than VM-owned templates when the disk must
 survive VM replacement.
 
+Raw block imports run as the non-root QEMU identity. Every containerd-backed
+node that may run a CDI importer or KubeVirt workload must therefore set
+`device_ownership_from_security_context = true` in the active CRI plugin
+configuration, validate the resulting TOML with `containerd config dump`, and
+restart containerd one node at a time. A site preflight must reject activation
+when the setting is absent or false on any eligible node. Retain the previous
+containerd configuration until the node is Ready again and a real raw-block
+DataVolume import succeeds. This is required for containerd config schemas v2
+and v3; changing the importer to run as root is not an acceptable substitute.
+
 Structural verification is not a live durability claim. Before promotion,
 prove the controller and webhook health, a digest-pinned import, bound PVC/PV
 and backend replicas, VM restart/reattach continuity, retained snapshot,
