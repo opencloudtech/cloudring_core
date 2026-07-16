@@ -37,7 +37,7 @@ func VerifyLonghornThreeNode(root string) (Report, error) {
 	}
 	report.Files = files
 	report.Documents = len(objects)
-	if report.Files != 2 || report.Documents != 11 {
+	if report.Files != 2 || report.Documents != 12 {
 		return report, errors.New("Longhorn three-node source inventory is incomplete")
 	}
 	if err := validateLonghornThreeNodeObjects(objects); err != nil {
@@ -51,6 +51,7 @@ func VerifyLonghornThreeNode(root string) (Report, error) {
 		"v1_engine_and_host_path_explicit",
 		"degraded_creation_and_telemetry_disabled",
 		"storage_class_non_default_and_delayed",
+		"migratable_vm_storage_class_explicit",
 		"single_retained_velero_snapshot_class",
 		"ha_snapshot_controller_pinned_and_least_privilege",
 		"ui_ingress_disabled",
@@ -111,6 +112,7 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 		"Role/kube-system/cloudring-snapshot-controller-leader-election",
 		"RoleBinding/kube-system/cloudring-snapshot-controller-leader-election",
 		"ServiceAccount/kube-system/snapshot-controller",
+		"StorageClass//longhorn-migratable",
 		"StorageClass//longhorn-replicated",
 		"VolumeSnapshotClass//longhorn-retain",
 	}
@@ -156,8 +158,12 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 	}
 
 	storageClass := require("StorageClass", "", "longhorn-replicated")
-	if !validateLonghornStorageClass(storageClass.Data) {
+	if !validateLonghornStorageClass(storageClass.Data, false) {
 		return errors.New("Longhorn StorageClass is invalid")
+	}
+	migratableStorageClass := require("StorageClass", "", "longhorn-migratable")
+	if !validateLonghornStorageClass(migratableStorageClass.Data, true) {
+		return errors.New("Longhorn migratable StorageClass is invalid")
 	}
 	snapshotClass := require("VolumeSnapshotClass", "", "longhorn-retain")
 	if veleroSnapshotLabels != 1 || !validateLonghornSnapshotClass(snapshotClass.Data) {
@@ -337,16 +343,23 @@ func validateLonghornValues(release map[string]any) bool {
 		nestedNumber(values, "longhornUI", "replicas") == 2 && exactBool(values, false, "ingress", "enabled") && exactBool(values, false, "metrics", "serviceMonitor", "enabled")
 }
 
-func validateLonghornStorageClass(class map[string]any) bool {
+func validateLonghornStorageClass(class map[string]any, migratable bool) bool {
 	parameters, ok := nested(class, "parameters").(map[string]any)
-	return ok && exactMappingKeys(class, "apiVersion", "kind", "metadata", "provisioner", "parameters", "allowVolumeExpansion", "reclaimPolicy", "volumeBindingMode") &&
+	if !ok {
+		return false
+	}
+	parameterKeys := []string{"numberOfReplicas", "staleReplicaTimeout", "fsType", "dataLocality", "unmapMarkSnapChainRemoved", "disableRevisionCounter", "dataEngine"}
+	if migratable {
+		parameterKeys = append(parameterKeys, "migratable")
+	}
+	return exactMappingKeys(class, "apiVersion", "kind", "metadata", "provisioner", "parameters", "allowVolumeExpansion", "reclaimPolicy", "volumeBindingMode") &&
 		nestedString(class, "apiVersion") == "storage.k8s.io/v1" && nestedString(class, "provisioner") == "driver.longhorn.io" &&
 		nestedString(class, "metadata", "annotations", "storageclass.kubernetes.io/is-default-class") == "false" &&
-		exactMappingKeys(parameters, "numberOfReplicas", "staleReplicaTimeout", "fsType", "dataLocality", "unmapMarkSnapChainRemoved", "disableRevisionCounter", "dataEngine") &&
+		exactMappingKeys(parameters, parameterKeys...) &&
 		nestedString(class, "parameters", "numberOfReplicas") == "3" && nestedString(class, "parameters", "staleReplicaTimeout") == "30" &&
 		nestedString(class, "parameters", "fsType") == "ext4" && nestedString(class, "parameters", "dataLocality") == "disabled" &&
 		nestedString(class, "parameters", "unmapMarkSnapChainRemoved") == "ignored" && nestedString(class, "parameters", "disableRevisionCounter") == "false" &&
-		nestedString(class, "parameters", "dataEngine") == "v1" && exactBool(class, true, "allowVolumeExpansion") &&
+		nestedString(class, "parameters", "dataEngine") == "v1" && (!migratable || nestedString(class, "parameters", "migratable") == "true") && exactBool(class, true, "allowVolumeExpansion") &&
 		nestedString(class, "reclaimPolicy") == "Delete" && nestedString(class, "volumeBindingMode") == "WaitForFirstConsumer"
 }
 
