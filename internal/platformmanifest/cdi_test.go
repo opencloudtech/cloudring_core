@@ -64,7 +64,8 @@ func TestCDIProfileAcceptsGitWindowsLineEndings(t *testing.T) {
 	root := copyCDIProfile(t)
 	path := filepath.Join(cdiProfilePath, "controllers", cdiOperatorManifest)
 	data := readCDIFile(t, root, path)
-	data = []byte(strings.ReplaceAll(string(data), "\n", "\r\n"))
+	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+	data = []byte(strings.ReplaceAll(normalized, "\n", "\r\n"))
 	writeCDIFile(t, root, path, data)
 	if _, err := VerifyCDI(root); err != nil {
 		t.Fatalf("verify Git CRLF checkout: %v", err)
