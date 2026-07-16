@@ -19,11 +19,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "unexpected positional arguments")
 		os.Exit(2)
 	}
-	reports := make([]platformmanifest.Report, 0, 3)
+	reports := make([]platformmanifest.Report, 0, 4)
 	for _, verify := range []func(string) (platformmanifest.Report, error){
 		platformmanifest.VerifySecretManager,
 		platformmanifest.VerifyRookCephRBD,
 		platformmanifest.VerifyLonghornThreeNode,
+		platformmanifest.VerifyPostgreSQLHA,
 	} {
 		report, err := verify(*root)
 		if err != nil {

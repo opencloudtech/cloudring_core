@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-system
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cnpg
+  namespace: cnpg-system
+spec:
+  interval: 1h
+  url: https://cloudnative-pg.github.io/charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cnpg
+  namespace: cnpg-system
+  annotations:
+    cloudring.org/non-claim: downstream-live-controller-and-webhook-evidence-required
+spec:
+  suspend: true
+  interval: 15m
+  timeout: 10m
+  releaseName: cnpg
+  chart:
+    spec:
+      chart: cloudnative-pg
+      version: 0.29.0
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg
+        namespace: cnpg-system
+      interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    replicaCount: 2
+    image:
+      repository: ghcr.io/cloudnative-pg/cloudnative-pg
+      tag: 1.30.0@sha256:a2701eb97cdd2a34b1fdb2cb51987f544b706e40bec72ae7146cd8580efefebb
+      pullPolicy: IfNotPresent
+    crds:
+      create: true
+    webhook:
+      mutating:
+        create: true
+        failurePolicy: Fail
+      validating:
+        create: true
+        failurePolicy: Fail
+    config:
+      create: true
+      clusterWide: true
+      maxConcurrentReconciles: 10
+    rbac:
+      create: true
+      aggregateClusterRoles: false
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsUser: 10001
+      runAsGroup: 10001
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: cnpg
+            app.kubernetes.io/name: cloudnative-pg
+    service:
+      type: ClusterIP
+      ipFamilyPolicy: PreferDualStack
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    monitoring:
+      podMonitorEnabled: false
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cnpg-controller-manager
+  namespace: cnpg-system
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: cnpg
+      app.kubernetes.io/name: cloudnative-pg
