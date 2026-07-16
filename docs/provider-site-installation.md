@@ -54,6 +54,13 @@ with enough supported filesystem capacity but no dedicated Ceph devices. Both
 profiles require downstream host preflight, activation, backup/restore, node
 loss, recovery, and cleanup evidence; a source render is never live readiness.
 
+The reusable database profile lives under
+`deploy/kubernetes/postgresql-ha`. It pairs the compact Longhorn profile with
+three hard-separated PostgreSQL instances and synchronous quorum durability.
+Downstream installations still own credential injection, sizing, immutable
+off-cell WAL/base backup, isolated restore, application cutover, and live
+primary-node-loss evidence.
+
 This slice is a complete preflight and planning contract. It is not an
 installer, does not prove that any provider site is reachable, and does not
 claim production readiness.

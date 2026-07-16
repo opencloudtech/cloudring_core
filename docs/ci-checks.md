@@ -29,6 +29,7 @@ The public CI contract covers these checks:
 | Check | Contract |
 | --- | --- |
 | Go tests | The public module must pass tests on supported minimum/current Go releases, plus race, vet, read-only module graph, and build checks. |
+| PostgreSQL integration | The transactional-state CAS, migrations, digest, and concurrent-writer behavior must pass against a real digest-pinned PostgreSQL service with synthetic, non-secret test configuration. |
 | Windows | The same unit suite is run on `windows-latest` as a portability signal. Native Windows support is not a release-readiness blocker for the current goal. |
 | OCS validation | The synthetic connector package must pass `go run ./cmd/ocsctl validate`. |
 | OCS conformance | The reference synthetic module must pass `go run ./cmd/ocsctl conformance`. |
@@ -36,6 +37,9 @@ The public CI contract covers these checks:
 | Security | CodeQL, govulncheck, gosec, and both current-tree and Git-history secret scans must pass without broad exclusions. |
 | Supply chain | Actions must be commit-pinned; workflows must be syntax-checked and must not request unexpected write permissions or PR secrets. The release-only workflow builds the Linux CLI bundle, generates a CycloneDX 1.6 SBOM, uploads both as one short-retention artifact set, and creates GitHub/Sigstore build and SBOM attestations. |
 | License and contribution docs | `LICENSE`, `NOTICE`, `CONTRIBUTING.md`, `SECURITY.md`, `GOVERNANCE.md`, `CLA.md`, `DCO.md`, and `TRADEMARKS.md` must exist in the public root. |
+
+The PostgreSQL service is an isolated CI dependency. This does not claim that
+a provider database or its backup and failover have been verified live.
 
 This contract does not require live provider credentials, secret environment
 variables, network mutation, or live Kubernetes access. Passing it only means

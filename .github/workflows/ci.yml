@@ -53,6 +53,37 @@ jobs:
           cache: true
       - run: go test -race ./... -count=1
 
+  postgres-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1
+    services:
+      postgres:
+        image: postgres:18.4@sha256:c2d42a104eb6b37b286a2d9c5cf83f349de4d6516d513d00a2bd9610e2c2e5e4
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.25.x
+          check-latest: true
+          cache: true
+      - name: Test transactional state against PostgreSQL
+        env:
+          CLOUDRING_POSTGRES_TEST_DSN: host=postgres port=5432 user=postgres dbname=postgres sslmode=disable
+        run: go test ./pkg/transactionalstate -run '^TestPostgreSQLDocumentLifecycleAndConcurrency$' -count=1
+
   go-vet:
     runs-on: ubuntu-latest
     timeout-minutes: 15

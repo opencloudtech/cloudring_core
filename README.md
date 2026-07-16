@@ -35,7 +35,8 @@ language, deployment substrate, or release cadence.
 
 The current pull request series is the first extraction from the existing
 platform into its canonical public repository. Contracts, conformance,
-backup-proof, and IAM/identity runtime slices are available; billing, portal,
+backup-proof, IAM/identity, and PostgreSQL-backed transactional-state runtime
+slices are available; billing, portal,
 installer, operations, and service slices are being moved with their tests.
 Green checks prove only the
 surfaces present in a commit and must not be interpreted as a claim that the
@@ -63,6 +64,8 @@ full platform extraction or a production installation is complete.
   continuity observer and exact fault/recovery evidence boundary.
 - Use `docs/provider-site-installation.md` for the strict provider-neutral site
   inventory preflight and deterministic installation plan contract.
+- Use `deploy/kubernetes/postgresql-ha/README.md` for the pinned CloudNativePG
+  HA source profile, migration boundary, and required downstream live gates.
 
 ## Fresh clone validation
 

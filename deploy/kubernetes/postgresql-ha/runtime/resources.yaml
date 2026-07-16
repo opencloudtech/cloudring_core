@@ -1,0 +1,153 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cloudring-postgres
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/name: cloudring-postgres
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-credential-backup-restore-and-live-failover-evidence-required
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4@sha256:17760b4508e1703f7bf3d5ee6c9335ff6d1bf62b034a3d5b32a43414a516789f
+  enableSuperuserAccess: false
+  enablePDB: true
+  failoverDelay: 10
+  primaryUpdateMethod: switchover
+  primaryUpdateStrategy: unsupervised
+  bootstrap:
+    initdb:
+      database: cloudring
+      owner: cloudring_owner
+      secret:
+        name: cloudring-postgres-owner
+      dataChecksums: true
+      encoding: UTF8
+  managed:
+    roles:
+      - name: cloudring_app
+        ensure: present
+        comment: CloudRING transactional state application
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        inherit: true
+        replication: false
+        bypassrls: false
+        connectionLimit: 50
+        passwordSecret:
+          name: cloudring-postgres-app
+  postgresql:
+    parameters:
+      password_encryption: scram-sha-256
+      ssl_min_protocol_version: TLSv1.3
+      synchronous_commit: remote_apply
+      log_connections: "on"
+      log_disconnections: "on"
+      log_min_duration_statement: "1000"
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+      failoverQuorum: true
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+    nodeSelector:
+      kubernetes.io/os: linux
+  storage:
+    storageClass: longhorn-replicated
+    size: 50Gi
+    resizeInUseVolumes: true
+  walStorage:
+    storageClass: longhorn-replicated
+    size: 20Gi
+    resizeInUseVolumes: true
+  nodeMaintenanceWindow:
+    reusePVC: false
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  monitoring:
+    enablePodMonitor: false
+  backup:
+    target: prefer-standby
+    volumeSnapshot:
+      className: longhorn-retain
+      walClassName: longhorn-retain
+      snapshotOwnerReference: none
+      online: true
+      onlineConfiguration:
+        immediateCheckpoint: true
+        waitForArchive: false
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: cloudring-postgres-volume-snapshot
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+spec:
+  schedule: "0 0 */6 * * *"
+  backupOwnerReference: self
+  method: volumeSnapshot
+  immediate: false
+  cluster:
+    name: cloudring-postgres
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudring-postgres-ingress
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: cloudring-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: cloudring-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - podSelector:
+            matchLabels:
+              cloudring.org/postgresql-client: "true"
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+      ports:
+        - protocol: TCP
+          port: 8000
