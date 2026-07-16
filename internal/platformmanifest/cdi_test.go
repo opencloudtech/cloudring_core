@@ -15,7 +15,7 @@ func TestCDIProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify CDI profile: %v", err)
 	}
-	if report.Status != "ready" || report.Files != 5 || report.Documents != 9 || len(report.Checks) != 7 {
+	if report.Status != "ready" || report.Files != 6 || report.Documents != 9 || len(report.Checks) != 8 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -34,6 +34,7 @@ func TestCDIProfileRejectsUnsafeChanges(t *testing.T) {
 		{"unsafe removal", "runtime/resources.yaml", "  uninstallStrategy: BlockUninstallIfWorkloadsExist\n", "  uninstallStrategy: RemoveWorkloads\n"},
 		{"delayed binding disabled", "runtime/resources.yaml", "      - HonorWaitForFirstConsumer\n", "      - OtherGate\n"},
 		{"non-linux workload", "runtime/resources.yaml", "  workload:\n    nodeSelector:\n      kubernetes.io/os: linux\n", "  workload:\n    nodeSelector:\n      kubernetes.io/os: windows\n"},
+		{"disabled raw block ownership", "README.md", "device_ownership_from_security_context = true", "device_ownership_from_security_context = false"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -86,6 +87,7 @@ func copyCDIProfile(t *testing.T) string {
 	}
 	defer destination.Close()
 	for _, relative := range []string{
+		"README.md",
 		"controllers/kustomization.yaml",
 		"controllers/upstream-cdi-operator-v1.65.0.yaml",
 		"activation/kustomization.yaml",

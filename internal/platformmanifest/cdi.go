@@ -53,11 +53,14 @@ func VerifyCDI(root string) (Report, error) {
 	if err := validateCDIActivation(repository); err != nil {
 		return report, err
 	}
+	if err := validateCDIHostPrerequisite(repository); err != nil {
+		return report, err
+	}
 	runtime, err := readCDIRuntime(repository)
 	if err != nil {
 		return report, err
 	}
-	report.Files = 5
+	report.Files = 6
 	report.Documents = len(controllers) + len(runtime)
 	if report.Documents != 9 {
 		return report, errors.New("CDI source inventory is incomplete")
@@ -76,9 +79,28 @@ func VerifyCDI(root string) (Report, error) {
 		"operator_and_operand_images_digest_pinned",
 		"delayed_binding_and_webhook_rendering_enabled",
 		"workload_safe_uninstall_policy_enabled",
+		"non_root_raw_block_device_ownership_required",
 		"live_import_persistence_and_restore_non_claim_preserved",
 	}
 	return report, nil
+}
+
+func validateCDIHostPrerequisite(root *os.Root) error {
+	data, err := readRegular(root, filepath.Join(cdiProfilePath, "README.md"))
+	if err != nil {
+		return err
+	}
+	for _, required := range [][]byte{
+		[]byte("device_ownership_from_security_context = true"),
+		[]byte("containerd config dump"),
+		[]byte("restart containerd one node at a time"),
+		[]byte("changing the importer to run as root is not an acceptable substitute"),
+	} {
+		if !bytes.Contains(data, required) {
+			return errors.New("CDI host runtime prerequisite is incomplete")
+		}
+	}
+	return nil
 }
 
 func readCDIControllers(root *os.Root) ([]object, error) {
