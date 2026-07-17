@@ -18,6 +18,10 @@ nodes, three workers, and three public Gateway nodes, with every role spread
 across at least three failure domains;
 unique provider-resource, management-address, and provisioning-address
 references; dual-stack networking;
+one health-checked dual-stack control-plane API endpoint which is not any
+node's management or provisioning address, is covered by the API serving
+certificate, and is also the exact bootstrap endpoint used by the CNI network
+agent or another pre-Service API client;
 stable IPv4 and IPv6 public-ingress addresses backed by an L2 VIP, BGP VIP,
 provider load balancer, or anycast implementation, plus provider-owned health
 check and failover-policy references (DNS round robin over node addresses is
@@ -37,6 +41,35 @@ CLI never applies the plan and never reads referenced values.
 The JSON Schema enforces structure and the baseline three-node role counts.
 The Go preflight is authoritative for cross-field rules, including declared
 availability values, per-role failure-domain spread, and reference uniqueness.
+
+The control-plane endpoint must be implemented by an L2 or BGP VIP, provider
+load balancer, or anycast service with health checking and a failover policy.
+Pointing Cilium's `k8sServiceHost`, or an equivalent bootstrap client, at the
+first control-plane node creates a circular outage: when that node is lost the
+network agent cannot observe the API or move service leadership. The profile
+therefore requires `controlPlaneAPIHA.endpointRef` and
+`controlPlaneAPIHA.cniBootstrapEndpointRef` to be the same provider-owned
+reference and rejects every declared per-node management or provisioning
+address. `controlPlaneTransportDeviceRef` identifies the private or provider
+transport device and `cniDeviceRefs` must contain it; omitting it can isolate
+workloads from a surviving API server even when the virtual endpoint itself
+moves correctly.
+
+The references in `ipv4AddressRef` and `ipv6AddressRef` must both be included
+in `servingCertificateSANRefs`, together with `endpointRef`. The
+`servingCertificateLifecycle` must identify an idempotent reconfiguration
+workflow, an exact rollback, and the one-server-loss acceptance. Its fixed
+`one-node-at-a-time` rollout retains the previous certificate and key for
+rollback, verifies the local static pod and the shared endpoint before
+continuing, and stops on the first failure. The profile and evidence must not
+contain private keys.
+
+The referenced one-server-loss acceptance must remove the current API-endpoint
+holder, prove that surviving network agents remain connected to the API, and
+verify authenticated IPv4 and IPv6 API requests before the node is returned.
+A profile is still a preflight-and-plan contract: its references do not
+support a live release claim until their downstream implementations and the
+failure test have been executed.
 
 The host-runtime baseline is a capacity contract, not a prescribed operating
 system. A Linux installer can satisfy it with a root-owned persistent sysctl

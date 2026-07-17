@@ -85,12 +85,40 @@ type Node struct {
 }
 
 type Network struct {
-	DualStack            bool            `json:"dualStack" yaml:"dualStack"`
-	ManagementPlaneRef   string          `json:"managementPlaneRef" yaml:"managementPlaneRef"`
-	ProvisioningPlaneRef string          `json:"provisioningPlaneRef" yaml:"provisioningPlaneRef"`
-	TenantPlaneRef       string          `json:"tenantPlaneRef" yaml:"tenantPlaneRef"`
-	PublicIngressRef     string          `json:"publicIngressRef" yaml:"publicIngressRef"`
-	PublicIngressHA      PublicIngressHA `json:"publicIngressHA" yaml:"publicIngressHA"`
+	DualStack            bool              `json:"dualStack" yaml:"dualStack"`
+	ManagementPlaneRef   string            `json:"managementPlaneRef" yaml:"managementPlaneRef"`
+	ProvisioningPlaneRef string            `json:"provisioningPlaneRef" yaml:"provisioningPlaneRef"`
+	TenantPlaneRef       string            `json:"tenantPlaneRef" yaml:"tenantPlaneRef"`
+	PublicIngressRef     string            `json:"publicIngressRef" yaml:"publicIngressRef"`
+	ControlPlaneAPIHA    ControlPlaneAPIHA `json:"controlPlaneAPIHA" yaml:"controlPlaneAPIHA"`
+	PublicIngressHA      PublicIngressHA   `json:"publicIngressHA" yaml:"publicIngressHA"`
+}
+
+// ControlPlaneAPIHA binds both the kubeadm endpoint and every component which
+// needs the API before Kubernetes Service routing exists to the same
+// health-checked endpoint. A node management or provisioning address is not a
+// control-plane HA endpoint.
+type ControlPlaneAPIHA struct {
+	Mode                           string                      `json:"mode" yaml:"mode"`
+	EndpointRef                    string                      `json:"endpointRef" yaml:"endpointRef"`
+	IPv4AddressRef                 string                      `json:"ipv4AddressRef" yaml:"ipv4AddressRef"`
+	IPv6AddressRef                 string                      `json:"ipv6AddressRef" yaml:"ipv6AddressRef"`
+	ServingCertificateSANRefs      []string                    `json:"servingCertificateSANRefs" yaml:"servingCertificateSANRefs"`
+	CNIBootstrapEndpointRef        string                      `json:"cniBootstrapEndpointRef" yaml:"cniBootstrapEndpointRef"`
+	ControlPlaneTransportDeviceRef string                      `json:"controlPlaneTransportDeviceRef" yaml:"controlPlaneTransportDeviceRef"`
+	CNIDeviceRefs                  []string                    `json:"cniDeviceRefs" yaml:"cniDeviceRefs"`
+	HealthCheckRef                 string                      `json:"healthCheckRef" yaml:"healthCheckRef"`
+	FailoverPolicyRef              string                      `json:"failoverPolicyRef" yaml:"failoverPolicyRef"`
+	ServingCertificateLifecycle    ServingCertificateLifecycle `json:"servingCertificateLifecycle" yaml:"servingCertificateLifecycle"`
+}
+
+// ServingCertificateLifecycle binds a fail-closed rolling reconfiguration to
+// its rollback and the failure exercise which proves the shared endpoint.
+type ServingCertificateLifecycle struct {
+	RolloutStrategy            string `json:"rolloutStrategy" yaml:"rolloutStrategy"`
+	ReconfigurationPlanRef     string `json:"reconfigurationPlanRef" yaml:"reconfigurationPlanRef"`
+	RollbackPlanRef            string `json:"rollbackPlanRef" yaml:"rollbackPlanRef"`
+	OneServerLossAcceptanceRef string `json:"oneServerLossAcceptanceRef" yaml:"oneServerLossAcceptanceRef"`
 }
 
 // PublicIngressHA describes stable dual-stack service addresses and the
@@ -259,6 +287,10 @@ func Validate(profile Profile) Report {
 		profile.Spec.Network.TenantPlaneRef,
 		profile.Spec.Network.PublicIngressRef,
 	))
+	record("control_plane_api_ha", validControlPlaneAPIHA(
+		profile.Spec.Network.ControlPlaneAPIHA,
+		profile.Spec.Inventory,
+	))
 	record("public_ingress_ha", validPublicIngressHA(profile.Spec.Network.PublicIngressHA))
 	record("host_runtime_baseline", profile.Spec.HostRuntimeBaseline.InotifyMaxUserInstances >= 1024 && allRefs(
 		profile.Spec.HostRuntimeBaseline.PersistenceRef,
@@ -315,16 +347,7 @@ func BuildPlan(profile Profile) (Plan, error) {
 		NonClaim:      RequiredNonClaim,
 		Phases: []Phase{
 			{ID: "inventory", DependsOn: []string{}, InputRefs: nodeRefs, Mutation: false},
-			{ID: "network", DependsOn: []string{"inventory"}, InputRefs: sortedRefs(
-				profile.Spec.Network.ManagementPlaneRef,
-				profile.Spec.Network.ProvisioningPlaneRef,
-				profile.Spec.Network.TenantPlaneRef,
-				profile.Spec.Network.PublicIngressRef,
-				profile.Spec.Network.PublicIngressHA.IPv4AddressRef,
-				profile.Spec.Network.PublicIngressHA.IPv6AddressRef,
-				profile.Spec.Network.PublicIngressHA.HealthCheckRef,
-				profile.Spec.Network.PublicIngressHA.FailoverPolicyRef,
-			), Mutation: false},
+			{ID: "network", DependsOn: []string{"inventory"}, InputRefs: networkInputRefs(profile), Mutation: false},
 			{ID: "identity", DependsOn: []string{"inventory", "network"}, InputRefs: sortedRefs(
 				profile.Spec.Identity.OIDCProviderRef,
 				profile.Spec.Identity.WorkloadIdentityRef,
@@ -345,11 +368,14 @@ func BuildPlan(profile Profile) (Plan, error) {
 			{ID: "bootstrap", DependsOn: []string{"identity", "storage", "observability"}, InputRefs: sortedRefs(
 				profile.Spec.Operations.GitOpsSourceRef,
 				profile.Spec.Operations.BootstrapPlanRef,
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle.ReconfigurationPlanRef,
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle.RollbackPlanRef,
 			), Mutation: true, RollbackRef: profile.Spec.Operations.RollbackPlanRef},
 			{ID: "acceptance", DependsOn: []string{"bootstrap"}, InputRefs: sortedRefs(
 				profile.Spec.Operations.UpgradePlanRef,
 				profile.Spec.Operations.RollbackPlanRef,
 				profile.Spec.OCS.ConformanceProfileRef,
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle.OneServerLossAcceptanceRef,
 			), Mutation: false},
 		},
 	}, nil
@@ -389,6 +415,102 @@ func validPublicIngressHA(value PublicIngressHA) bool {
 		return false
 	}
 	return allRefs(value.IPv4AddressRef, value.IPv6AddressRef, value.HealthCheckRef, value.FailoverPolicyRef)
+}
+
+func validControlPlaneAPIHA(value ControlPlaneAPIHA, inventory Inventory) bool {
+	switch value.Mode {
+	case "l2-vip", "bgp-vip", "provider-load-balancer", "anycast":
+	default:
+		return false
+	}
+	if !allRefs(
+		value.EndpointRef,
+		value.IPv4AddressRef,
+		value.IPv6AddressRef,
+		value.CNIBootstrapEndpointRef,
+		value.ControlPlaneTransportDeviceRef,
+		value.HealthCheckRef,
+		value.FailoverPolicyRef,
+	) ||
+		value.EndpointRef != value.CNIBootstrapEndpointRef ||
+		value.IPv4AddressRef == value.IPv6AddressRef ||
+		len(value.ServingCertificateSANRefs) < 3 ||
+		!validUniqueRefs(value.ServingCertificateSANRefs) ||
+		!containsAll(
+			value.ServingCertificateSANRefs,
+			value.EndpointRef,
+			value.IPv4AddressRef,
+			value.IPv6AddressRef,
+		) ||
+		!validUniqueRefs(value.CNIDeviceRefs) ||
+		!slices.Contains(value.CNIDeviceRefs, value.ControlPlaneTransportDeviceRef) ||
+		value.ServingCertificateLifecycle.RolloutStrategy != "one-node-at-a-time" ||
+		!allRefs(
+			value.ServingCertificateLifecycle.ReconfigurationPlanRef,
+			value.ServingCertificateLifecycle.RollbackPlanRef,
+			value.ServingCertificateLifecycle.OneServerLossAcceptanceRef,
+		) {
+		return false
+	}
+	for _, node := range inventory.Nodes {
+		if slices.Contains(
+			[]string{value.EndpointRef, value.IPv4AddressRef, value.IPv6AddressRef},
+			node.ManagementAddressRef,
+		) || slices.Contains(
+			[]string{value.EndpointRef, value.IPv4AddressRef, value.IPv6AddressRef},
+			node.ProvisioningAddressRef,
+		) {
+			return false
+		}
+	}
+	return true
+}
+
+func networkInputRefs(profile Profile) []string {
+	network := profile.Spec.Network
+	controlPlane := network.ControlPlaneAPIHA
+	values := []string{
+		network.ManagementPlaneRef,
+		network.ProvisioningPlaneRef,
+		network.TenantPlaneRef,
+		network.PublicIngressRef,
+		controlPlane.EndpointRef,
+		controlPlane.IPv4AddressRef,
+		controlPlane.IPv6AddressRef,
+		controlPlane.ControlPlaneTransportDeviceRef,
+		controlPlane.HealthCheckRef,
+		controlPlane.FailoverPolicyRef,
+		network.PublicIngressHA.IPv4AddressRef,
+		network.PublicIngressHA.IPv6AddressRef,
+		network.PublicIngressHA.HealthCheckRef,
+		network.PublicIngressHA.FailoverPolicyRef,
+	}
+	values = append(values, controlPlane.ServingCertificateSANRefs...)
+	values = append(values, controlPlane.CNIDeviceRefs...)
+	return sortedRefs(values...)
+}
+
+func validUniqueRefs(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if !validRef(value) {
+			return false
+		}
+		if _, exists := seen[value]; exists {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
+}
+
+func containsAll(values []string, expected ...string) bool {
+	return !slices.ContainsFunc(expected, func(value string) bool {
+		return !slices.Contains(values, value)
+	})
 }
 
 func validInventory(value Inventory, availability Availability) bool {
@@ -442,7 +564,15 @@ func validInventory(value Inventory, availability Availability) bool {
 }
 
 func sortedRefs(values ...string) []string {
-	result := append([]string(nil), values...)
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
 	sort.Strings(result)
 	return result
 }

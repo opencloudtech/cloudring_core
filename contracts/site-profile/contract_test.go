@@ -52,6 +52,79 @@ func TestSchemaRejectsDNSRoundRobinOnlyPublicIngress(t *testing.T) {
 	}
 }
 
+func TestSchemaRequiresControlPlaneAPIHA(t *testing.T) {
+	for _, field := range []string{
+		"mode",
+		"endpointRef",
+		"ipv4AddressRef",
+		"ipv6AddressRef",
+		"servingCertificateSANRefs",
+		"cniBootstrapEndpointRef",
+		"controlPlaneTransportDeviceRef",
+		"cniDeviceRefs",
+		"healthCheckRef",
+		"failoverPolicyRef",
+		"servingCertificateLifecycle",
+	} {
+		t.Run(field, func(t *testing.T) {
+			var document map[string]any
+			if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+				t.Fatal(err)
+			}
+			ha := document["spec"].(map[string]any)["network"].(map[string]any)["controlPlaneAPIHA"].(map[string]any)
+			delete(ha, field)
+			if schemaAccepts(t, document) {
+				t.Fatalf("control-plane API HA without %s passed schema validation", field)
+			}
+		})
+	}
+}
+
+func TestSchemaRequiresServingCertificateLifecycle(t *testing.T) {
+	for _, field := range []string{"rolloutStrategy", "reconfigurationPlanRef", "rollbackPlanRef", "oneServerLossAcceptanceRef"} {
+		t.Run(field, func(t *testing.T) {
+			var document map[string]any
+			if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+				t.Fatal(err)
+			}
+			lifecycle := document["spec"].(map[string]any)["network"].(map[string]any)["controlPlaneAPIHA"].(map[string]any)["servingCertificateLifecycle"].(map[string]any)
+			delete(lifecycle, field)
+			if schemaAccepts(t, document) {
+				t.Fatalf("serving-certificate lifecycle without %s passed schema validation", field)
+			}
+		})
+	}
+}
+
+func TestSchemaRejectsDuplicateControlPlaneLists(t *testing.T) {
+	for _, field := range []string{"servingCertificateSANRefs", "cniDeviceRefs"} {
+		t.Run(field, func(t *testing.T) {
+			var document map[string]any
+			if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+				t.Fatal(err)
+			}
+			ha := document["spec"].(map[string]any)["network"].(map[string]any)["controlPlaneAPIHA"].(map[string]any)
+			values := ha[field].([]any)
+			ha[field] = append(values, values[0])
+			if schemaAccepts(t, document) {
+				t.Fatalf("duplicate %s passed schema validation", field)
+			}
+		})
+	}
+}
+
+func TestSchemaRejectsDNSRoundRobinControlPlaneAPI(t *testing.T) {
+	var document map[string]any
+	if err := json.Unmarshal(exampleJSON(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	network := document["spec"].(map[string]any)["network"].(map[string]any)
+	network["controlPlaneAPIHA"].(map[string]any)["mode"] = "dns-round-robin"
+	if schemaAccepts(t, document) {
+		t.Fatal("DNS round robin over control-plane nodes passed API HA validation")
+	}
+}
+
 func TestSchemaRequiresDualStackIngressAddressesAndFailover(t *testing.T) {
 	for _, field := range []string{"ipv4AddressRef", "ipv6AddressRef", "healthCheckRef", "failoverPolicyRef"} {
 		t.Run(field, func(t *testing.T) {

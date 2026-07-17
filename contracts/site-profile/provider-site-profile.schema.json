@@ -151,14 +151,54 @@
     "network": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dualStack", "managementPlaneRef", "provisioningPlaneRef", "tenantPlaneRef", "publicIngressRef", "publicIngressHA"],
+      "required": ["dualStack", "managementPlaneRef", "provisioningPlaneRef", "tenantPlaneRef", "publicIngressRef", "controlPlaneAPIHA", "publicIngressHA"],
       "properties": {
         "dualStack": {"const": true},
         "managementPlaneRef": {"$ref": "#/$defs/reference"},
         "provisioningPlaneRef": {"$ref": "#/$defs/reference"},
         "tenantPlaneRef": {"$ref": "#/$defs/reference"},
         "publicIngressRef": {"$ref": "#/$defs/reference"},
+        "controlPlaneAPIHA": {"$ref": "#/$defs/controlPlaneAPIHA"},
         "publicIngressHA": {"$ref": "#/$defs/publicIngressHA"}
+      }
+    },
+    "controlPlaneAPIHA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "endpointRef", "ipv4AddressRef", "ipv6AddressRef", "servingCertificateSANRefs", "cniBootstrapEndpointRef", "controlPlaneTransportDeviceRef", "cniDeviceRefs", "healthCheckRef", "failoverPolicyRef", "servingCertificateLifecycle"],
+      "properties": {
+        "mode": {"enum": ["l2-vip", "bgp-vip", "provider-load-balancer", "anycast"]},
+        "endpointRef": {"$ref": "#/$defs/reference"},
+        "ipv4AddressRef": {"$ref": "#/$defs/reference"},
+        "ipv6AddressRef": {"$ref": "#/$defs/reference"},
+        "servingCertificateSANRefs": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/reference"}
+        },
+        "cniBootstrapEndpointRef": {"$ref": "#/$defs/reference"},
+        "controlPlaneTransportDeviceRef": {"$ref": "#/$defs/reference"},
+        "cniDeviceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/reference"}
+        },
+        "healthCheckRef": {"$ref": "#/$defs/reference"},
+        "failoverPolicyRef": {"$ref": "#/$defs/reference"},
+        "servingCertificateLifecycle": {"$ref": "#/$defs/servingCertificateLifecycle"}
+      }
+    },
+    "servingCertificateLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rolloutStrategy", "reconfigurationPlanRef", "rollbackPlanRef", "oneServerLossAcceptanceRef"],
+      "properties": {
+        "rolloutStrategy": {"const": "one-node-at-a-time"},
+        "reconfigurationPlanRef": {"$ref": "#/$defs/reference"},
+        "rollbackPlanRef": {"$ref": "#/$defs/reference"},
+        "oneServerLossAcceptanceRef": {"$ref": "#/$defs/reference"}
       }
     },
     "publicIngressHA": {
