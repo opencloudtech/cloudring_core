@@ -41,6 +41,8 @@ CLI never applies the plan and never reads referenced values.
 The JSON Schema enforces structure and the baseline three-node role counts.
 The Go preflight is authoritative for cross-field rules, including declared
 availability values, per-role failure-domain spread, and reference uniqueness.
+The provider-neutral kubeadm renderer and stand verifier are documented in
+[`kubeadm-control-plane-ha.md`](./kubeadm-control-plane-ha.md).
 
 The control-plane endpoint must be implemented by an L2 or BGP VIP, provider
 load balancer, or anycast service with health checking and a failover policy.

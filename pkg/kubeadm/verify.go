@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+package kubeadm
+
+import (
+	"fmt"
+	"net/netip"
+	"strings"
+)
+
+// VerifyUpstreamStand independently evaluates sanitized observed state against
+// the upstream Kubernetes HA contract.
+func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
+	report := StandReport{
+		Status:               "ready",
+		WorkflowContinuity:   inventory.WorkflowContinuity,
+		DataDurability:       inventory.DataDurability,
+		SinglePointOfFailure: inventory.SinglePointOfFailure,
+		Observed:             inventory,
+	}
+	add := func(id, category, message string) {
+		report.Blockers = append(report.Blockers, Blocker{ID: id, Category: category, Message: message})
+	}
+
+	if !strings.EqualFold(strings.TrimSpace(inventory.Distribution), "upstream") {
+		add("non_upstream_distribution", "runtime_policy", "cluster distribution must be upstream Kubernetes")
+	}
+	if !strings.EqualFold(strings.TrimSpace(inventory.Bootstrap), "kubeadm") {
+		add("non_kubeadm_bootstrap", "runtime_policy", "cluster bootstrap must be kubeadm")
+	}
+	serverVersion := strings.ToLower(strings.TrimSpace(inventory.ServerVersion))
+	switch {
+	case serverVersion == "":
+		add("missing_server_version", "runtime_policy", "captured inventory must include Kubernetes server version")
+	case strings.Contains(serverVersion, "+k3s"):
+		add("legacy_k3s_version", "runtime_policy", "server version contains +k3s and cannot satisfy upstream readiness")
+	}
+	controlPlaneEndpoint := normalizeEndpoint(inventory.ControlPlaneEndpoint)
+	controlPlaneHost := endpointHost(controlPlaneEndpoint)
+	if controlPlaneHost == "" {
+		add("missing_control_plane_endpoint", "ha_topology", "captured inventory must include the kubeadm controlPlaneEndpoint")
+	}
+	stableIPv4 := strings.TrimSpace(inventory.StableAPIIPv4)
+	stableIPv6 := strings.TrimSpace(inventory.StableAPIIPv6)
+	parsedStableIPv4, stableIPv4Err := netip.ParseAddr(stableIPv4)
+	parsedStableIPv6, stableIPv6Err := netip.ParseAddr(stableIPv6)
+	if stableIPv4Err != nil || !parsedStableIPv4.Is4() || stableIPv6Err != nil || !parsedStableIPv6.Is6() {
+		add("stable_api_addresses_missing", "ha_topology", "captured inventory must include stable API IPv4 and IPv6 addresses")
+	}
+	sans, validSANs := uniqueTrimmed(inventory.APIServingCertificateSANs)
+	if !validSANs ||
+		!hasDualStackSANs(sans) ||
+		!containsString(sans, controlPlaneHost) ||
+		!containsString(sans, stableIPv4) ||
+		!containsString(sans, stableIPv6) {
+		add("api_serving_certificate_sans_missing", "networking", "API serving certificate evidence must cover the endpoint host and the declared stable API IPv4 and IPv6 addresses")
+	}
+	if inventory.ControlPlaneReplicas < 3 {
+		add("missing_control_plane_replicas", "ha_topology", "at least three control-plane replicas are required")
+	}
+	if !strings.EqualFold(strings.TrimSpace(inventory.EtcdTopology), "stacked") {
+		add("missing_stacked_etcd", "ha_topology", "stacked etcd topology is required for this profile")
+	}
+	if !HasIPv4AndIPv6CIDRs(inventory.PodCIDRs) {
+		add("missing_dual_stack_pod_cidrs", "dual_stack", "pod CIDR inventory must include IPv4 and IPv6 ranges")
+	}
+	if !HasIPv4AndIPv6CIDRs(inventory.ServiceCIDRs) {
+		add("missing_dual_stack_service_cidrs", "dual_stack", "service CIDR inventory must include IPv4 and IPv6 ranges")
+	}
+	if inventory.SurviveUnavailableServers < 1 {
+		add("missing_one_server_loss_evidence", "ha_topology", "readiness requires evidence for surviving one unavailable server")
+	}
+	if !inventory.CiliumDualStackReady {
+		add("cilium_dual_stack_unready", "networking", "Cilium dual-stack readiness evidence is required")
+	}
+	if normalizeEndpoint(inventory.CiliumAPIEndpoint) != controlPlaneEndpoint {
+		add("cilium_api_endpoint_mismatch", "networking", "Cilium must use the same stable endpoint as kubeadm")
+	}
+	devices, validDevices := uniqueTrimmed(inventory.CiliumDevices)
+	transportDevice := strings.TrimSpace(inventory.ControlPlaneTransportDevice)
+	if transportDevice == "" || !validDevices || !containsString(devices, transportDevice) {
+		add("cilium_control_plane_device_missing", "networking", "Cilium devices must contain the control-plane transport device")
+	}
+	if strings.TrimSpace(inventory.ServingCertificateRolloutStrategy) != "one-node-at-a-time" {
+		add("serving_certificate_rollout_unsafe", "workflow_continuity", "API serving certificates must be reconfigured one node at a time")
+	}
+	if !inventory.ServingCertificateReconfigurationReady {
+		add("serving_certificate_reconfiguration_unverified", "workflow_continuity", "API serving-certificate reconfiguration evidence is required")
+	}
+	if !inventory.ServingCertificateRollbackReady {
+		add("serving_certificate_rollback_unverified", "workflow_continuity", "API serving-certificate rollback evidence is required")
+	}
+	if !inventory.ControlPlaneAPIFailoverReady {
+		add("control_plane_api_failover_unverified", "single_point_of_failure", "authenticated dual-stack API failover evidence is required")
+	}
+	if inventory.CoreDNSMinReplicas < 2 || !inventory.CoreDNSSpreadReady {
+		add("coredns_spread_missing", "workflow_continuity", "CoreDNS replica and topology-spread evidence is required")
+	}
+	if !inventory.PodDisruptionBudgetsReady {
+		add("missing_pdb_evidence", "workflow_continuity", "PodDisruptionBudget evidence is required")
+	}
+	if len(inventory.Nodes) < inventory.ControlPlaneReplicas {
+		add("missing_node_inventory", "ha_topology", "node inventory must include every control-plane replica")
+	}
+	nodeNamesSeen := make(map[string]struct{}, len(inventory.Nodes))
+	nodeIPv4Seen := make(map[string]struct{}, len(inventory.Nodes))
+	nodeIPv6Seen := make(map[string]struct{}, len(inventory.Nodes))
+	for _, node := range inventory.Nodes {
+		nodeName := strings.TrimSpace(node.Name)
+		nodeIPv4 := strings.TrimSpace(node.NodeIPv4)
+		nodeIPv6 := strings.TrimSpace(node.NodeIPv6)
+		if nodeName == "" {
+			add("unnamed_node_inventory", "ha_topology", "each node inventory entry must be named")
+			continue
+		}
+		if _, exists := nodeNamesSeen[nodeName]; exists {
+			add("duplicate_node_name", "ha_topology", "control-plane node names must be unique")
+		}
+		if _, exists := nodeIPv4Seen[nodeIPv4]; exists {
+			add("duplicate_node_ipv4", "ha_topology", "control-plane IPv4 addresses must be unique")
+		}
+		if _, exists := nodeIPv6Seen[nodeIPv6]; exists {
+			add("duplicate_node_ipv6", "ha_topology", "control-plane IPv6 addresses must be unique")
+		}
+		nodeNamesSeen[nodeName] = struct{}{}
+		nodeIPv4Seen[nodeIPv4] = struct{}{}
+		nodeIPv6Seen[nodeIPv6] = struct{}{}
+		if !node.Ready {
+			add("node_not_ready_"+nodeName, "workflow_continuity", "node must be Ready")
+		}
+		if !node.ControlPlane {
+			add("node_missing_control_plane_"+nodeName, "ha_topology", "node must carry the control-plane role")
+		}
+		if !node.EtcdMember {
+			add("node_missing_etcd_"+nodeName, "data_durability", "node must be an etcd member in stacked topology")
+		}
+		if !HasIPv4AndIPv6Addresses(nodeIPv4, nodeIPv6) {
+			add("node_missing_dual_stack_ip_"+nodeName, "dual_stack", "node inventory must include IPv4 and IPv6 node-ip evidence")
+		}
+		if controlPlaneHost == nodeIPv4 || controlPlaneHost == nodeIPv6 {
+			add("node_bound_control_plane_endpoint", "ha_topology", "control plane endpoint must not be any node address")
+		}
+		if stableIPv4 == nodeIPv4 || stableIPv6 == nodeIPv6 {
+			add("node_bound_stable_api_address", "ha_topology", "stable API addresses must not be any node address")
+		}
+	}
+	requireEvidence := func(id, category string, evidence EvidenceInventory) {
+		if strings.TrimSpace(evidence.Summary) == "" || len(trimmedCopy(evidence.Items)) == 0 {
+			add(id, category, "required readiness evidence inventory is missing")
+		}
+	}
+	requireEvidence("missing_workflow_continuity_evidence", "workflow_continuity", inventory.WorkflowContinuity)
+	requireEvidence("missing_data_durability_evidence", "data_durability", inventory.DataDurability)
+	requireEvidence("missing_spof_inventory", "single_point_of_failure", inventory.SinglePointOfFailure)
+
+	if len(report.Blockers) > 0 {
+		report.Status = "blocked"
+		return report, fmt.Errorf("verify upstream stand: %w", ErrStandBlocked)
+	}
+	return report, nil
+}
