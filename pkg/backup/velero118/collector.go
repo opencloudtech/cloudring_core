@@ -25,6 +25,7 @@ var ErrNotFound = errors.New("Kubernetes object not found")
 
 const (
 	providerAbsenceMinimumInterval = 10 * time.Second
+	providerAbsenceClockSkewMargin = time.Second
 	serverStatusMaximumAge         = time.Minute
 	sourceBaselineMaximumAge       = 15 * time.Minute
 )
@@ -254,7 +255,11 @@ func CollectCSIDataMoverVolumeLineage(
 		return restoreproof.VolumeReceipt{}, errors.New("provider absence observation timestamp is invalid")
 	}
 	backend.AbsenceObservations = append(backend.AbsenceObservations, firstAbsence)
-	if err := clock.Wait(ctx, providerAbsenceMinimumInterval); err != nil {
+	// Wait on the local monotonic clock beyond the evidence interval because
+	// provider observations carry wall-clock timestamps. A small NTP correction
+	// must not make an otherwise valid absence proof intermittently fail, while
+	// the timestamp validator below still enforces the full minimum interval.
+	if err := clock.Wait(ctx, providerAbsenceMinimumInterval+providerAbsenceClockSkewMargin); err != nil {
 		return restoreproof.VolumeReceipt{}, errors.New("provider absence interval interrupted")
 	}
 	if _, err := requireExactCleanup(ctx, reader, cleanupTargets); err != nil {
