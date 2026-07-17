@@ -5,7 +5,6 @@ package kubeadm
 
 import (
 	"fmt"
-	"net/netip"
 	"strings"
 )
 
@@ -43,12 +42,18 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 	}
 	stableIPv4 := strings.TrimSpace(inventory.StableAPIIPv4)
 	stableIPv6 := strings.TrimSpace(inventory.StableAPIIPv6)
-	parsedStableIPv4, stableIPv4Err := netip.ParseAddr(stableIPv4)
-	parsedStableIPv6, stableIPv6Err := netip.ParseAddr(stableIPv6)
-	if stableIPv4Err != nil || !parsedStableIPv4.Is4() || stableIPv6Err != nil || !parsedStableIPv6.Is6() {
+	parsedStableIPv4, stableIPv4OK := canonicalAddress(stableIPv4)
+	parsedStableIPv6, stableIPv6OK := canonicalAddress(stableIPv6)
+	if stableIPv4OK {
+		stableIPv4 = parsedStableIPv4.String()
+	}
+	if stableIPv6OK {
+		stableIPv6 = parsedStableIPv6.String()
+	}
+	if !stableIPv4OK || !parsedStableIPv4.Is4() || !stableIPv6OK || !parsedStableIPv6.Is6() {
 		add("stable_api_addresses_missing", "ha_topology", "captured inventory must include stable API IPv4 and IPv6 addresses")
 	}
-	sans, validSANs := uniqueTrimmed(inventory.APIServingCertificateSANs)
+	sans, validSANs := uniqueNormalizedHosts(inventory.APIServingCertificateSANs)
 	if !validSANs ||
 		!hasDualStackSANs(sans) ||
 		!containsString(sans, controlPlaneHost) ||
@@ -108,8 +113,16 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 	nodeIPv6Seen := make(map[string]struct{}, len(inventory.Nodes))
 	for _, node := range inventory.Nodes {
 		nodeName := strings.TrimSpace(node.Name)
-		nodeIPv4 := strings.TrimSpace(node.NodeIPv4)
-		nodeIPv6 := strings.TrimSpace(node.NodeIPv6)
+		parsedNodeIPv4, nodeIPv4OK := canonicalAddress(node.NodeIPv4)
+		parsedNodeIPv6, nodeIPv6OK := canonicalAddress(node.NodeIPv6)
+		nodeIPv4 := ""
+		nodeIPv6 := ""
+		if nodeIPv4OK && parsedNodeIPv4.Is4() {
+			nodeIPv4 = parsedNodeIPv4.String()
+		}
+		if nodeIPv6OK && parsedNodeIPv6.Is6() {
+			nodeIPv6 = parsedNodeIPv6.String()
+		}
 		if nodeName == "" {
 			add("unnamed_node_inventory", "ha_topology", "each node inventory entry must be named")
 			continue
@@ -117,15 +130,19 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 		if _, exists := nodeNamesSeen[nodeName]; exists {
 			add("duplicate_node_name", "ha_topology", "control-plane node names must be unique")
 		}
-		if _, exists := nodeIPv4Seen[nodeIPv4]; exists {
-			add("duplicate_node_ipv4", "ha_topology", "control-plane IPv4 addresses must be unique")
+		if nodeIPv4 != "" {
+			if _, exists := nodeIPv4Seen[nodeIPv4]; exists {
+				add("duplicate_node_ipv4", "ha_topology", "control-plane IPv4 addresses must be unique")
+			}
+			nodeIPv4Seen[nodeIPv4] = struct{}{}
 		}
-		if _, exists := nodeIPv6Seen[nodeIPv6]; exists {
-			add("duplicate_node_ipv6", "ha_topology", "control-plane IPv6 addresses must be unique")
+		if nodeIPv6 != "" {
+			if _, exists := nodeIPv6Seen[nodeIPv6]; exists {
+				add("duplicate_node_ipv6", "ha_topology", "control-plane IPv6 addresses must be unique")
+			}
+			nodeIPv6Seen[nodeIPv6] = struct{}{}
 		}
 		nodeNamesSeen[nodeName] = struct{}{}
-		nodeIPv4Seen[nodeIPv4] = struct{}{}
-		nodeIPv6Seen[nodeIPv6] = struct{}{}
 		if !node.Ready {
 			add("node_not_ready_"+nodeName, "workflow_continuity", "node must be Ready")
 		}
@@ -135,7 +152,7 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 		if !node.EtcdMember {
 			add("node_missing_etcd_"+nodeName, "data_durability", "node must be an etcd member in stacked topology")
 		}
-		if !HasIPv4AndIPv6Addresses(nodeIPv4, nodeIPv6) {
+		if nodeIPv4 == "" || nodeIPv6 == "" {
 			add("node_missing_dual_stack_ip_"+nodeName, "dual_stack", "node inventory must include IPv4 and IPv6 node-ip evidence")
 		}
 		if controlPlaneHost == nodeIPv4 || controlPlaneHost == nodeIPv6 {

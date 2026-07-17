@@ -142,6 +142,38 @@ func TestKubeadmRenderStackedEtcdDualStackConfig(t *testing.T) {
 	)
 }
 
+func TestKubeadmRendererCanonicalizesIPAddresses(t *testing.T) {
+	spec := syntheticBootstrapSpec()
+	spec.ControlPlaneEndpoint = "[2001:0db8:0:0:0:0:0:30]:6443"
+	spec.CiliumAPIEndpoint = spec.ControlPlaneEndpoint
+	spec.StableAPIIPv6 = "2001:0db8:0:0:0:0:0:20"
+	spec.APIServingCertificateSANs = []string{
+		"2001:0db8:0:0:0:0:0:30",
+		spec.StableAPIIPv4,
+		spec.StableAPIIPv6,
+	}
+	spec.Nodes[0].AdvertiseIPv6 = "2001:0db8:0:0:0:0:0:11"
+	spec.Nodes[1].AdvertiseIPv6 = "2001:0db8:0:0:0:0:0:12"
+	spec.Nodes[2].AdvertiseIPv6 = "2001:0db8:0:0:0:0:0:13"
+
+	bundle, err := RenderStackedEtcdDualStackConfig(spec)
+	if err != nil {
+		t.Fatalf("expected equivalent IPv6 spellings to normalize: %v", err)
+	}
+	for _, want := range []string{
+		"controlPlaneEndpoint: '[2001:db8::30]:6443'",
+		"- 2001:db8::20",
+		"value: 192.0.2.11,2001:db8::11",
+	} {
+		if !strings.Contains(bundle.InitYAML, want) {
+			t.Fatalf("normalized kubeadm config missing %q:\n%s", want, bundle.InitYAML)
+		}
+	}
+	if bundle.Cilium.APIEndpoint != "[2001:db8::30]:6443" {
+		t.Fatalf("Cilium endpoint was not canonicalized: %q", bundle.Cilium.APIEndpoint)
+	}
+}
+
 func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -156,6 +188,17 @@ func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "node-bound equivalent IPv6 endpoint",
+			mutate: func(spec *BootstrapSpec) {
+				spec.ControlPlaneEndpoint = "[2001:0db8:0:0:0:0:0:11]:6443"
+				spec.CiliumAPIEndpoint = spec.ControlPlaneEndpoint
+				spec.APIServingCertificateSANs = append(
+					spec.APIServingCertificateSANs,
+					"2001:0db8:0:0:0:0:0:11",
+				)
+			},
+		},
+		{
 			name: "unrelated stable API IPv4",
 			mutate: func(spec *BootstrapSpec) {
 				spec.StableAPIIPv4 = "192.0.2.99"
@@ -166,6 +209,13 @@ func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 			mutate: func(spec *BootstrapSpec) {
 				spec.StableAPIIPv4 = spec.Nodes[0].AdvertiseIPv4
 				spec.APIServingCertificateSANs = append(spec.APIServingCertificateSANs, spec.StableAPIIPv4)
+			},
+		},
+		{
+			name: "node-bound equivalent stable API IPv6",
+			mutate: func(spec *BootstrapSpec) {
+				spec.StableAPIIPv6 = "2001:0db8:0:0:0:0:0:11"
+				spec.APIServingCertificateSANs = append(spec.APIServingCertificateSANs, spec.StableAPIIPv6)
 			},
 		},
 		{
@@ -211,6 +261,15 @@ func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "duplicate equivalent IPv6 SAN",
+			mutate: func(spec *BootstrapSpec) {
+				spec.APIServingCertificateSANs = append(
+					spec.APIServingCertificateSANs,
+					"2001:0db8:0:0:0:0:0:20",
+				)
+			},
+		},
+		{
 			name: "duplicate node name",
 			mutate: func(spec *BootstrapSpec) {
 				spec.Nodes[1].Name = spec.Nodes[0].Name
@@ -226,6 +285,12 @@ func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 			name: "duplicate node IPv6",
 			mutate: func(spec *BootstrapSpec) {
 				spec.Nodes[1].AdvertiseIPv6 = spec.Nodes[0].AdvertiseIPv6
+			},
+		},
+		{
+			name: "duplicate equivalent node IPv6",
+			mutate: func(spec *BootstrapSpec) {
+				spec.Nodes[1].AdvertiseIPv6 = "2001:0db8:0:0:0:0:0:11"
 			},
 		},
 		{
@@ -336,6 +401,18 @@ func TestUpstreamStandVerifierRejectsUnsafeControlPlaneAPIState(t *testing.T) {
 			},
 		},
 		{
+			name:    "node-bound equivalent IPv6 endpoint",
+			blocker: "node_bound_control_plane_endpoint",
+			mutate: func(inventory *StandInventory) {
+				inventory.ControlPlaneEndpoint = "[2001:0db8:0:0:0:0:0:11]:6443"
+				inventory.CiliumAPIEndpoint = inventory.ControlPlaneEndpoint
+				inventory.APIServingCertificateSANs = append(
+					inventory.APIServingCertificateSANs,
+					"2001:0db8:0:0:0:0:0:11",
+				)
+			},
+		},
+		{
 			name:    "stable API IPv4 omitted from SANs",
 			blocker: "api_serving_certificate_sans_missing",
 			mutate: func(inventory *StandInventory) {
@@ -351,10 +428,31 @@ func TestUpstreamStandVerifierRejectsUnsafeControlPlaneAPIState(t *testing.T) {
 			},
 		},
 		{
+			name:    "node-bound equivalent stable API IPv6",
+			blocker: "node_bound_stable_api_address",
+			mutate: func(inventory *StandInventory) {
+				inventory.StableAPIIPv6 = "2001:0db8:0:0:0:0:0:11"
+				inventory.APIServingCertificateSANs = append(
+					inventory.APIServingCertificateSANs,
+					inventory.StableAPIIPv6,
+				)
+			},
+		},
+		{
 			name:    "missing IPv6 SAN",
 			blocker: "api_serving_certificate_sans_missing",
 			mutate: func(inventory *StandInventory) {
 				inventory.APIServingCertificateSANs = []string{"api.synthetic.example", "192.0.2.20"}
+			},
+		},
+		{
+			name:    "duplicate equivalent IPv6 SAN",
+			blocker: "api_serving_certificate_sans_missing",
+			mutate: func(inventory *StandInventory) {
+				inventory.APIServingCertificateSANs = append(
+					inventory.APIServingCertificateSANs,
+					"2001:0db8:0:0:0:0:0:20",
+				)
 			},
 		},
 		{
@@ -418,6 +516,13 @@ func TestUpstreamStandVerifierRejectsUnsafeControlPlaneAPIState(t *testing.T) {
 			blocker: "duplicate_node_ipv6",
 			mutate: func(inventory *StandInventory) {
 				inventory.Nodes[1].NodeIPv6 = inventory.Nodes[0].NodeIPv6
+			},
+		},
+		{
+			name:    "duplicate equivalent node IPv6",
+			blocker: "duplicate_node_ipv6",
+			mutate: func(inventory *StandInventory) {
+				inventory.Nodes[1].NodeIPv6 = "2001:0db8:0:0:0:0:0:11"
 			},
 		},
 	}

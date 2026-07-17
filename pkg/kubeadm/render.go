@@ -110,15 +110,21 @@ func normalizeBootstrapSpec(spec BootstrapSpec) (BootstrapSpec, error) {
 		spec.RequiredPodDisruptionNames = []string{"coredns"}
 	}
 	var ok bool
-	if spec.APIServingCertificateSANs, ok = uniqueTrimmed(spec.APIServingCertificateSANs); !ok {
+	if spec.APIServingCertificateSANs, ok = uniqueNormalizedHosts(spec.APIServingCertificateSANs); !ok {
 		return BootstrapSpec{}, fmt.Errorf("API serving certificate SANs must be unique and non-empty: %w", ErrInvalidBootstrapSpec)
 	}
 	if spec.CiliumDevices, ok = uniqueTrimmed(spec.CiliumDevices); !ok {
 		return BootstrapSpec{}, fmt.Errorf("Cilium devices must be unique and non-empty: %w", ErrInvalidBootstrapSpec)
 	}
 	endpointHost := endpointHost(spec.ControlPlaneEndpoint)
-	stableIPv4, stableIPv4Err := netip.ParseAddr(spec.StableAPIIPv4)
-	stableIPv6, stableIPv6Err := netip.ParseAddr(spec.StableAPIIPv6)
+	stableIPv4, stableIPv4OK := canonicalAddress(spec.StableAPIIPv4)
+	stableIPv6, stableIPv6OK := canonicalAddress(spec.StableAPIIPv6)
+	if stableIPv4OK {
+		spec.StableAPIIPv4 = stableIPv4.String()
+	}
+	if stableIPv6OK {
+		spec.StableAPIIPv6 = stableIPv6.String()
+	}
 
 	switch {
 	case spec.ClusterName == "":
@@ -133,9 +139,9 @@ func normalizeBootstrapSpec(spec BootstrapSpec) (BootstrapSpec, error) {
 		return BootstrapSpec{}, fmt.Errorf("control plane endpoint missing: %w", ErrInvalidBootstrapSpec)
 	case endpointHost == "":
 		return BootstrapSpec{}, fmt.Errorf("control plane endpoint invalid: %w", ErrInvalidBootstrapSpec)
-	case stableIPv4Err != nil || !stableIPv4.Is4():
+	case !stableIPv4OK || !stableIPv4.Is4():
 		return BootstrapSpec{}, fmt.Errorf("stable API IPv4 address invalid: %w", ErrInvalidBootstrapSpec)
-	case stableIPv6Err != nil || !stableIPv6.Is6():
+	case !stableIPv6OK || !stableIPv6.Is6():
 		return BootstrapSpec{}, fmt.Errorf("stable API IPv6 address invalid: %w", ErrInvalidBootstrapSpec)
 	case spec.CiliumAPIEndpoint != spec.ControlPlaneEndpoint:
 		return BootstrapSpec{}, fmt.Errorf("Cilium API endpoint must equal the control plane endpoint: %w", ErrInvalidBootstrapSpec)
@@ -190,11 +196,15 @@ func normalizeBootstrapSpec(spec BootstrapSpec) (BootstrapSpec, error) {
 	for index := range spec.Nodes[:spec.ControlPlaneReplicas] {
 		node := spec.Nodes[index]
 		node.Name = strings.TrimSpace(node.Name)
-		node.AdvertiseIPv4 = strings.TrimSpace(node.AdvertiseIPv4)
-		node.AdvertiseIPv6 = strings.TrimSpace(node.AdvertiseIPv6)
-		if !validDNS1123Subdomain(node.Name) || !HasIPv4AndIPv6Addresses(node.AdvertiseIPv4, node.AdvertiseIPv6) {
+		nodeIPv4, nodeIPv4OK := canonicalAddress(node.AdvertiseIPv4)
+		nodeIPv6, nodeIPv6OK := canonicalAddress(node.AdvertiseIPv6)
+		if !validDNS1123Subdomain(node.Name) ||
+			!nodeIPv4OK || !nodeIPv4.Is4() ||
+			!nodeIPv6OK || !nodeIPv6.Is6() {
 			return BootstrapSpec{}, fmt.Errorf("node %q missing dual-stack advertise addresses: %w", node.Name, ErrInvalidBootstrapSpec)
 		}
+		node.AdvertiseIPv4 = nodeIPv4.String()
+		node.AdvertiseIPv6 = nodeIPv6.String()
 		if endpointHost == node.AdvertiseIPv4 || endpointHost == node.AdvertiseIPv6 {
 			return BootstrapSpec{}, fmt.Errorf("control plane endpoint is bound to node %q: %w", node.Name, ErrInvalidBootstrapSpec)
 		}
@@ -371,11 +381,14 @@ func normalizeEndpoint(endpoint string) string {
 		return ""
 	}
 	host, port, err := net.SplitHostPort(endpoint)
-	if err == nil && validPort(port) && validEndpointHost(host) {
-		return net.JoinHostPort(host, port)
+	if err == nil && validPort(port) {
+		normalizedHost, hostOK := canonicalEndpointHost(host)
+		if hostOK {
+			return net.JoinHostPort(normalizedHost, port)
+		}
 	}
 	rawHost := strings.TrimPrefix(strings.TrimSuffix(endpoint, "]"), "[")
-	if address, parseErr := netip.ParseAddr(rawHost); parseErr == nil {
+	if address, addressOK := canonicalAddress(rawHost); addressOK {
 		return net.JoinHostPort(address.String(), defaultAPIPort)
 	}
 	if strings.Contains(endpoint, ":") || !validEndpointHost(endpoint) {
@@ -393,11 +406,8 @@ func endpointHost(endpoint string) string {
 }
 
 func validEndpointHost(host string) bool {
-	host = strings.TrimSpace(host)
-	if address, err := netip.ParseAddr(host); err == nil {
-		return address.Is4() || address.Is6()
-	}
-	return validDNS1123Subdomain(host)
+	_, ok := canonicalEndpointHost(host)
+	return ok
 }
 
 func validPort(port string) bool {
@@ -452,6 +462,45 @@ func uniqueTrimmed(values []string) ([]string, bool) {
 		result = append(result, value)
 	}
 	return result, true
+}
+
+func uniqueNormalizedHosts(values []string) ([]string, bool) {
+	if len(values) == 0 {
+		return nil, false
+	}
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		normalized, ok := canonicalEndpointHost(value)
+		if !ok {
+			return nil, false
+		}
+		if _, exists := seen[normalized]; exists {
+			return nil, false
+		}
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+	return result, true
+}
+
+func canonicalEndpointHost(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if address, ok := canonicalAddress(value); ok {
+		return address.String(), true
+	}
+	if !validDNS1123Subdomain(value) {
+		return "", false
+	}
+	return value, true
+}
+
+func canonicalAddress(value string) (netip.Addr, bool) {
+	address, err := netip.ParseAddr(strings.TrimSpace(value))
+	if err != nil || address.Zone() != "" || address.Is4In6() {
+		return netip.Addr{}, false
+	}
+	return address, true
 }
 
 func containsString(values []string, expected string) bool {
