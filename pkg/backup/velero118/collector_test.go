@@ -94,6 +94,17 @@ func TestCollectCSIDataMoverVolumeLineageEndToEnd(t *testing.T) {
 	if len(receipt.Lineage.BackendArtifacts) != 1 || len(receipt.Lineage.BackendArtifacts[0].AbsenceObservations) != 2 {
 		t.Fatalf("provider absence proof = %#v", receipt.Lineage.BackendArtifacts)
 	}
+	firstAbsenceAt, err := time.Parse(time.RFC3339Nano, receipt.Lineage.BackendArtifacts[0].AbsenceObservations[0].ObservedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondAbsenceAt, err := time.Parse(time.RFC3339Nano, receipt.Lineage.BackendArtifacts[0].AbsenceObservations[1].ObservedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if separation := secondAbsenceAt.Sub(firstAbsenceAt); separation < providerAbsenceMinimumInterval+providerAbsenceClockSkewMargin {
+		t.Fatalf("provider absence proof has no wall-clock skew margin: %s", separation)
+	}
 	if receipt.DataUpload.ArchivedObjectSHA256 == "" || receipt.Lineage.Helpers[0].DataDownload.DataUploadResultPayloadSHA256 == "" {
 		t.Fatal("archive/result cross-binding is absent")
 	}
