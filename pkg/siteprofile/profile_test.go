@@ -36,14 +36,37 @@ func TestSyntheticProfilePassesAndPlanIsDeterministic(t *testing.T) {
 		}
 	}
 	for _, ref := range []string{
+		profile.Spec.Network.ControlPlaneAPIHA.EndpointRef,
+		profile.Spec.Network.ControlPlaneAPIHA.IPv4AddressRef,
+		profile.Spec.Network.ControlPlaneAPIHA.IPv6AddressRef,
+		profile.Spec.Network.ControlPlaneAPIHA.ControlPlaneTransportDeviceRef,
+		profile.Spec.Network.ControlPlaneAPIHA.HealthCheckRef,
+		profile.Spec.Network.ControlPlaneAPIHA.FailoverPolicyRef,
 		profile.Spec.Network.PublicIngressHA.IPv4AddressRef,
 		profile.Spec.Network.PublicIngressHA.IPv6AddressRef,
 		profile.Spec.Network.PublicIngressHA.HealthCheckRef,
 		profile.Spec.Network.PublicIngressHA.FailoverPolicyRef,
 	} {
-		if !contains(first.Phases[1].InputRefs, ref) {
+		if countValue(first.Phases[1].InputRefs, ref) != 1 {
 			t.Fatalf("network phase omits HA ingress reference %q: %#v", ref, first.Phases[1].InputRefs)
 		}
+	}
+	for _, ref := range append(
+		append([]string{}, profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateSANRefs...),
+		profile.Spec.Network.ControlPlaneAPIHA.CNIDeviceRefs...,
+	) {
+		if countValue(first.Phases[1].InputRefs, ref) != 1 {
+			t.Fatalf("network phase must contain reference %q exactly once: %#v", ref, first.Phases[1].InputRefs)
+		}
+	}
+	lifecycle := profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle
+	for _, ref := range []string{lifecycle.ReconfigurationPlanRef, lifecycle.RollbackPlanRef} {
+		if countValue(first.Phases[5].InputRefs, ref) != 1 {
+			t.Fatalf("bootstrap phase omits certificate lifecycle reference %q: %#v", ref, first.Phases[5].InputRefs)
+		}
+	}
+	if countValue(first.Phases[6].InputRefs, lifecycle.OneServerLossAcceptanceRef) != 1 {
+		t.Fatalf("acceptance phase omits one-server-loss reference: %#v", first.Phases[6].InputRefs)
 	}
 }
 
@@ -55,7 +78,13 @@ func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
 		blocker     string
 	}{
 		{name: "single stack", old: "dualStack: true", replacement: "dualStack: false", blocker: "dual_stack_network"},
-		{name: "DNS round robin ingress", old: "mode: l2-vip", replacement: "mode: dns-round-robin", blocker: "public_ingress_ha"},
+		{name: "missing dual-stack API IPv6", old: "ipv6AddressRef: networks.control-plane-api.ipv6", replacement: "ipv6AddressRef: ''", blocker: "control_plane_api_ha"},
+		{name: "missing control-plane transport device", old: "controlPlaneTransportDeviceRef: network-devices.control-plane-transport", replacement: "controlPlaneTransportDeviceRef: ''", blocker: "control_plane_api_ha"},
+		{name: "missing control-plane health check", old: "healthCheckRef: networks.control-plane-api.health-check", replacement: "healthCheckRef: ''", blocker: "control_plane_api_ha"},
+		{name: "missing certificate reconfiguration", old: "reconfigurationPlanRef: operations.control-plane-api-certificate.reconfigure", replacement: "reconfigurationPlanRef: ''", blocker: "control_plane_api_ha"},
+		{name: "missing certificate rollback", old: "rollbackPlanRef: operations.control-plane-api-certificate.rollback", replacement: "rollbackPlanRef: ''", blocker: "control_plane_api_ha"},
+		{name: "missing one-server-loss acceptance", old: "oneServerLossAcceptanceRef: resilience.control-plane-api-one-server-loss", replacement: "oneServerLossAcceptanceRef: ''", blocker: "control_plane_api_ha"},
+		{name: "DNS round robin ingress", old: "publicIngressHA:\n      mode: l2-vip", replacement: "publicIngressHA:\n      mode: dns-round-robin", blocker: "public_ingress_ha"},
 		{name: "missing ingress health check", old: "healthCheckRef: networks.ingress.health-check", replacement: "healthCheckRef: ''", blocker: "public_ingress_ha"},
 		{name: "weak inotify capacity", old: "inotifyMaxUserInstances: 1024", replacement: "inotifyMaxUserInstances: 128", blocker: "host_runtime_baseline"},
 		{name: "missing host persistence", old: "persistenceRef: host-baseline.inotify-persistence", replacement: "persistenceRef: ''", blocker: "host_runtime_baseline"},
@@ -75,6 +104,116 @@ func TestProfileFailsClosedOnRequiredProductionInputs(t *testing.T) {
 			}
 			if _, err := BuildPlan(profile); !errors.Is(err, ErrProfileBlocked) {
 				t.Fatalf("blocked profile produced a plan: %v", err)
+			}
+		})
+	}
+}
+
+func TestControlPlaneAPIHARejectsUnsafeBindings(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Profile)
+	}{
+		{
+			name: "CNI endpoint mismatch",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.CNIBootstrapEndpointRef = "networks.control-plane-api.other"
+			},
+		},
+		{
+			name: "node-bound endpoint",
+			mutate: func(profile *Profile) {
+				nodeAddress := profile.Spec.Inventory.Nodes[0].ManagementAddressRef
+				ha := &profile.Spec.Network.ControlPlaneAPIHA
+				ha.EndpointRef = nodeAddress
+				ha.CNIBootstrapEndpointRef = nodeAddress
+				ha.ServingCertificateSANRefs[0] = nodeAddress
+			},
+		},
+		{
+			name: "node-bound IPv4",
+			mutate: func(profile *Profile) {
+				nodeAddress := profile.Spec.Inventory.Nodes[0].ProvisioningAddressRef
+				profile.Spec.Network.ControlPlaneAPIHA.IPv4AddressRef = nodeAddress
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateSANRefs[1] = nodeAddress
+			},
+		},
+		{
+			name: "node-bound IPv6",
+			mutate: func(profile *Profile) {
+				nodeAddress := profile.Spec.Inventory.Nodes[0].ManagementAddressRef
+				profile.Spec.Network.ControlPlaneAPIHA.IPv6AddressRef = nodeAddress
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateSANRefs[2] = nodeAddress
+			},
+		},
+		{
+			name: "same IPv4 and IPv6 reference",
+			mutate: func(profile *Profile) {
+				ha := &profile.Spec.Network.ControlPlaneAPIHA
+				ha.IPv6AddressRef = ha.IPv4AddressRef
+				ha.ServingCertificateSANRefs = ha.ServingCertificateSANRefs[:2]
+			},
+		},
+		{
+			name: "two SANs when endpoint and IPv4 share a reference",
+			mutate: func(profile *Profile) {
+				ha := &profile.Spec.Network.ControlPlaneAPIHA
+				ha.EndpointRef = ha.IPv4AddressRef
+				ha.CNIBootstrapEndpointRef = ha.IPv4AddressRef
+				ha.ServingCertificateSANRefs = []string{ha.IPv4AddressRef, ha.IPv6AddressRef}
+			},
+		},
+		{
+			name: "serving certificate omits IPv6",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateSANRefs[2] = "networks.control-plane-api.other"
+			},
+		},
+		{
+			name: "duplicate serving certificate SAN",
+			mutate: func(profile *Profile) {
+				ha := &profile.Spec.Network.ControlPlaneAPIHA
+				ha.ServingCertificateSANRefs[2] = ha.ServingCertificateSANRefs[1]
+			},
+		},
+		{
+			name: "invalid serving certificate SAN",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateSANRefs[2] = "networks..invalid"
+			},
+		},
+		{
+			name: "CNI omits control-plane transport device",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.CNIDeviceRefs = []string{"network-devices.public"}
+			},
+		},
+		{
+			name: "duplicate CNI device",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.CNIDeviceRefs = []string{"network-devices.public", "network-devices.public"}
+			},
+		},
+		{
+			name: "invalid CNI device",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.CNIDeviceRefs[0] = "network-devices..invalid"
+			},
+		},
+		{
+			name: "parallel certificate rollout",
+			mutate: func(profile *Profile) {
+				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle.RolloutStrategy = "parallel"
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			profile := parseFixture(t, validProfileYAML)
+			test.mutate(&profile)
+			report := Validate(profile)
+			if report.Status != "blocked" || !contains(report.Blockers, "control_plane_api_ha") {
+				t.Fatalf("unsafe control-plane API HA binding passed validation: %#v", report)
 			}
 		})
 	}
@@ -211,6 +350,16 @@ func contains(values []string, expected string) bool {
 	return false
 }
 
+func countValue(values []string, expected string) int {
+	count := 0
+	for _, value := range values {
+		if value == expected {
+			count++
+		}
+	}
+	return count
+}
+
 const validProfileYAML = `apiVersion: cloudring.io/v1alpha1
 kind: ProviderSiteProfile
 metadata:
@@ -250,6 +399,27 @@ spec:
     provisioningPlaneRef: networks.provisioning
     tenantPlaneRef: networks.tenant
     publicIngressRef: networks.ingress
+    controlPlaneAPIHA:
+      mode: l2-vip
+      endpointRef: networks.control-plane-api.endpoint
+      ipv4AddressRef: networks.control-plane-api.ipv4
+      ipv6AddressRef: networks.control-plane-api.ipv6
+      servingCertificateSANRefs:
+        - networks.control-plane-api.endpoint
+        - networks.control-plane-api.ipv4
+        - networks.control-plane-api.ipv6
+      cniBootstrapEndpointRef: networks.control-plane-api.endpoint
+      controlPlaneTransportDeviceRef: network-devices.control-plane-transport
+      cniDeviceRefs:
+        - network-devices.public
+        - network-devices.control-plane-transport
+      healthCheckRef: networks.control-plane-api.health-check
+      failoverPolicyRef: networks.control-plane-api.failover
+      servingCertificateLifecycle:
+        rolloutStrategy: one-node-at-a-time
+        reconfigurationPlanRef: operations.control-plane-api-certificate.reconfigure
+        rollbackPlanRef: operations.control-plane-api-certificate.rollback
+        oneServerLossAcceptanceRef: resilience.control-plane-api-one-server-loss
     publicIngressHA:
       mode: l2-vip
       ipv4AddressRef: networks.ingress.ipv4

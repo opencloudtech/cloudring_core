@@ -37,6 +37,27 @@ spec:
     provisioningPlaneRef: networks.provisioning
     tenantPlaneRef: networks.tenant
     publicIngressRef: networks.ingress
+    controlPlaneAPIHA:
+      mode: l2-vip
+      endpointRef: networks.control-plane-api.endpoint
+      ipv4AddressRef: networks.control-plane-api.ipv4
+      ipv6AddressRef: networks.control-plane-api.ipv6
+      servingCertificateSANRefs:
+        - networks.control-plane-api.endpoint
+        - networks.control-plane-api.ipv4
+        - networks.control-plane-api.ipv6
+      cniBootstrapEndpointRef: networks.control-plane-api.endpoint
+      controlPlaneTransportDeviceRef: network-devices.control-plane-transport
+      cniDeviceRefs:
+        - network-devices.public
+        - network-devices.control-plane-transport
+      healthCheckRef: networks.control-plane-api.health-check
+      failoverPolicyRef: networks.control-plane-api.failover
+      servingCertificateLifecycle:
+        rolloutStrategy: one-node-at-a-time
+        reconfigurationPlanRef: operations.control-plane-api-certificate.reconfigure
+        rollbackPlanRef: operations.control-plane-api-certificate.rollback
+        oneServerLossAcceptanceRef: resilience.control-plane-api-one-server-loss
     publicIngressHA:
       mode: l2-vip
       ipv4AddressRef: networks.ingress.ipv4
