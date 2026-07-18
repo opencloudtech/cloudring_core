@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/provider-adapter/inventory-request.schema.json",
+  "title": "CloudRING provider inventory request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "scope",
+    "profileSha256",
+    "runNonceSha256",
+    "adapterCatalogSha256",
+    "bindings",
+    "productionReady"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "cloudring.provider-adapter.inventory-request/v1"
+    },
+    "scope": {
+      "const": "provider-inventory"
+    },
+    "profileSha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "runNonceSha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "adapterCatalogSha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "bindings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/binding"
+      }
+    },
+    "productionReady": {
+      "const": false
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 253,
+      "pattern": "^[a-z][a-z0-9]*(?:[._/-][a-z0-9]+)*$",
+      "not": {
+        "pattern": "(?:\\.\\.|//)"
+      }
+    },
+    "bindingClass": {
+      "enum": [
+        "provider-adapter-reference",
+        "region-inventory-reference",
+        "provider-resource-reference",
+        "management-address-reference",
+        "provisioning-address-reference"
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingClass",
+        "reference"
+      ],
+      "properties": {
+        "bindingClass": {
+          "$ref": "#/$defs/bindingClass"
+        },
+        "reference": {
+          "$ref": "#/$defs/reference"
+        }
+      }
+    }
+  }
+}

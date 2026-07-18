@@ -329,12 +329,10 @@ func BuildPlan(profile Profile) (Plan, error) {
 	if report.Status != "ready" {
 		return Plan{}, ErrProfileBlocked
 	}
-	nodeRefs := make([]string, 0, len(profile.Spec.Inventory.Nodes)*3+4)
+	nodeRefs := make([]string, 0, len(profile.Spec.Inventory.Nodes)*3+2)
 	nodeRefs = append(nodeRefs,
 		profile.Spec.ProviderAdapterRef,
 		profile.Spec.RegionRef,
-		profile.Spec.HostRuntimeBaseline.PersistenceRef,
-		profile.Spec.HostRuntimeBaseline.VerificationRef,
 	)
 	for _, node := range profile.Spec.Inventory.Nodes {
 		nodeRefs = append(nodeRefs, node.ProviderResourceRef, node.ManagementAddressRef, node.ProvisioningAddressRef)
@@ -347,6 +345,10 @@ func BuildPlan(profile Profile) (Plan, error) {
 		NonClaim:      RequiredNonClaim,
 		Phases: []Phase{
 			{ID: "inventory", DependsOn: []string{}, InputRefs: nodeRefs, Mutation: false},
+			{ID: "host-baseline", DependsOn: []string{"inventory"}, InputRefs: sortedRefs(
+				profile.Spec.HostRuntimeBaseline.PersistenceRef,
+				profile.Spec.HostRuntimeBaseline.VerificationRef,
+			), Mutation: false},
 			{ID: "network", DependsOn: []string{"inventory"}, InputRefs: networkInputRefs(profile), Mutation: false},
 			{ID: "identity", DependsOn: []string{"inventory", "network"}, InputRefs: sortedRefs(
 				profile.Spec.Identity.OIDCProviderRef,
@@ -365,7 +367,7 @@ func BuildPlan(profile Profile) (Plan, error) {
 				profile.Spec.Observability.TracesRef,
 				profile.Spec.Observability.AlertsRef,
 			), Mutation: false},
-			{ID: "bootstrap", DependsOn: []string{"identity", "storage", "observability"}, InputRefs: sortedRefs(
+			{ID: "bootstrap", DependsOn: []string{"host-baseline", "identity", "storage", "observability"}, InputRefs: sortedRefs(
 				profile.Spec.Operations.GitOpsSourceRef,
 				profile.Spec.Operations.BootstrapPlanRef,
 				profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle.ReconfigurationPlanRef,
