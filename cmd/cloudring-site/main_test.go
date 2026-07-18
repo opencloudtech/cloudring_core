@@ -190,7 +190,11 @@ func TestCLIKubeadmInputsFailClosedWithoutEcho(t *testing.T) {
 }
 
 func TestCLIKubeadmSemanticValidationBlocksUnsafeContracts(t *testing.T) {
-	valid := readExample(t, "kubeadm-bootstrap-spec.json")
+	valid := strings.ReplaceAll(
+		readExample(t, "kubeadm-bootstrap-spec.json"),
+		"\r\n",
+		"\n",
+	)
 	tests := []struct {
 		name    string
 		payload string
