@@ -64,6 +64,8 @@ full platform extraction or a production installation is complete.
   continuity observer and exact fault/recovery evidence boundary.
 - Use `docs/provider-site-installation.md` for the strict provider-neutral site
   inventory preflight and deterministic installation plan contract.
+- Use `docs/kubeadm-control-plane-ha.md` for the strict standalone kubeadm
+  configuration renderer and captured-state HA verifier.
 - Use `deploy/kubernetes/postgresql-ha/README.md` for the pinned CloudNativePG
   HA source profile, migration boundary, and required downstream live gates.
 
@@ -80,12 +82,15 @@ go test ./... -count=1
 go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
 go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 go run ./cmd/cloudring-registry validate ./contracts/module-registry/fixtures/synthetic-module-registry.json
+go run ./cmd/cloudring-site render-kubeadm --spec ./examples/kubeadm-bootstrap-spec.json
+go run ./cmd/cloudring-site verify-kubeadm --inventory ./examples/kubeadm-stand-inventory.json
 go run ./cmd/cloudring-manifestcheck --root .
 ```
 
-The example package is synthetic. It is intended for local validation and does
-not include live provider values, tenant records, credentials, or deployment
-receipts.
+The example inputs are synthetic. They are intended for local validation and
+do not include live provider values, tenant records, credentials, or deployment
+receipts. A ready result for a synthetic stand inventory is not live readiness
+evidence.
 
 ## HTTP security audit
 

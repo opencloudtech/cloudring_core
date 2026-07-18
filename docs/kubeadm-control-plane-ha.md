@@ -6,6 +6,21 @@ upstream Kubernetes topology, renders deterministic kubeadm configuration, and
 verifies captured stand state. It does not connect to hosts or apply the
 rendered plan.
 
+The standalone site CLI exposes both sides of that contract:
+
+```sh
+go run ./cmd/cloudring-site render-kubeadm --spec ./examples/kubeadm-bootstrap-spec.json
+go run ./cmd/cloudring-site verify-kubeadm --inventory ./examples/kubeadm-stand-inventory.json
+```
+
+Both commands accept `-` instead of a path to read a single JSON document from
+standard input. Input is size-bounded and decoded strictly: duplicate or
+unknown fields, trailing documents, and unsafe semantic values fail closed.
+Rendering is deterministic for the same validated specification. Verification
+always writes the sanitized report; a blocked report uses exit code `3`.
+Successful validation uses `0`, invalid input uses `1`, command-line usage
+errors use `2`, and an internal encoding failure uses `4`.
+
 `RenderStackedEtcdDualStackConfig` fails closed unless the input declares:
 
 - at least three stacked-etcd control-plane nodes with valid IPv4 and IPv6
@@ -51,7 +66,10 @@ and collect sanitized evidence. A provider implementation must:
 7. remove the current endpoint holder and verify authenticated IPv4 and IPv6
    API requests through the surviving nodes.
 
-The package and site profile are an executable validation and rendering
-contract, not live deployment evidence. A downstream installation may claim a
-successful release only after its adapter has executed the referenced
-lifecycle and the independent stand verifier has accepted captured state.
+The included examples are synthetic contract fixtures. Even when the synthetic
+inventory produces a ready report, it is only an example of the verifier input
+shape and is not live readiness evidence. The package and site profile are an
+executable validation and rendering contract, not live deployment evidence. A
+downstream installation may claim a successful release only after its adapter
+has executed the referenced lifecycle and the independent stand verifier has
+accepted freshly captured state.
