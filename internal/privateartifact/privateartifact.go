@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
 
-// Package privateartifact writes new owner-only JSON artifacts through a
-// stable directory handle without following or replacing the final path.
+// Package privateartifact reads existing and writes new owner-only JSON
+// artifacts through stable directory handles without following or replacing
+// the final path.
 package privateartifact
 
 import (
