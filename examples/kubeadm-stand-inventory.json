@@ -1,0 +1,88 @@
+{
+  "distribution": "upstream",
+  "bootstrap": "kubeadm",
+  "serverVersion": "v1.35.6",
+  "controlPlaneEndpoint": "api.synthetic.example:6443",
+  "stableAPIIPv4": "192.0.2.20",
+  "stableAPIIPv6": "2001:db8::20",
+  "apiServingCertificateSANs": [
+    "api.synthetic.example",
+    "192.0.2.20",
+    "2001:db8::20"
+  ],
+  "controlPlaneReplicas": 3,
+  "etcdTopology": "stacked",
+  "podCIDRs": [
+    "192.0.2.0/24",
+    "2001:db8:244::/56"
+  ],
+  "serviceCIDRs": [
+    "198.51.100.0/24",
+    "2001:db8:96::/108"
+  ],
+  "surviveUnavailableServers": 1,
+  "ciliumDualStackReady": true,
+  "ciliumAPIEndpoint": "api.synthetic.example:6443",
+  "controlPlaneTransportDevice": "transport0",
+  "ciliumDevices": [
+    "public0",
+    "transport0"
+  ],
+  "servingCertificateRolloutStrategy": "one-node-at-a-time",
+  "servingCertificateReconfigurationReady": true,
+  "servingCertificateRollbackReady": true,
+  "controlPlaneAPIFailoverReady": true,
+  "coreDNSMinReplicas": 3,
+  "coreDNSSpreadReady": true,
+  "podDisruptionBudgetsReady": true,
+  "nodes": [
+    {
+      "name": "node-a",
+      "ready": true,
+      "controlPlane": true,
+      "etcdMember": true,
+      "nodeIPv4": "192.0.2.11",
+      "nodeIPv6": "2001:db8::11"
+    },
+    {
+      "name": "node-b",
+      "ready": true,
+      "controlPlane": true,
+      "etcdMember": true,
+      "nodeIPv4": "192.0.2.12",
+      "nodeIPv6": "2001:db8::12"
+    },
+    {
+      "name": "node-c",
+      "ready": true,
+      "controlPlane": true,
+      "etcdMember": true,
+      "nodeIPv4": "192.0.2.13",
+      "nodeIPv6": "2001:db8::13"
+    }
+  ],
+  "workflowContinuity": {
+    "summary": "synthetic control-plane continuity evidence",
+    "items": [
+      "synthetic:tenant-api-smoke",
+      "synthetic:console-smoke",
+      "synthetic:gitops-reconcile"
+    ]
+  },
+  "dataDurability": {
+    "summary": "synthetic durability evidence",
+    "items": [
+      "synthetic:etcd-snapshot",
+      "synthetic:backup",
+      "synthetic:restore-drill"
+    ]
+  },
+  "singlePointOfFailure": {
+    "summary": "synthetic one-server-loss evidence",
+    "items": [
+      "synthetic:three-control-plane",
+      "synthetic:stacked-etcd",
+      "synthetic:one-server-loss"
+    ]
+  }
+}

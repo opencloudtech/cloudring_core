@@ -1,0 +1,101 @@
+{
+  "clusterName": "cloudring-synthetic-site",
+  "kubernetesVersion": "v1.35.6",
+  "controlPlaneEndpoint": "api.synthetic.example:6443",
+  "stableAPIIPv4": "192.0.2.20",
+  "stableAPIIPv6": "2001:db8::20",
+  "apiServingCertificateSANs": [
+    "api.synthetic.example",
+    "192.0.2.20",
+    "2001:db8::20"
+  ],
+  "controlPlaneReplicas": 3,
+  "etcdTopology": "stacked",
+  "podCIDRs": [
+    "192.0.2.0/24",
+    "2001:db8:244::/56"
+  ],
+  "serviceCIDRs": [
+    "198.51.100.0/24",
+    "2001:db8:96::/108"
+  ],
+  "surviveUnavailableServers": 1,
+  "ciliumVersionRef": "oci://registry.example.invalid/cilium@sha256:redacted",
+  "ciliumDualStackMode": "native-routing",
+  "ciliumAPIEndpoint": "api.synthetic.example:6443",
+  "controlPlaneTransportDevice": "transport0",
+  "ciliumDevices": [
+    "public0",
+    "transport0"
+  ],
+  "servingCertificateLifecycle": {
+    "rolloutStrategy": "one-node-at-a-time",
+    "reconfigurationPlanRef": "operations.api-certificate.reconfigure",
+    "rollbackPlanRef": "operations.api-certificate.rollback",
+    "oneServerLossAcceptanceRef": "resilience.api.one-server-loss"
+  },
+  "containerRuntimeSocket": "unix:///run/containerd/containerd.sock",
+  "coreDNSMinReplicas": 3,
+  "coreDNSTopologyKey": "kubernetes.io/hostname",
+  "requiredPodDisruptionNames": [
+    "coredns",
+    "provider-controller",
+    "provider-portal"
+  ],
+  "nodes": [
+    {
+      "name": "node-a",
+      "advertiseIPv4": "192.0.2.11",
+      "advertiseIPv6": "2001:db8::11",
+      "roles": [
+        "control-plane",
+        "etcd",
+        "worker",
+        "storage",
+        "ingress"
+      ],
+      "labels": {
+        "node.cloudring.io/failure-domain": "server-a"
+      },
+      "taints": [
+        "node-role.kubernetes.io/control-plane:NoSchedule"
+      ]
+    },
+    {
+      "name": "node-b",
+      "advertiseIPv4": "192.0.2.12",
+      "advertiseIPv6": "2001:db8::12",
+      "roles": [
+        "control-plane",
+        "etcd",
+        "worker",
+        "storage",
+        "ingress"
+      ],
+      "labels": {
+        "node.cloudring.io/failure-domain": "server-b"
+      },
+      "taints": [
+        "node-role.kubernetes.io/control-plane:NoSchedule"
+      ]
+    },
+    {
+      "name": "node-c",
+      "advertiseIPv4": "192.0.2.13",
+      "advertiseIPv6": "2001:db8::13",
+      "roles": [
+        "control-plane",
+        "etcd",
+        "worker",
+        "storage",
+        "ingress"
+      ],
+      "labels": {
+        "node.cloudring.io/failure-domain": "server-c"
+      },
+      "taints": [
+        "node-role.kubernetes.io/control-plane:NoSchedule"
+      ]
+    }
+  ]
+}

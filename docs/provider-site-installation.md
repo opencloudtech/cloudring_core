@@ -43,6 +43,17 @@ The Go preflight is authoritative for cross-field rules, including declared
 availability values, per-role failure-domain spread, and reference uniqueness.
 The provider-neutral kubeadm renderer and stand verifier are documented in
 [`kubeadm-control-plane-ha.md`](./kubeadm-control-plane-ha.md).
+They are also available as standalone, strict JSON commands:
+
+```sh
+go run ./cmd/cloudring-site render-kubeadm --spec ./examples/kubeadm-bootstrap-spec.json
+go run ./cmd/cloudring-site verify-kubeadm --inventory ./examples/kubeadm-stand-inventory.json
+```
+
+Downstream adapters remain responsible for binding provider references,
+performing the approved mutations, capturing current stand state, and passing
+that captured state to the verifier. The public CLI neither resolves private
+references nor performs provider mutations.
 
 The control-plane endpoint must be implemented by an L2 or BGP VIP, provider
 load balancer, or anycast service with health checking and a failover policy.
@@ -116,6 +127,7 @@ Downstream installations still own credential injection, sizing, immutable
 off-cell WAL/base backup, isolated restore, application cutover, and live
 primary-node-loss evidence.
 
-This slice is a complete preflight and planning contract. It is not an
-installer, does not prove that any provider site is reachable, and does not
-claim production readiness.
+This slice provides profile preflight, deterministic planning, kubeadm
+rendering, and captured-state verification contracts. It is not an installer,
+does not prove that any provider site is reachable, and does not claim
+production readiness.

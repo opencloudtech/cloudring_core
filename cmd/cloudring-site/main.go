@@ -5,13 +5,24 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/opencloudtech/CloudRING/internal/strictjson"
+	"github.com/opencloudtech/CloudRING/pkg/kubeadm"
 	"github.com/opencloudtech/CloudRING/pkg/siteprofile"
+)
+
+const (
+	exitSuccess  = 0
+	exitFailure  = 1
+	exitUsage    = 2
+	exitBlocked  = 3
+	exitInternal = 4
 )
 
 func main() {
@@ -19,51 +30,147 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "preflight" && args[0] != "plan" {
-		fmt.Fprintln(stderr, "usage: cloudring-site preflight|plan --profile <path|->")
-		return 2
+	if len(args) == 0 {
+		printUsage(stderr)
+		return exitUsage
 	}
-	command := args[0]
+	switch args[0] {
+	case "preflight", "plan":
+		return runSiteProfile(args[0], args[1:], stdin, stdout, stderr)
+	case "render-kubeadm":
+		return runKubeadmRender(args[1:], stdin, stdout, stderr)
+	case "verify-kubeadm":
+		return runKubeadmVerify(args[1:], stdin, stdout, stderr)
+	default:
+		printUsage(stderr)
+		return exitUsage
+	}
+}
+
+func runSiteProfile(command string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	flags.SetOutput(io.Discard)
 	profilePath := flags.String("profile", "-", "provider site profile path or - for stdin")
-	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
-		return 2
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		printUsage(stderr)
+		return exitUsage
 	}
 	reader, closeReader, err := openProfile(*profilePath, stdin)
 	if err != nil {
 		fmt.Fprintln(stderr, "provider site profile unavailable")
-		return 1
+		return exitFailure
 	}
 	defer closeReader()
 	profile, err := siteprofile.Parse(reader)
 	if err != nil {
 		fmt.Fprintln(stderr, "provider site profile invalid")
-		return 1
+		return exitFailure
 	}
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
 	if command == "preflight" {
 		report := siteprofile.Validate(profile)
-		if err := encoder.Encode(report); err != nil {
+		if err := encodeJSON(stdout, report); err != nil {
 			fmt.Fprintln(stderr, "encode provider site preflight")
-			return 2
+			return exitInternal
 		}
 		if report.Status != "ready" {
-			return 1
+			return exitFailure
 		}
-		return 0
+		return exitSuccess
 	}
 	plan, err := siteprofile.BuildPlan(profile)
 	if err != nil {
 		fmt.Fprintln(stderr, "provider site plan blocked")
-		return 1
+		return exitFailure
 	}
-	if err := encoder.Encode(plan); err != nil {
+	if err := encodeJSON(stdout, plan); err != nil {
 		fmt.Fprintln(stderr, "encode provider site plan")
-		return 2
+		return exitInternal
 	}
-	return 0
+	return exitSuccess
+}
+
+func runKubeadmRender(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	specPath, ok := parseInputPath("render-kubeadm", "spec", args, stderr)
+	if !ok {
+		return exitUsage
+	}
+	var spec kubeadm.BootstrapSpec
+	if err := decodeExactInput(specPath, stdin, &spec); err != nil {
+		fmt.Fprintln(stderr, "kubeadm bootstrap spec invalid")
+		return exitFailure
+	}
+	bundle, err := kubeadm.RenderStackedEtcdDualStackConfig(spec)
+	if err != nil {
+		fmt.Fprintln(stderr, "kubeadm bootstrap spec blocked")
+		return exitFailure
+	}
+	if err := encodeJSON(stdout, bundle); err != nil {
+		fmt.Fprintln(stderr, "encode kubeadm bootstrap bundle")
+		return exitInternal
+	}
+	return exitSuccess
+}
+
+func runKubeadmVerify(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	inventoryPath, ok := parseInputPath("verify-kubeadm", "inventory", args, stderr)
+	if !ok {
+		return exitUsage
+	}
+	var inventory kubeadm.StandInventory
+	if err := decodeExactInput(inventoryPath, stdin, &inventory); err != nil {
+		fmt.Fprintln(stderr, "kubeadm stand inventory invalid")
+		return exitFailure
+	}
+	report, err := kubeadm.VerifyUpstreamStand(inventory)
+	if err != nil && !errors.Is(err, kubeadm.ErrStandBlocked) {
+		fmt.Fprintln(stderr, "kubeadm stand verification failed")
+		return exitFailure
+	}
+	if encodeErr := encodeJSON(stdout, report); encodeErr != nil {
+		fmt.Fprintln(stderr, "encode kubeadm stand report")
+		return exitInternal
+	}
+	if errors.Is(err, kubeadm.ErrStandBlocked) {
+		return exitBlocked
+	}
+	return exitSuccess
+}
+
+func parseInputPath(command, flagName string, args []string, stderr io.Writer) (string, bool) {
+	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	path := flags.String(flagName, "-", "JSON input path or - for stdin")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || strings.TrimSpace(*path) == "" {
+		printUsage(stderr)
+		return "", false
+	}
+	return *path, true
+}
+
+func decodeExactInput(path string, stdin io.Reader, destination any) error {
+	reader, closeReader, err := openProfile(path, stdin)
+	if err != nil {
+		return err
+	}
+	defer closeReader()
+	payload, err := strictjson.Read(reader)
+	if err != nil {
+		return err
+	}
+	defer clear(payload)
+	return strictjson.DecodeExact(payload, destination)
+}
+
+func encodeJSON(writer io.Writer, value any) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
+}
+
+func printUsage(writer io.Writer) {
+	fmt.Fprintln(writer, "usage: cloudring-site preflight|plan --profile <path|->")
+	fmt.Fprintln(writer, "       cloudring-site render-kubeadm --spec <path|->")
+	fmt.Fprintln(writer, "       cloudring-site verify-kubeadm --inventory <path|->")
 }
 
 func openProfile(path string, stdin io.Reader) (io.Reader, func(), error) {
