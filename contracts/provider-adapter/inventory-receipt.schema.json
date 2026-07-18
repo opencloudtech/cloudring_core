@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/contracts/provider-adapter/inventory-receipt.schema.json",
+  "title": "CloudRING value-free provider inventory receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "scope",
+    "status",
+    "requestSha256",
+    "adapterExecutableSha256",
+    "adapterCatalogSha256",
+    "observations",
+    "blockerIds",
+    "productionReady"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "cloudring.provider-adapter.inventory-receipt/v1"
+    },
+    "scope": {
+      "const": "provider-inventory"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "blocked",
+        "denied",
+        "retryable",
+        "failed"
+      ]
+    },
+    "requestSha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "adapterExecutableSha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "adapterCatalogSha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "observations": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "blockerIds": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 63,
+        "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+      }
+    },
+    "productionReady": {
+      "const": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ready"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "blockerIds": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "blockerIds": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 253,
+      "pattern": "^[a-z][a-z0-9]*(?:[._/-][a-z0-9]+)*$",
+      "not": {
+        "pattern": "(?:\\.\\.|//)"
+      }
+    },
+    "bindingClass": {
+      "enum": [
+        "provider-adapter-reference",
+        "region-inventory-reference",
+        "provider-resource-reference",
+        "management-address-reference",
+        "provisioning-address-reference"
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingClass",
+        "reference",
+        "observationCommitmentSha256"
+      ],
+      "properties": {
+        "bindingClass": {
+          "$ref": "#/$defs/bindingClass"
+        },
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "observationCommitmentSha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}

@@ -6,6 +6,7 @@ package siteprofile
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -24,16 +25,38 @@ func TestSyntheticProfilePassesAndPlanIsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.ProfileDigest != second.ProfileDigest || len(first.Phases) != 7 || first.Phases[5].RollbackRef == "" {
+	if first.ProfileDigest != second.ProfileDigest || len(first.Phases) != 8 {
 		t.Fatalf("plan is incomplete or non-deterministic: %#v %#v", first, second)
 	}
-	if !contains(first.Phases[0].InputRefs, profile.Spec.ProviderAdapterRef) || !contains(first.Phases[0].InputRefs, profile.Spec.RegionRef) {
-		t.Fatalf("inventory phase omits provider context: %#v", first.Phases[0].InputRefs)
+	inventory := phaseByID(t, first, "inventory")
+	hostBaseline := phaseByID(t, first, "host-baseline")
+	network := phaseByID(t, first, "network")
+	bootstrap := phaseByID(t, first, "bootstrap")
+	acceptance := phaseByID(t, first, "acceptance")
+	if bootstrap.RollbackRef == "" {
+		t.Fatalf("bootstrap phase omits rollback: %#v", bootstrap)
+	}
+	if len(inventory.InputRefs) != 11 || !contains(inventory.InputRefs, profile.Spec.ProviderAdapterRef) || !contains(inventory.InputRefs, profile.Spec.RegionRef) {
+		t.Fatalf("inventory phase must contain the exact three-node provider discovery set: %#v", inventory.InputRefs)
+	}
+	expectedInventory := []string{profile.Spec.ProviderAdapterRef, profile.Spec.RegionRef}
+	for _, node := range profile.Spec.Inventory.Nodes {
+		expectedInventory = append(expectedInventory, node.ProviderResourceRef, node.ManagementAddressRef, node.ProvisioningAddressRef)
+	}
+	slices.Sort(expectedInventory)
+	if !slices.Equal(inventory.InputRefs, expectedInventory) {
+		t.Fatalf("inventory phase differs from the exact provider discovery set: got=%#v want=%#v", inventory.InputRefs, expectedInventory)
 	}
 	for _, ref := range []string{profile.Spec.HostRuntimeBaseline.PersistenceRef, profile.Spec.HostRuntimeBaseline.VerificationRef} {
-		if !contains(first.Phases[0].InputRefs, ref) {
-			t.Fatalf("inventory phase omits host baseline reference %q: %#v", ref, first.Phases[0].InputRefs)
+		if contains(inventory.InputRefs, ref) {
+			t.Fatalf("inventory phase contains host baseline reference %q: %#v", ref, inventory.InputRefs)
 		}
+		if countValue(hostBaseline.InputRefs, ref) != 1 {
+			t.Fatalf("host-baseline phase omits reference %q: %#v", ref, hostBaseline.InputRefs)
+		}
+	}
+	if len(hostBaseline.InputRefs) != 2 || !slices.Equal(hostBaseline.DependsOn, []string{"inventory"}) || !contains(bootstrap.DependsOn, "host-baseline") {
+		t.Fatalf("host baseline is not an isolated bootstrap prerequisite: host=%#v bootstrap=%#v", hostBaseline, bootstrap)
 	}
 	for _, ref := range []string{
 		profile.Spec.Network.ControlPlaneAPIHA.EndpointRef,
@@ -47,26 +70,26 @@ func TestSyntheticProfilePassesAndPlanIsDeterministic(t *testing.T) {
 		profile.Spec.Network.PublicIngressHA.HealthCheckRef,
 		profile.Spec.Network.PublicIngressHA.FailoverPolicyRef,
 	} {
-		if countValue(first.Phases[1].InputRefs, ref) != 1 {
-			t.Fatalf("network phase omits HA ingress reference %q: %#v", ref, first.Phases[1].InputRefs)
+		if countValue(network.InputRefs, ref) != 1 {
+			t.Fatalf("network phase omits HA ingress reference %q: %#v", ref, network.InputRefs)
 		}
 	}
 	for _, ref := range append(
 		append([]string{}, profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateSANRefs...),
 		profile.Spec.Network.ControlPlaneAPIHA.CNIDeviceRefs...,
 	) {
-		if countValue(first.Phases[1].InputRefs, ref) != 1 {
-			t.Fatalf("network phase must contain reference %q exactly once: %#v", ref, first.Phases[1].InputRefs)
+		if countValue(network.InputRefs, ref) != 1 {
+			t.Fatalf("network phase must contain reference %q exactly once: %#v", ref, network.InputRefs)
 		}
 	}
 	lifecycle := profile.Spec.Network.ControlPlaneAPIHA.ServingCertificateLifecycle
 	for _, ref := range []string{lifecycle.ReconfigurationPlanRef, lifecycle.RollbackPlanRef} {
-		if countValue(first.Phases[5].InputRefs, ref) != 1 {
-			t.Fatalf("bootstrap phase omits certificate lifecycle reference %q: %#v", ref, first.Phases[5].InputRefs)
+		if countValue(bootstrap.InputRefs, ref) != 1 {
+			t.Fatalf("bootstrap phase omits certificate lifecycle reference %q: %#v", ref, bootstrap.InputRefs)
 		}
 	}
-	if countValue(first.Phases[6].InputRefs, lifecycle.OneServerLossAcceptanceRef) != 1 {
-		t.Fatalf("acceptance phase omits one-server-loss reference: %#v", first.Phases[6].InputRefs)
+	if countValue(acceptance.InputRefs, lifecycle.OneServerLossAcceptanceRef) != 1 {
+		t.Fatalf("acceptance phase omits one-server-loss reference: %#v", acceptance.InputRefs)
 	}
 }
 
@@ -358,6 +381,17 @@ func countValue(values []string, expected string) int {
 		}
 	}
 	return count
+}
+
+func phaseByID(t *testing.T, plan Plan, id string) Phase {
+	t.Helper()
+	for _, phase := range plan.Phases {
+		if phase.ID == id {
+			return phase
+		}
+	}
+	t.Fatalf("plan omits phase %q: %#v", id, plan.Phases)
+	return Phase{}
 }
 
 const validProfileYAML = `apiVersion: cloudring.io/v1alpha1
