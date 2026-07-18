@@ -97,11 +97,15 @@ baseline quorum, workload minima, the VM on the selected server, and a real
 data-probe result. It then atomically creates the non-overwriting `0600`
 `ready-for-fault` marker.
 
-The downstream fault procedure must validate the marker schema, recompute its
-digest, compare its request/run bindings with protected state, and obtain any
-required live mutation approval. Only then may it fault the exact selected
-server. Keep the observer process running. A marker from another request, a
-stale marker, or an exited observer is not authorization to act.
+The downstream fault procedure must call
+`oneserverloss.ValidateReadyMarkerFreshness` with its supplied current time,
+approved maximum marker age, and approved future-clock skew; compare the
+request/run bindings with protected state; and obtain any required live
+mutation approval. This API preserves `ValidateReadyMarker` as the offline
+schema/digest validator and adds the explicit temporal gate. Only then may the
+downstream procedure fault the exact selected server. Keep the observer process
+running. A marker from another request, a stale marker, or an exited observer
+is not authorization to act.
 
 During loss, the observer requires:
 

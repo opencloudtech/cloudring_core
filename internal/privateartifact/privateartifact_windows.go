@@ -3,7 +3,10 @@
 
 package privateartifact
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
 func privateDirectoryMode(os.FileMode) bool {
 	return true
@@ -11,4 +14,8 @@ func privateDirectoryMode(os.FileMode) bool {
 
 func syncDirectory(*os.Root) error {
 	return nil
+}
+
+func readOwnerOnly(string, int64, func()) ([]byte, error) {
+	return nil, errors.New("protected private artifact reads are unsupported on Windows")
 }

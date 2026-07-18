@@ -15,7 +15,6 @@ import (
 	"syscall"
 
 	"github.com/opencloudtech/CloudRING/internal/privateartifact"
-	"github.com/opencloudtech/CloudRING/internal/strictjson"
 	"github.com/opencloudtech/CloudRING/pkg/resilience/oneserverloss"
 )
 
@@ -115,17 +114,7 @@ func (barrier fileReadyBarrier) ReadyForFault(ctx context.Context, marker oneser
 }
 
 func readExactJSON(path string, destination any) error {
-	file, err := os.Open(filepath.Clean(path))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	payload, err := strictjson.Read(file)
-	if err != nil {
-		return err
-	}
-	defer zero(payload)
-	return strictjson.DecodeExact(payload, destination)
+	return privateartifact.ReadJSON(path, destination)
 }
 
 func ensureNewDestinations(paths ...string) error {

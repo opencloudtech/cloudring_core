@@ -114,6 +114,27 @@ func ValidateReadyMarker(marker ReadyMarker) error {
 	return nil
 }
 
+// ValidateReadyMarkerFreshness verifies the marker's offline digest contract
+// and then applies caller-supplied temporal bounds. Callers must supply their
+// current time so policy evaluation remains deterministic and testable.
+func ValidateReadyMarkerFreshness(marker ReadyMarker, now time.Time, maximumAge, maximumFutureSkew time.Duration) error {
+	if err := ValidateReadyMarker(marker); err != nil {
+		return err
+	}
+	if now.IsZero() || maximumAge <= 0 || maximumFutureSkew < 0 {
+		return errors.New("one-server-loss ready marker freshness policy is invalid")
+	}
+	readyAt := canonicalTimestamp(marker.ReadyAt)
+	now = now.UTC()
+	if readyAt.Before(now.Add(-maximumAge)) {
+		return errors.New("one-server-loss ready marker is stale")
+	}
+	if readyAt.After(now.Add(maximumFutureSkew)) {
+		return errors.New("one-server-loss ready marker is from the future")
+	}
+	return nil
+}
+
 // ValidateReceipt verifies the complete sanitized receipt offline. It
 // recomputes every nested digest and rejects observation gaps, identity
 // replacement, quorum loss, VM SLO failures, or data-probe drift.
