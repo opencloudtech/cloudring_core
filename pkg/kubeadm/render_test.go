@@ -826,7 +826,7 @@ func testOneServerLossReceipt() oneserverloss.Receipt {
 			},
 			DataProbe: oneserverloss.DataProbeEvidence{
 				ID: "business-state", BindingSHA256: probeBinding, Implementation: "postgresql-probe", Version: "v1",
-				RequestSHA256:           testSHA256("probe-request-" + string(rune('a'+sequence))),
+				RequestSHA256:           testSHA256(fmt.Sprintf("probe-request-%d", sequence)),
 				AdapterExecutableSHA256: probeAdapter, HashAlgorithm: "sha256", DataSHA256: dataDigest, ValidatedBytes: 4096,
 				StartedAt: at(second), CompletedAt: at(second),
 			},
