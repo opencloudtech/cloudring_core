@@ -46,8 +46,9 @@ Durations must use Go's canonical duration form. The runtime requires a poll
 interval from one to thirty seconds, a stable pre-state covering at least two
 poll intervals, a loss and recovery-stability window of at least two poll
 intervals, bounded fault/recovery timeouts, and a bounded VM unavailability
-SLO. The request is rejected if its worst-case sample count could exceed the
-receipt bound.
+SLO. Use a poll interval of at least 10–15 seconds on a live cluster unless
+measured API and data-probe latency justifies a different value. The request is
+rejected if its worst-case sample count could exceed the receipt bound.
 
 ## Data-probe adapter
 
@@ -107,6 +108,12 @@ downstream procedure fault the exact selected server. Keep the observer process
 running. A marker from another request, a stale marker, or an exited observer
 is not authorization to act.
 
+Objects carrying a valid Kubernetes `deletionTimestamp` are normal during
+eviction and failover. The observer continues decoding them but counts a
+terminating Node, Pod, VirtualMachine, or VirtualMachineInstance as not ready.
+Malformed metadata, timestamps, object identities, selectors, or duplicate
+objects still fail closed.
+
 During loss, the observer requires:
 
 - the selected node is not Ready;
@@ -122,7 +129,9 @@ During loss, the observer requires:
 Recovery must restore the same node name and UID, full baseline quorum,
 control-plane pods, workloads, VM readiness, and data result for the complete
 stability window. A replacement node with the same name fails closed. Missing
-samples or a gap greater than two poll intervals also fail closed.
+samples or an idle gap greater than two poll intervals between the completion
+of one sample and the start of the next also fail closed. The recorded duration
+of a successful sample is not itself misclassified as an observation gap.
 
 Only a successful complete timeline creates the receipt. Verify it without
 cluster access:
@@ -138,6 +147,13 @@ node-identity, adapter, and data-continuity conditions. The receipt deliberately
 contains only safe IDs, counts, booleans, timestamps, and hashes. It is still
 an unsigned deployment-private artifact and must be signed by the downstream
 evidence workflow before supporting a release decision.
+
+The kubeadm stand readiness gate accepts the receipt only as a separate
+owner-protected input. Its stand inventory must bind the exact receipt digest,
+run nonce, target Node UID hash, kubectl executable hash, and probe-adapter hash
+and must include unique current Node UID hashes. A
+`surviveUnavailableServers` integer or evidence-summary string without that
+validated receipt remains blocked as `missing_one_server_loss_evidence`.
 
 ## Kubernetes permissions
 

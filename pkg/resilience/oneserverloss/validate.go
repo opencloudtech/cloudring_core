@@ -280,7 +280,7 @@ func validateSampleSequence(samples []SampleEvidence, poll time.Duration, receip
 		if digestJSON(copy) != sample.SampleSHA256 {
 			return errors.New("one-server-loss sample digest is invalid")
 		}
-		if index > 0 && (started.Before(previous) || observed.Before(previous) || observed.Sub(previous) > 2*poll) {
+		if index > 0 && (started.Before(previous) || observed.Before(previous) || started.Sub(previous) > 2*poll) {
 			return errors.New("one-server-loss observation gap is invalid")
 		}
 		previous = *observed

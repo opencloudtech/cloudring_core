@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
-	"strings"
 
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
 )
@@ -207,10 +206,14 @@ func decodeVMI(raw []byte, namespace, name string) (vmiObject, error) {
 
 func validObjectMetadata(metadata objectMetadata, namespace string) bool {
 	if !validDNSName(metadata.Name) || metadata.UID == "" || len(metadata.UID) > 256 || metadata.ResourceVersion == "" || len(metadata.ResourceVersion) > 256 ||
-		metadata.DeletionTimestamp != nil && strings.TrimSpace(*metadata.DeletionTimestamp) != "" {
+		metadata.DeletionTimestamp != nil && canonicalTimestamp(*metadata.DeletionTimestamp) == nil {
 		return false
 	}
 	return namespace == "" || metadata.Namespace == namespace
+}
+
+func objectTerminating(metadata objectMetadata) bool {
+	return metadata.DeletionTimestamp != nil
 }
 
 func conditionTrue(conditions []condition, expected string) bool {

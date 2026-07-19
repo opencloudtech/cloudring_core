@@ -37,17 +37,26 @@ func (clock *fakeClock) Sleep(ctx context.Context, duration time.Duration) error
 }
 
 type fakeReader struct {
-	index           int
-	replacement     bool
-	lossQuorum      int
-	workloadFailure bool
-	vmNeverMigrates bool
+	index                     int
+	replacement               bool
+	lossQuorum                int
+	workloadFailure           bool
+	vmNeverMigrates           bool
+	clock                     *fakeClock
+	sampleCost                time.Duration
+	terminatingTargetNode     bool
+	terminatingWorkload       bool
+	terminatingVirtualMachine bool
+	terminatingVMI            bool
 }
 
 func (reader *fakeReader) IdentitySHA256() string { return testDigest("kubectl") }
 
 func (reader *fakeReader) ReadyZ(context.Context) error {
 	reader.index++
+	if reader.clock != nil {
+		reader.clock.now = reader.clock.now.Add(reader.sampleCost)
+	}
 	return nil
 }
 
@@ -68,7 +77,11 @@ func (reader *fakeReader) ListPage(_ context.Context, resource Resource, namespa
 			if node == 1 && state >= 5 && reader.replacement {
 				uid = "replacement-node-uid"
 			}
-			items = append(items, nodeFixture(fmt.Sprintf("node-%d", node), uid, ready))
+			item := nodeFixture(fmt.Sprintf("node-%d", node), uid, ready)
+			if node == 1 && reader.terminatingTargetNode {
+				markDeleting(item)
+			}
+			items = append(items, item)
 		}
 	case "pods":
 		if namespace == "kube-system" {
@@ -82,8 +95,12 @@ func (reader *fakeReader) ListPage(_ context.Context, resource Resource, namespa
 			}
 		} else {
 			ready := !(reader.workloadFailure && state >= 3 && state < 5)
-			items = append(items, podFixture(namespace, "service-0", "service-pod-uid", "node-2", ready,
-				map[string]string{"app.kubernetes.io/name": "service"}))
+			item := podFixture(namespace, "service-0", "service-pod-uid", "node-2", ready,
+				map[string]string{"app.kubernetes.io/name": "service"})
+			if reader.terminatingWorkload {
+				markDeleting(item)
+			}
+			items = append(items, item)
 		}
 	default:
 		return nil, errors.New("unexpected list resource")
@@ -96,10 +113,14 @@ func (reader *fakeReader) Get(_ context.Context, resource Resource, namespace, n
 	switch resource.Resource {
 	case "virtualmachines":
 		ready := state != 3
-		return objectFixture(map[string]any{
+		item := map[string]any{
 			"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine",
 			"metadata": metadataFixture(namespace, name, "vm-uid"), "status": map[string]any{"ready": ready},
-		}), nil
+		}
+		if reader.terminatingVirtualMachine {
+			markDeleting(item)
+		}
+		return objectFixture(item), nil
 	case "virtualmachineinstances":
 		if state == 3 {
 			return nil, ErrNotFound
@@ -108,11 +129,15 @@ func (reader *fakeReader) Get(_ context.Context, resource Resource, namespace, n
 		if state >= 4 && !reader.vmNeverMigrates {
 			node = "node-2"
 		}
-		return objectFixture(map[string]any{
+		item := map[string]any{
 			"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachineInstance",
 			"metadata": metadataFixture(namespace, name, "vmi-uid"),
 			"status":   map[string]any{"phase": "Running", "nodeName": node, "conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
-		}), nil
+		}
+		if reader.terminatingVMI {
+			markDeleting(item)
+		}
+		return objectFixture(item), nil
 	default:
 		return nil, errors.New("unexpected get resource")
 	}
@@ -204,6 +229,103 @@ func TestObserveFailsClosedForContinuityViolations(t *testing.T) {
 				t.Fatal("Observe accepted a continuity violation")
 			}
 		})
+	}
+}
+
+func TestObserveDoesNotMisclassifySuccessfulSampleDurationAsGap(t *testing.T) {
+	clock := newFakeClock()
+	reader := &fakeReader{clock: clock, sampleCost: 1500 * time.Millisecond}
+	request := validRequest()
+	request.FaultArrivalTimeout = "20s"
+	request.RecoveryTimeout = "30s"
+	request.VM.MaximumUnavailableDuration = "5s"
+	barrier := &recordingBarrier{}
+
+	receipt, err := Observe(context.Background(), reader, fakeProbe{clock: clock}, barrier, request, clock)
+	if err != nil {
+		t.Fatalf("slow successful samples were misclassified as an observation gap: %v", err)
+	}
+	if err := ValidateReceipt(&receipt); err != nil {
+		t.Fatalf("offline verifier rejected slow successful samples: %v", err)
+	}
+	for _, phase := range []PhaseEvidence{receipt.PreLoss, receipt.Loss, receipt.Recovered} {
+		for _, sample := range phase.Samples {
+			if mustTimestamp(sample.ObservedAt).Sub(mustTimestamp(sample.StartedAt)) != reader.sampleCost {
+				t.Fatalf("sample duration was not recorded: %#v", sample)
+			}
+		}
+	}
+}
+
+func TestTerminatingObjectsRemainDecodableAndCountAsNotReady(t *testing.T) {
+	tests := []struct {
+		name   string
+		reader *fakeReader
+		assert func(*testing.T, SampleEvidence)
+	}{
+		{
+			name:   "target node",
+			reader: &fakeReader{terminatingTargetNode: true},
+			assert: func(t *testing.T, sample SampleEvidence) {
+				if !sample.TargetNodePresent || sample.TargetNodeReady || sample.ControlPlaneReadyNodes != 2 {
+					t.Fatalf("terminating node was not counted as present but not ready: %#v", sample)
+				}
+			},
+		},
+		{
+			name:   "workload pod",
+			reader: &fakeReader{terminatingWorkload: true},
+			assert: func(t *testing.T, sample SampleEvidence) {
+				if len(sample.Workloads) != 1 || sample.Workloads[0].ReadyPods != 0 || sample.Workloads[0].DistinctReadyNodes != 0 {
+					t.Fatalf("terminating workload Pod was counted ready: %#v", sample.Workloads)
+				}
+			},
+		},
+		{
+			name:   "virtual machine",
+			reader: &fakeReader{terminatingVirtualMachine: true},
+			assert: func(t *testing.T, sample SampleEvidence) {
+				if sample.VM.VMReady {
+					t.Fatalf("terminating VirtualMachine was counted ready: %#v", sample.VM)
+				}
+			},
+		},
+		{
+			name:   "virtual machine instance",
+			reader: &fakeReader{terminatingVMI: true},
+			assert: func(t *testing.T, sample SampleEvidence) {
+				if sample.VM.VMIReady || sample.VM.VMIUIDSHA256 != "" || sample.VM.VMIOnTarget {
+					t.Fatalf("terminating VMI was not treated as absent/not ready: %#v", sample.VM)
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clock := newFakeClock()
+			parsed, err := validateRequest(validRequest())
+			if err != nil {
+				t.Fatal(err)
+			}
+			collector := sampler{
+				reader: test.reader, probe: fakeProbe{clock: clock}, request: validRequest(), parsed: parsed, clock: clock,
+			}
+			sample, err := collector.next(context.Background(), PhasePreLoss)
+			if err != nil {
+				t.Fatalf("terminating object aborted sampling: %v", err)
+			}
+			test.assert(t, sample)
+		})
+	}
+}
+
+func TestListDecoderRejectsMalformedDeletionTimestamp(t *testing.T) {
+	item := podFixture("service-system", "service-0", "service-pod-uid", "node-2", true,
+		map[string]string{"app.kubernetes.io/name": "service"})
+	item["metadata"].(map[string]any)["deletionTimestamp"] = "not-a-timestamp"
+	payload := listFixture(podResource, []any{item})
+	if _, err := listAll(context.Background(), fuzzListReader{payload: payload}, podResource, "service-system", ""); err == nil {
+		t.Fatal("malformed deletionTimestamp passed strict list decoding")
 	}
 }
 
@@ -348,6 +470,10 @@ func metadataWithLabelsFixture(namespace, name, uid string, labels map[string]st
 	metadata := metadataFixture(namespace, name, uid)
 	metadata["labels"] = labels
 	return metadata
+}
+
+func markDeleting(object map[string]any) {
+	object["metadata"].(map[string]any)["deletionTimestamp"] = "2026-07-19T10:00:00Z"
 }
 
 func objectFixture(value any) []byte {

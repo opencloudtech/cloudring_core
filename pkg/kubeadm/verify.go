@@ -6,11 +6,13 @@ package kubeadm
 import (
 	"fmt"
 	"strings"
+
+	"github.com/opencloudtech/CloudRING/pkg/resilience/oneserverloss"
 )
 
 // VerifyUpstreamStand independently evaluates sanitized observed state against
 // the upstream Kubernetes HA contract.
-func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
+func VerifyUpstreamStand(inventory StandInventory, receipts ...*oneserverloss.Receipt) (StandReport, error) {
 	report := StandReport{
 		Status:               "ready",
 		WorkflowContinuity:   inventory.WorkflowContinuity,
@@ -63,6 +65,8 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 	}
 	if inventory.ControlPlaneReplicas < 3 {
 		add("missing_control_plane_replicas", "ha_topology", "at least three control-plane replicas are required")
+	} else if inventory.ControlPlaneReplicas%2 == 0 {
+		add("even_control_plane_replicas", "ha_topology", "stacked-etcd control-plane replica count must be odd")
 	}
 	if !strings.EqualFold(strings.TrimSpace(inventory.EtcdTopology), "stacked") {
 		add("missing_stacked_etcd", "ha_topology", "stacked etcd topology is required for this profile")
@@ -73,8 +77,8 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 	if !HasIPv4AndIPv6CIDRs(inventory.ServiceCIDRs) {
 		add("missing_dual_stack_service_cidrs", "dual_stack", "service CIDR inventory must include IPv4 and IPv6 ranges")
 	}
-	if inventory.SurviveUnavailableServers < 1 {
-		add("missing_one_server_loss_evidence", "ha_topology", "readiness requires evidence for surviving one unavailable server")
+	if inventory.SurviveUnavailableServers != 1 {
+		add("unsupported_one_server_loss_envelope", "ha_topology", "this readiness contract requires evidence for exactly one unavailable server")
 	}
 	if !inventory.CiliumDualStackReady {
 		add("cilium_dual_stack_unready", "networking", "Cilium dual-stack readiness evidence is required")
@@ -105,14 +109,22 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 	if !inventory.PodDisruptionBudgetsReady {
 		add("missing_pdb_evidence", "workflow_continuity", "PodDisruptionBudget evidence is required")
 	}
-	if len(inventory.Nodes) < inventory.ControlPlaneReplicas {
-		add("missing_node_inventory", "ha_topology", "node inventory must include every control-plane replica")
+	if len(inventory.Nodes) != inventory.ControlPlaneReplicas {
+		add("node_inventory_replica_mismatch", "ha_topology", "node inventory count must equal the declared control-plane replicas")
 	}
 	nodeNamesSeen := make(map[string]struct{}, len(inventory.Nodes))
+	nodeUIDsSeen := make(map[string]struct{}, len(inventory.Nodes))
 	nodeIPv4Seen := make(map[string]struct{}, len(inventory.Nodes))
 	nodeIPv6Seen := make(map[string]struct{}, len(inventory.Nodes))
-	for _, node := range inventory.Nodes {
+	controlPlaneNodes := 0
+	etcdMembers := 0
+	for index, node := range inventory.Nodes {
 		nodeName := strings.TrimSpace(node.Name)
+		blockerSuffix := nodeName
+		if !validDNS1123Subdomain(nodeName) {
+			blockerSuffix = fmt.Sprintf("entry_%d", index+1)
+			add("invalid_node_name_"+blockerSuffix, "ha_topology", "each node inventory entry must use a DNS-1123 name")
+		}
 		parsedNodeIPv4, nodeIPv4OK := canonicalAddress(node.NodeIPv4)
 		parsedNodeIPv6, nodeIPv6OK := canonicalAddress(node.NodeIPv6)
 		nodeIPv4 := ""
@@ -123,12 +135,13 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 		if nodeIPv6OK && parsedNodeIPv6.Is6() {
 			nodeIPv6 = parsedNodeIPv6.String()
 		}
-		if nodeName == "" {
-			add("unnamed_node_inventory", "ha_topology", "each node inventory entry must be named")
-			continue
-		}
 		if _, exists := nodeNamesSeen[nodeName]; exists {
 			add("duplicate_node_name", "ha_topology", "control-plane node names must be unique")
+		}
+		if !sha256Pattern.MatchString(node.UIDSHA256) {
+			add("node_uid_binding_invalid_"+blockerSuffix, "ha_topology", "each node inventory entry must include a SHA-256 UID binding")
+		} else if _, exists := nodeUIDsSeen[node.UIDSHA256]; exists {
+			add("duplicate_node_uid_binding", "ha_topology", "control-plane node UID bindings must be unique")
 		}
 		if nodeIPv4 != "" {
 			if _, exists := nodeIPv4Seen[nodeIPv4]; exists {
@@ -143,17 +156,24 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 			nodeIPv6Seen[nodeIPv6] = struct{}{}
 		}
 		nodeNamesSeen[nodeName] = struct{}{}
+		if sha256Pattern.MatchString(node.UIDSHA256) {
+			nodeUIDsSeen[node.UIDSHA256] = struct{}{}
+		}
 		if !node.Ready {
-			add("node_not_ready_"+nodeName, "workflow_continuity", "node must be Ready")
+			add("node_not_ready_"+blockerSuffix, "workflow_continuity", "node must be Ready")
 		}
 		if !node.ControlPlane {
-			add("node_missing_control_plane_"+nodeName, "ha_topology", "node must carry the control-plane role")
+			add("node_missing_control_plane_"+blockerSuffix, "ha_topology", "node must carry the control-plane role")
+		} else {
+			controlPlaneNodes++
 		}
 		if !node.EtcdMember {
-			add("node_missing_etcd_"+nodeName, "data_durability", "node must be an etcd member in stacked topology")
+			add("node_missing_etcd_"+blockerSuffix, "data_durability", "node must be an etcd member in stacked topology")
+		} else {
+			etcdMembers++
 		}
 		if nodeIPv4 == "" || nodeIPv6 == "" {
-			add("node_missing_dual_stack_ip_"+nodeName, "dual_stack", "node inventory must include IPv4 and IPv6 node-ip evidence")
+			add("node_missing_dual_stack_ip_"+blockerSuffix, "dual_stack", "node inventory must include IPv4 and IPv6 node-ip evidence")
 		}
 		if controlPlaneHost == nodeIPv4 || controlPlaneHost == nodeIPv6 {
 			add("node_bound_control_plane_endpoint", "ha_topology", "control plane endpoint must not be any node address")
@@ -161,6 +181,10 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 		if stableIPv4 == nodeIPv4 || stableIPv6 == nodeIPv6 {
 			add("node_bound_stable_api_address", "ha_topology", "stable API addresses must not be any node address")
 		}
+	}
+	if inventory.SurviveUnavailableServers >= 1 &&
+		!validOneServerLossReceiptBinding(inventory, receipts, nodeUIDsSeen, controlPlaneNodes, etcdMembers) {
+		add("missing_one_server_loss_evidence", "ha_topology", "readiness requires a valid identity-bound one-server-loss receipt")
 	}
 	requireEvidence := func(id, category string, evidence EvidenceInventory) {
 		if strings.TrimSpace(evidence.Summary) == "" || len(trimmedCopy(evidence.Items)) == 0 {
@@ -176,4 +200,40 @@ func VerifyUpstreamStand(inventory StandInventory) (StandReport, error) {
 		return report, fmt.Errorf("verify upstream stand: %w", ErrStandBlocked)
 	}
 	return report, nil
+}
+
+func validOneServerLossReceiptBinding(
+	inventory StandInventory,
+	receipts []*oneserverloss.Receipt,
+	nodeUIDs map[string]struct{},
+	controlPlaneNodes, etcdMembers int,
+) bool {
+	if len(receipts) != 1 || receipts[0] == nil || inventory.SurviveUnavailableServers != 1 {
+		return false
+	}
+	receipt := receipts[0]
+	if err := oneserverloss.ValidateReceipt(receipt); err != nil {
+		return false
+	}
+	binding := inventory.OneServerLossReceipt
+	if !sha256Pattern.MatchString(binding.ReceiptSHA256) ||
+		!sha256Pattern.MatchString(binding.RunNonceSHA256) ||
+		!sha256Pattern.MatchString(binding.TargetNodeUIDSHA256) ||
+		!sha256Pattern.MatchString(binding.KubectlExecutableSHA256) ||
+		!sha256Pattern.MatchString(binding.ProbeAdapterSHA256) ||
+		binding.ReceiptSHA256 != receipt.ReceiptSHA256 ||
+		binding.RunNonceSHA256 != receipt.RunNonceSHA256 ||
+		binding.TargetNodeUIDSHA256 != receipt.TargetNodeUIDSHA256 ||
+		binding.KubectlExecutableSHA256 != receipt.KubectlExecutableSHA256 ||
+		binding.ProbeAdapterSHA256 != receipt.ProbeAdapterSHA256 {
+		return false
+	}
+	if _, targetPresent := nodeUIDs[receipt.TargetNodeUIDSHA256]; !targetPresent {
+		return false
+	}
+	return receipt.Baseline.ControlPlaneNodes == controlPlaneNodes &&
+		receipt.Baseline.ControlPlaneNodes == inventory.ControlPlaneReplicas &&
+		receipt.Baseline.EtcdMembers == etcdMembers &&
+		receipt.Baseline.APIServerMembers == controlPlaneNodes &&
+		receipt.MinimumControlPlane <= controlPlaneNodes
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
 	"github.com/opencloudtech/CloudRING/pkg/kubeadm"
+	"github.com/opencloudtech/CloudRING/pkg/resilience/oneserverloss"
 	"github.com/opencloudtech/CloudRING/pkg/siteprofile"
 )
 
@@ -112,16 +113,30 @@ func runKubeadmRender(args []string, stdin io.Reader, stdout, stderr io.Writer) 
 }
 
 func runKubeadmVerify(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	inventoryPath, ok := parseInputPath("verify-kubeadm", "inventory", args, stderr)
-	if !ok {
+	flags := flag.NewFlagSet("verify-kubeadm", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	inventoryPath := flags.String("inventory", "-", "stand inventory JSON path or - for stdin")
+	receiptPath := flags.String("one-server-loss-receipt", "", "one-server-loss receipt JSON path")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 ||
+		strings.TrimSpace(*inventoryPath) == "" ||
+		(*inventoryPath == "-" && *receiptPath == "-") {
+		printUsage(stderr)
 		return exitUsage
 	}
 	var inventory kubeadm.StandInventory
-	if err := decodeExactInput(inventoryPath, stdin, &inventory); err != nil {
+	if err := decodeExactInput(*inventoryPath, stdin, &inventory); err != nil {
 		fmt.Fprintln(stderr, "kubeadm stand inventory invalid")
 		return exitFailure
 	}
-	report, err := kubeadm.VerifyUpstreamStand(inventory)
+	var receipt *oneserverloss.Receipt
+	if strings.TrimSpace(*receiptPath) != "" {
+		receipt = &oneserverloss.Receipt{}
+		if err := decodeExactInput(*receiptPath, stdin, receipt); err != nil {
+			fmt.Fprintln(stderr, "one-server-loss receipt invalid")
+			return exitFailure
+		}
+	}
+	report, err := kubeadm.VerifyUpstreamStand(inventory, receipt)
 	if err != nil && !errors.Is(err, kubeadm.ErrStandBlocked) {
 		fmt.Fprintln(stderr, "kubeadm stand verification failed")
 		return exitFailure
@@ -170,7 +185,7 @@ func encodeJSON(writer io.Writer, value any) error {
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: cloudring-site preflight|plan --profile <path|->")
 	fmt.Fprintln(writer, "       cloudring-site render-kubeadm --spec <path|->")
-	fmt.Fprintln(writer, "       cloudring-site verify-kubeadm --inventory <path|->")
+	fmt.Fprintln(writer, "       cloudring-site verify-kubeadm --inventory <path|-> --one-server-loss-receipt <path|->")
 }
 
 func openProfile(path string, stdin io.Reader) (io.Reader, func(), error) {
