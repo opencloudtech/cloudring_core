@@ -41,7 +41,7 @@ func (sampler *sampler) next(ctx context.Context, phase string) (SampleEvidence,
 		if err != nil {
 			return SampleEvidence{}, err
 		}
-		ready := conditionTrue(node.Status.Conditions, "Ready")
+		ready := !objectTerminating(node.Metadata) && conditionTrue(node.Status.Conditions, "Ready")
 		_, controlPlane := node.Metadata.Labels["node-role.kubernetes.io/control-plane"]
 		if ready {
 			readyNodeNames[node.Metadata.Name] = struct{}{}
@@ -87,7 +87,7 @@ func (sampler *sampler) next(ctx context.Context, phase string) (SampleEvidence,
 				break
 			}
 			_, nodeReady := readyNodeNames[pod.Spec.NodeName]
-			if nodeReady && pod.Status.Phase == "Running" && pod.Spec.NodeName != "" && conditionTrue(pod.Status.Conditions, "Ready") {
+			if nodeReady && !objectTerminating(pod.Metadata) && pod.Status.Phase == "Running" && pod.Spec.NodeName != "" && conditionTrue(pod.Status.Conditions, "Ready") {
 				readyPods++
 				readyNodes[pod.Spec.NodeName] = struct{}{}
 			}
@@ -110,7 +110,10 @@ func (sampler *sampler) next(ctx context.Context, phase string) (SampleEvidence,
 	if err != nil {
 		return SampleEvidence{}, err
 	}
-	sample.VM = VMEvidence{ID: sampler.request.VM.ID, BindingSHA256: sampler.parsed.vmBinding, VMUIDSHA256: digestJSON(vm.Metadata.UID), VMReady: vm.Status.Ready}
+	sample.VM = VMEvidence{
+		ID: sampler.request.VM.ID, BindingSHA256: sampler.parsed.vmBinding, VMUIDSHA256: digestJSON(vm.Metadata.UID),
+		VMReady: !objectTerminating(vm.Metadata) && vm.Status.Ready,
+	}
 	vmiPayload, err := sampler.reader.Get(ctx, vmiResource, sampler.request.VM.Namespace, sampler.request.VM.Name)
 	if err == nil {
 		vmi, decodeErr := decodeVMI(vmiPayload, sampler.request.VM.Namespace, sampler.request.VM.Name)
@@ -118,10 +121,12 @@ func (sampler *sampler) next(ctx context.Context, phase string) (SampleEvidence,
 		if decodeErr != nil {
 			return SampleEvidence{}, decodeErr
 		}
-		sample.VM.VMIUIDSHA256 = digestJSON(vmi.Metadata.UID)
-		_, vmiNodeReady := readyNodeNames[vmi.Status.NodeName]
-		sample.VM.VMIReady = vmiNodeReady && vmi.Status.Phase == "Running" && conditionTrue(vmi.Status.Conditions, "Ready")
-		sample.VM.VMIOnTarget = vmi.Status.NodeName == sampler.request.TargetNodeName
+		if !objectTerminating(vmi.Metadata) {
+			sample.VM.VMIUIDSHA256 = digestJSON(vmi.Metadata.UID)
+			_, vmiNodeReady := readyNodeNames[vmi.Status.NodeName]
+			sample.VM.VMIReady = vmiNodeReady && vmi.Status.Phase == "Running" && conditionTrue(vmi.Status.Conditions, "Ready")
+			sample.VM.VMIOnTarget = vmi.Status.NodeName == sampler.request.TargetNodeName
+		}
 	} else if !errors.Is(err, ErrNotFound) {
 		return SampleEvidence{}, errors.New("read exact VirtualMachineInstance")
 	}
@@ -164,7 +169,7 @@ func (sampler *sampler) controlPlanePods(ctx context.Context, component string, 
 			return 0, false, errors.New("Kubernetes control-plane list violated its selector")
 		}
 		_, nodeReady := readyControlPlaneNodes[pod.Spec.NodeName]
-		if !nodeReady || pod.Status.Phase != "Running" || pod.Spec.NodeName == "" || !conditionTrue(pod.Status.Conditions, "Ready") {
+		if !nodeReady || objectTerminating(pod.Metadata) || pod.Status.Phase != "Running" || pod.Spec.NodeName == "" || !conditionTrue(pod.Status.Conditions, "Ready") {
 			continue
 		}
 		nodes[pod.Spec.NodeName] = struct{}{}

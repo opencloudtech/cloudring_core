@@ -27,6 +27,9 @@ const (
 
 var (
 	dns1123SubdomainPattern  = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$`)
+	qualifiedNamePartPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[-_.A-Za-z0-9]{0,61}[A-Za-z0-9])?$`)
+	labelValuePattern        = regexp.MustCompile(`^(?:[A-Za-z0-9](?:[-_.A-Za-z0-9]{0,61}[A-Za-z0-9])?)?$`)
+	sha256Pattern            = regexp.MustCompile(`^[a-f0-9]{64}$`)
 	kubernetesVersionPattern = regexp.MustCompile(
 		`^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`,
 	)
@@ -59,9 +62,10 @@ func RenderStackedEtcdDualStackConfig(spec BootstrapSpec) (BootstrapBundle, erro
 	}
 
 	return BootstrapBundle{
-		InitYAML:             initYAML,
-		ControlPlaneJoinYAML: joinDocs,
-		Actions:              plannedActions(normalized),
+		InitYAML:                  initYAML,
+		ControlPlaneJoinYAML:      joinDocs,
+		SurviveUnavailableServers: normalized.SurviveUnavailableServers,
+		Actions:                   plannedActions(normalized),
 		Cilium: CiliumReadiness{
 			DualStack:                   true,
 			VersionRef:                  normalized.CiliumVersionRef,
@@ -167,16 +171,18 @@ func normalizeBootstrapSpec(spec BootstrapSpec) (BootstrapSpec, error) {
 		return BootstrapSpec{}, fmt.Errorf("API serving certificate lifecycle references missing: %w", ErrInvalidBootstrapSpec)
 	case spec.ControlPlaneReplicas < 3:
 		return BootstrapSpec{}, fmt.Errorf("control plane replicas must be at least three: %w", ErrInvalidBootstrapSpec)
+	case spec.ControlPlaneReplicas%2 == 0:
+		return BootstrapSpec{}, fmt.Errorf("stacked-etcd control plane replicas must be odd: %w", ErrInvalidBootstrapSpec)
 	case !strings.EqualFold(spec.EtcdTopology, "stacked"):
 		return BootstrapSpec{}, fmt.Errorf("stacked etcd topology required: %w", ErrInvalidBootstrapSpec)
-	case spec.SurviveUnavailableServers < 1:
-		return BootstrapSpec{}, fmt.Errorf("one-server-loss envelope missing: %w", ErrInvalidBootstrapSpec)
+	case spec.SurviveUnavailableServers != 1:
+		return BootstrapSpec{}, fmt.Errorf("one-server-loss envelope must equal one: %w", ErrInvalidBootstrapSpec)
 	case !HasIPv4AndIPv6CIDRs(spec.PodCIDRs):
 		return BootstrapSpec{}, fmt.Errorf("pod CIDRs must be dual-stack: %w", ErrInvalidBootstrapSpec)
 	case !HasIPv4AndIPv6CIDRs(spec.ServiceCIDRs):
 		return BootstrapSpec{}, fmt.Errorf("service CIDRs must be dual-stack: %w", ErrInvalidBootstrapSpec)
-	case len(spec.Nodes) < spec.ControlPlaneReplicas:
-		return BootstrapSpec{}, fmt.Errorf("control-plane node count below replicas: %w", ErrInvalidBootstrapSpec)
+	case len(spec.Nodes) != spec.ControlPlaneReplicas:
+		return BootstrapSpec{}, fmt.Errorf("control-plane node count must equal replicas: %w", ErrInvalidBootstrapSpec)
 	case !validRuntimeSocket(spec.ContainerRuntimeSocket):
 		return BootstrapSpec{}, fmt.Errorf("container runtime socket must be an absolute unix URL: %w", ErrInvalidBootstrapSpec)
 	}
@@ -193,7 +199,7 @@ func normalizeBootstrapSpec(spec BootstrapSpec) (BootstrapSpec, error) {
 	nodeNamesSeen := make(map[string]struct{}, spec.ControlPlaneReplicas)
 	nodeIPv4Seen := make(map[string]struct{}, spec.ControlPlaneReplicas)
 	nodeIPv6Seen := make(map[string]struct{}, spec.ControlPlaneReplicas)
-	for index := range spec.Nodes[:spec.ControlPlaneReplicas] {
+	for index := range spec.Nodes {
 		node := spec.Nodes[index]
 		node.Name = strings.TrimSpace(node.Name)
 		nodeIPv4, nodeIPv4OK := canonicalAddress(node.AdvertiseIPv4)
@@ -220,12 +226,29 @@ func normalizeBootstrapSpec(spec BootstrapSpec) (BootstrapSpec, error) {
 		if _, exists := nodeIPv6Seen[node.AdvertiseIPv6]; exists {
 			return BootstrapSpec{}, fmt.Errorf("duplicate control-plane IPv6 address %q: %w", node.AdvertiseIPv6, ErrInvalidBootstrapSpec)
 		}
+		for key, value := range node.Labels {
+			if !validQualifiedName(key) || !validLabelValue(value) {
+				return BootstrapSpec{}, fmt.Errorf("node %q contains an invalid label: %w", node.Name, ErrInvalidBootstrapSpec)
+			}
+		}
+		seenTaints := make(map[string]struct{}, len(node.Taints))
+		for _, taint := range node.Taints {
+			key, value, effect, ok := parseTaint(taint)
+			if !ok {
+				return BootstrapSpec{}, fmt.Errorf("node %q contains an invalid taint: %w", node.Name, ErrInvalidBootstrapSpec)
+			}
+			identity := key + "\x00" + value + "\x00" + effect
+			if _, exists := seenTaints[identity]; exists {
+				return BootstrapSpec{}, fmt.Errorf("node %q contains a duplicate taint: %w", node.Name, ErrInvalidBootstrapSpec)
+			}
+			seenTaints[identity] = struct{}{}
+		}
 		nodeNamesSeen[node.Name] = struct{}{}
 		nodeIPv4Seen[node.AdvertiseIPv4] = struct{}{}
 		nodeIPv6Seen[node.AdvertiseIPv6] = struct{}{}
 		spec.Nodes[index] = node
 	}
-	spec.Nodes = append([]NodeSpec(nil), spec.Nodes[:spec.ControlPlaneReplicas]...)
+	spec.Nodes = append([]NodeSpec(nil), spec.Nodes...)
 	spec.PodCIDRs = trimmedCopy(spec.PodCIDRs)
 	spec.ServiceCIDRs = trimmedCopy(spec.ServiceCIDRs)
 	spec.RequiredPodDisruptionNames = trimmedCopy(spec.RequiredPodDisruptionNames)
@@ -312,8 +335,8 @@ func nodeRegistration(spec BootstrapSpec, node NodeSpec) nodeRegistrationOptions
 	}
 	taints := make([]kubeadmTaint, 0, len(node.Taints))
 	for _, taint := range sortedStrings(node.Taints) {
-		key, effect := splitTaint(taint)
-		taints = append(taints, kubeadmTaint{Key: key, Effect: effect})
+		key, value, effect, _ := parseTaint(taint)
+		taints = append(taints, kubeadmTaint{Key: key, Value: value, Effect: effect})
 	}
 	return nodeRegistrationOptions{
 		Name:             node.Name,
@@ -614,6 +637,7 @@ type kubeadmArg struct {
 
 type kubeadmTaint struct {
 	Key    string `yaml:"key"`
+	Value  string `yaml:"value,omitempty"`
 	Effect string `yaml:"effect"`
 }
 
@@ -642,12 +666,45 @@ func renderLabels(labels map[string]string) string {
 	return strings.Join(parts, ",")
 }
 
-func splitTaint(taint string) (string, string) {
-	key, effect, ok := strings.Cut(taint, ":")
-	if !ok {
-		return taint, "NoSchedule"
+func parseTaint(taint string) (string, string, string, bool) {
+	keyValue, effect, ok := strings.Cut(taint, ":")
+	if !ok || keyValue == "" {
+		return "", "", "", false
 	}
-	return key, effect
+	key, value, hasValue := strings.Cut(keyValue, "=")
+	if !hasValue {
+		value = ""
+	}
+	if !validQualifiedName(key) || !validLabelValue(value) {
+		return "", "", "", false
+	}
+	switch effect {
+	case "NoSchedule", "PreferNoSchedule", "NoExecute":
+		return key, value, effect, true
+	default:
+		return "", "", "", false
+	}
+}
+
+func validQualifiedName(value string) bool {
+	if len(value) == 0 || len(value) > 317 {
+		return false
+	}
+	name := value
+	if strings.Count(value, "/") > 1 {
+		return false
+	}
+	if prefix, remainder, ok := strings.Cut(value, "/"); ok {
+		if !validDNS1123Subdomain(prefix) {
+			return false
+		}
+		name = remainder
+	}
+	return qualifiedNamePartPattern.MatchString(name)
+}
+
+func validLabelValue(value string) bool {
+	return labelValuePattern.MatchString(value)
 }
 
 func nodeNames(nodes []NodeSpec) []string {

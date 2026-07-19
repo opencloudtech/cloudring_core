@@ -235,7 +235,7 @@ func phaseEvidence(phase, startedAt, completedAt string, samples []SampleEvidenc
 }
 
 func observationGap(previous, current SampleEvidence, poll time.Duration) bool {
-	left, right := mustTimestamp(previous.ObservedAt), mustTimestamp(current.ObservedAt)
+	left, right := mustTimestamp(previous.ObservedAt), mustTimestamp(current.StartedAt)
 	return right.Before(left) || right.Sub(left) > 2*poll
 }
 

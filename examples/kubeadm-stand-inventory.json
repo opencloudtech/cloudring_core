@@ -21,6 +21,13 @@
     "2001:db8:96::/108"
   ],
   "surviveUnavailableServers": 1,
+  "oneServerLossReceipt": {
+    "receiptSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "runNonceSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "targetNodeUidSha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "kubectlExecutableSha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "probeAdapterSha256": "5555555555555555555555555555555555555555555555555555555555555555"
+  },
   "ciliumDualStackReady": true,
   "ciliumAPIEndpoint": "api.synthetic.example:6443",
   "controlPlaneTransportDevice": "transport0",
@@ -38,6 +45,7 @@
   "nodes": [
     {
       "name": "node-a",
+      "uidSha256": "3333333333333333333333333333333333333333333333333333333333333333",
       "ready": true,
       "controlPlane": true,
       "etcdMember": true,
@@ -46,6 +54,7 @@
     },
     {
       "name": "node-b",
+      "uidSha256": "6666666666666666666666666666666666666666666666666666666666666666",
       "ready": true,
       "controlPlane": true,
       "etcdMember": true,
@@ -54,6 +63,7 @@
     },
     {
       "name": "node-c",
+      "uidSha256": "7777777777777777777777777777777777777777777777777777777777777777",
       "ready": true,
       "controlPlane": true,
       "etcdMember": true,

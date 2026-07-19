@@ -83,7 +83,9 @@ go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-packa
 go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 go run ./cmd/cloudring-registry validate ./contracts/module-registry/fixtures/synthetic-module-registry.json
 go run ./cmd/cloudring-site render-kubeadm --spec ./examples/kubeadm-bootstrap-spec.json
-go run ./cmd/cloudring-site verify-kubeadm --inventory ./examples/kubeadm-stand-inventory.json
+go run ./cmd/cloudring-site verify-kubeadm \
+  --inventory /protected/run/kubeadm-stand-inventory.json \
+  --one-server-loss-receipt /protected/run/unsigned-one-server-loss-receipt.json
 go run ./cmd/cloudring-manifestcheck --root .
 ```
 

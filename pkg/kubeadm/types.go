@@ -62,6 +62,7 @@ type NodeSpec struct {
 type BootstrapBundle struct {
 	InitYAML                    string                      `json:"initYAML"`
 	ControlPlaneJoinYAML        []JoinDocument              `json:"controlPlaneJoinYAML"`
+	SurviveUnavailableServers   int                         `json:"surviveUnavailableServers"`
 	Actions                     []NodeAction                `json:"actions"`
 	Cilium                      CiliumReadiness             `json:"cilium"`
 	ServingCertificateLifecycle ServingCertificateLifecycle `json:"servingCertificateLifecycle"`
@@ -108,43 +109,56 @@ type CoreDNSExpectation struct {
 // StandInventory is sanitized observed state consumed by the independent
 // verifier.
 type StandInventory struct {
-	Distribution                           string            `json:"distribution"`
-	Bootstrap                              string            `json:"bootstrap"`
-	ServerVersion                          string            `json:"serverVersion"`
-	ControlPlaneEndpoint                   string            `json:"controlPlaneEndpoint"`
-	StableAPIIPv4                          string            `json:"stableAPIIPv4"`
-	StableAPIIPv6                          string            `json:"stableAPIIPv6"`
-	APIServingCertificateSANs              []string          `json:"apiServingCertificateSANs"`
-	ControlPlaneReplicas                   int               `json:"controlPlaneReplicas"`
-	EtcdTopology                           string            `json:"etcdTopology"`
-	PodCIDRs                               []string          `json:"podCIDRs"`
-	ServiceCIDRs                           []string          `json:"serviceCIDRs"`
-	SurviveUnavailableServers              int               `json:"surviveUnavailableServers"`
-	CiliumDualStackReady                   bool              `json:"ciliumDualStackReady"`
-	CiliumAPIEndpoint                      string            `json:"ciliumAPIEndpoint"`
-	ControlPlaneTransportDevice            string            `json:"controlPlaneTransportDevice"`
-	CiliumDevices                          []string          `json:"ciliumDevices"`
-	ServingCertificateRolloutStrategy      string            `json:"servingCertificateRolloutStrategy"`
-	ServingCertificateReconfigurationReady bool              `json:"servingCertificateReconfigurationReady"`
-	ServingCertificateRollbackReady        bool              `json:"servingCertificateRollbackReady"`
-	ControlPlaneAPIFailoverReady           bool              `json:"controlPlaneAPIFailoverReady"`
-	CoreDNSMinReplicas                     int               `json:"coreDNSMinReplicas"`
-	CoreDNSSpreadReady                     bool              `json:"coreDNSSpreadReady"`
-	PodDisruptionBudgetsReady              bool              `json:"podDisruptionBudgetsReady"`
-	Nodes                                  []NodeInventory   `json:"nodes"`
-	WorkflowContinuity                     EvidenceInventory `json:"workflowContinuity"`
-	DataDurability                         EvidenceInventory `json:"dataDurability"`
-	SinglePointOfFailure                   EvidenceInventory `json:"singlePointOfFailure"`
+	Distribution                           string                      `json:"distribution"`
+	Bootstrap                              string                      `json:"bootstrap"`
+	ServerVersion                          string                      `json:"serverVersion"`
+	ControlPlaneEndpoint                   string                      `json:"controlPlaneEndpoint"`
+	StableAPIIPv4                          string                      `json:"stableAPIIPv4"`
+	StableAPIIPv6                          string                      `json:"stableAPIIPv6"`
+	APIServingCertificateSANs              []string                    `json:"apiServingCertificateSANs"`
+	ControlPlaneReplicas                   int                         `json:"controlPlaneReplicas"`
+	EtcdTopology                           string                      `json:"etcdTopology"`
+	PodCIDRs                               []string                    `json:"podCIDRs"`
+	ServiceCIDRs                           []string                    `json:"serviceCIDRs"`
+	SurviveUnavailableServers              int                         `json:"surviveUnavailableServers"`
+	OneServerLossReceipt                   OneServerLossReceiptBinding `json:"oneServerLossReceipt"`
+	CiliumDualStackReady                   bool                        `json:"ciliumDualStackReady"`
+	CiliumAPIEndpoint                      string                      `json:"ciliumAPIEndpoint"`
+	ControlPlaneTransportDevice            string                      `json:"controlPlaneTransportDevice"`
+	CiliumDevices                          []string                    `json:"ciliumDevices"`
+	ServingCertificateRolloutStrategy      string                      `json:"servingCertificateRolloutStrategy"`
+	ServingCertificateReconfigurationReady bool                        `json:"servingCertificateReconfigurationReady"`
+	ServingCertificateRollbackReady        bool                        `json:"servingCertificateRollbackReady"`
+	ControlPlaneAPIFailoverReady           bool                        `json:"controlPlaneAPIFailoverReady"`
+	CoreDNSMinReplicas                     int                         `json:"coreDNSMinReplicas"`
+	CoreDNSSpreadReady                     bool                        `json:"coreDNSSpreadReady"`
+	PodDisruptionBudgetsReady              bool                        `json:"podDisruptionBudgetsReady"`
+	Nodes                                  []NodeInventory             `json:"nodes"`
+	WorkflowContinuity                     EvidenceInventory           `json:"workflowContinuity"`
+	DataDurability                         EvidenceInventory           `json:"dataDurability"`
+	SinglePointOfFailure                   EvidenceInventory           `json:"singlePointOfFailure"`
 }
 
 // NodeInventory is sanitized observed state for one control-plane node.
 type NodeInventory struct {
 	Name         string `json:"name"`
+	UIDSHA256    string `json:"uidSha256"`
 	Ready        bool   `json:"ready"`
 	ControlPlane bool   `json:"controlPlane"`
 	EtcdMember   bool   `json:"etcdMember"`
 	NodeIPv4     string `json:"nodeIPv4"`
 	NodeIPv6     string `json:"nodeIPv6"`
+}
+
+// OneServerLossReceiptBinding binds the stand inventory to one exact,
+// independently validated resilience receipt without embedding the receipt in
+// the sanitized stand report.
+type OneServerLossReceiptBinding struct {
+	ReceiptSHA256           string `json:"receiptSha256"`
+	RunNonceSHA256          string `json:"runNonceSha256"`
+	TargetNodeUIDSHA256     string `json:"targetNodeUidSha256"`
+	KubectlExecutableSHA256 string `json:"kubectlExecutableSha256"`
+	ProbeAdapterSHA256      string `json:"probeAdapterSha256"`
 }
 
 // EvidenceInventory records source-safe evidence identifiers and a summary.

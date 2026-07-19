@@ -47,7 +47,9 @@ They are also available as standalone, strict JSON commands:
 
 ```sh
 go run ./cmd/cloudring-site render-kubeadm --spec ./examples/kubeadm-bootstrap-spec.json
-go run ./cmd/cloudring-site verify-kubeadm --inventory ./examples/kubeadm-stand-inventory.json
+go run ./cmd/cloudring-site verify-kubeadm \
+  --inventory /protected/run/kubeadm-stand-inventory.json \
+  --one-server-loss-receipt /protected/run/unsigned-one-server-loss-receipt.json
 ```
 
 Downstream adapters remain responsible for binding provider references,

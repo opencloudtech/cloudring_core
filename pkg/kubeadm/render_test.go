@@ -4,10 +4,15 @@
 package kubeadm
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/opencloudtech/CloudRING/pkg/resilience/oneserverloss"
 	"gopkg.in/yaml.v3"
 )
 
@@ -95,6 +100,9 @@ func TestKubeadmRenderStackedEtcdDualStackConfig(t *testing.T) {
 	if len(bundle.ControlPlaneJoinYAML) != 2 {
 		t.Fatalf("expected two secondary control-plane join configs, got %d", len(bundle.ControlPlaneJoinYAML))
 	}
+	if bundle.SurviveUnavailableServers != 1 {
+		t.Fatalf("rendered bundle lost its unavailable-server envelope: %#v", bundle)
+	}
 	if !strings.Contains(bundle.ControlPlaneJoinYAML[0].YAML, "apiServerEndpoint: api.synthetic.example:6443") {
 		t.Fatalf("join config must target the HA endpoint:\n%s", bundle.ControlPlaneJoinYAML[0].YAML)
 	}
@@ -179,6 +187,56 @@ func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 		name   string
 		mutate func(*BootstrapSpec)
 	}{
+		{
+			name: "extra control-plane node",
+			mutate: func(spec *BootstrapSpec) {
+				spec.Nodes = append(spec.Nodes, NodeSpec{
+					Name: "node-d", AdvertiseIPv4: spec.Nodes[0].AdvertiseIPv4, AdvertiseIPv6: spec.Nodes[0].AdvertiseIPv6,
+				})
+			},
+		},
+		{
+			name: "even stacked-etcd replicas",
+			mutate: func(spec *BootstrapSpec) {
+				spec.ControlPlaneReplicas = 4
+				spec.Nodes = append(spec.Nodes, NodeSpec{Name: "node-d", AdvertiseIPv4: "192.0.2.14", AdvertiseIPv6: "2001:db8::14"})
+			},
+		},
+		{
+			name: "multi-server envelope is outside one-server-loss contract",
+			mutate: func(spec *BootstrapSpec) {
+				spec.ControlPlaneReplicas = 5
+				spec.SurviveUnavailableServers = 2
+				spec.Nodes = append(spec.Nodes,
+					NodeSpec{Name: "node-d", AdvertiseIPv4: "192.0.2.14", AdvertiseIPv6: "2001:db8::14"},
+					NodeSpec{Name: "node-e", AdvertiseIPv4: "192.0.2.15", AdvertiseIPv6: "2001:db8::15"},
+				)
+			},
+		},
+		{
+			name: "invalid label key",
+			mutate: func(spec *BootstrapSpec) {
+				spec.Nodes[0].Labels = map[string]string{"BAD KEY!!": "value"}
+			},
+		},
+		{
+			name: "invalid label value",
+			mutate: func(spec *BootstrapSpec) {
+				spec.Nodes[0].Labels = map[string]string{"node.cloudring.io/role": "bad value"}
+			},
+		},
+		{
+			name: "invalid taint effect",
+			mutate: func(spec *BootstrapSpec) {
+				spec.Nodes[0].Taints = []string{"node.cloudring.io/role:DefinitelyNotAnEffect"}
+			},
+		},
+		{
+			name: "malformed taint key",
+			mutate: func(spec *BootstrapSpec) {
+				spec.Nodes[0].Taints = []string{"bad key=value:NoSchedule"}
+			},
+		},
 		{
 			name: "node-bound endpoint",
 			mutate: func(spec *BootstrapSpec) {
@@ -330,6 +388,21 @@ func TestKubeadmRendererRejectsUnsafeControlPlaneAPIContracts(t *testing.T) {
 	}
 }
 
+func TestKubeadmRendererParsesTaintValueSeparatelyFromKey(t *testing.T) {
+	spec := syntheticBootstrapSpec()
+	spec.Nodes[0].Taints = []string{"node.cloudring.io/workload=platform:NoExecute"}
+	bundle, err := RenderStackedEtcdDualStackConfig(spec)
+	if err != nil {
+		t.Fatalf("valid key=value:Effect taint was rejected: %v", err)
+	}
+	if !strings.Contains(bundle.InitYAML, "key: node.cloudring.io/workload") ||
+		!strings.Contains(bundle.InitYAML, "value: platform") ||
+		!strings.Contains(bundle.InitYAML, "effect: NoExecute") ||
+		strings.Contains(bundle.InitYAML, "key: node.cloudring.io/workload=platform") {
+		t.Fatalf("taint key/value/effect were rendered incorrectly:\n%s", bundle.InitYAML)
+	}
+}
+
 func TestUpstreamStandVerifierRejectsLegacyDistributionVersion(t *testing.T) {
 	inventory := readyInventory()
 	inventory.ServerVersion = "v1.35.0+k3s1"
@@ -354,7 +427,8 @@ func TestUpstreamStandVerifierRejectsLegacyDistributionVersion(t *testing.T) {
 }
 
 func TestUpstreamStandVerifierReportsReadinessInventory(t *testing.T) {
-	report, err := VerifyUpstreamStand(readyInventory())
+	receipt := testOneServerLossReceipt()
+	report, err := VerifyUpstreamStand(readyInventory(), &receipt)
 	if err != nil {
 		t.Fatalf("expected ready upstream stand to verify: %v", err)
 	}
@@ -369,6 +443,93 @@ func TestUpstreamStandVerifierReportsReadinessInventory(t *testing.T) {
 	}
 	if report.SinglePointOfFailure.Summary == "" || len(report.SinglePointOfFailure.Items) == 0 {
 		t.Fatalf("expected SPOF inventory: %#v", report.SinglePointOfFailure)
+	}
+}
+
+func TestUpstreamStandVerifierRequiresValidIdentityBoundReceipt(t *testing.T) {
+	inventory := readyInventory()
+	report, err := VerifyUpstreamStand(inventory)
+	if err == nil {
+		t.Fatal("self-declared surviveUnavailableServers passed without a verified receipt")
+	}
+	assertBlocker(t, report.Blockers, "missing_one_server_loss_evidence")
+
+	receipt := testOneServerLossReceipt()
+	inventory.OneServerLossReceipt.TargetNodeUIDSHA256 = testSHA256("different-node")
+	report, err = VerifyUpstreamStand(inventory, &receipt)
+	if err == nil {
+		t.Fatal("receipt with a stand-identity binding mismatch passed")
+	}
+	assertBlocker(t, report.Blockers, "missing_one_server_loss_evidence")
+
+	inventory = readyInventory()
+	receipt.ReceiptSHA256 = testSHA256("forged-receipt")
+	inventory.OneServerLossReceipt.ReceiptSHA256 = receipt.ReceiptSHA256
+	report, err = VerifyUpstreamStand(inventory, &receipt)
+	if err == nil {
+		t.Fatal("receipt with an invalid nested digest passed")
+	}
+	assertBlocker(t, report.Blockers, "missing_one_server_loss_evidence")
+}
+
+func TestUpstreamStandVerifierRejectsImpossibleTopologyAndSanitizesNodeBlockers(t *testing.T) {
+	tests := []struct {
+		name    string
+		blocker string
+		mutate  func(*StandInventory)
+	}{
+		{
+			name:    "even replicas",
+			blocker: "even_control_plane_replicas",
+			mutate: func(inventory *StandInventory) {
+				inventory.ControlPlaneReplicas = 4
+			},
+		},
+		{
+			name:    "multi-server envelope is outside one-server-loss contract",
+			blocker: "unsupported_one_server_loss_envelope",
+			mutate: func(inventory *StandInventory) {
+				inventory.SurviveUnavailableServers = 2
+			},
+		},
+		{
+			name:    "extra node inventory",
+			blocker: "node_inventory_replica_mismatch",
+			mutate: func(inventory *StandInventory) {
+				inventory.Nodes = append(inventory.Nodes, inventory.Nodes[2])
+				inventory.Nodes[3].Name = "node-d"
+				inventory.Nodes[3].UIDSHA256 = testSHA256("node-d")
+				inventory.Nodes[3].NodeIPv4 = "192.0.2.14"
+				inventory.Nodes[3].NodeIPv6 = "2001:db8::14"
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			inventory := readyInventory()
+			test.mutate(&inventory)
+			receipt := testOneServerLossReceipt()
+			report, err := VerifyUpstreamStand(inventory, &receipt)
+			if err == nil {
+				t.Fatal("impossible topology passed stand verification")
+			}
+			assertBlocker(t, report.Blockers, test.blocker)
+		})
+	}
+
+	inventory := readyInventory()
+	inventory.Nodes[0].Name = "node-a\nINJECTED"
+	inventory.Nodes[0].Ready = false
+	receipt := testOneServerLossReceipt()
+	report, err := VerifyUpstreamStand(inventory, &receipt)
+	if err == nil {
+		t.Fatal("invalid node name passed stand verification")
+	}
+	assertBlocker(t, report.Blockers, "invalid_node_name_entry_1")
+	for _, blocker := range report.Blockers {
+		if strings.ContainsAny(blocker.ID, "\r\n") {
+			t.Fatalf("blocker ID contains raw control characters: %q", blocker.ID)
+		}
 	}
 }
 
@@ -531,7 +692,8 @@ func TestUpstreamStandVerifierRejectsUnsafeControlPlaneAPIState(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			inventory := readyInventory()
 			test.mutate(&inventory)
-			report, err := VerifyUpstreamStand(inventory)
+			receipt := testOneServerLossReceipt()
+			report, err := VerifyUpstreamStand(inventory, &receipt)
 			if err == nil {
 				t.Fatal("unsafe control-plane API state passed stand verification")
 			}
@@ -577,19 +739,27 @@ func syntheticBootstrapSpec() BootstrapSpec {
 }
 
 func readyInventory() StandInventory {
+	receipt := testOneServerLossReceipt()
 	return StandInventory{
-		Distribution:                           "upstream",
-		Bootstrap:                              "kubeadm",
-		ServerVersion:                          "v1.35.6",
-		ControlPlaneEndpoint:                   "api.synthetic.example:6443",
-		StableAPIIPv4:                          "192.0.2.20",
-		StableAPIIPv6:                          "2001:db8::20",
-		APIServingCertificateSANs:              []string{"api.synthetic.example", "192.0.2.20", "2001:db8::20"},
-		ControlPlaneReplicas:                   3,
-		EtcdTopology:                           "stacked",
-		PodCIDRs:                               []string{"192.0.2.0/24", "2001:db8:244::/56"},
-		ServiceCIDRs:                           []string{"198.51.100.0/24", "2001:db8:96::/108"},
-		SurviveUnavailableServers:              1,
+		Distribution:              "upstream",
+		Bootstrap:                 "kubeadm",
+		ServerVersion:             "v1.35.6",
+		ControlPlaneEndpoint:      "api.synthetic.example:6443",
+		StableAPIIPv4:             "192.0.2.20",
+		StableAPIIPv6:             "2001:db8::20",
+		APIServingCertificateSANs: []string{"api.synthetic.example", "192.0.2.20", "2001:db8::20"},
+		ControlPlaneReplicas:      3,
+		EtcdTopology:              "stacked",
+		PodCIDRs:                  []string{"192.0.2.0/24", "2001:db8:244::/56"},
+		ServiceCIDRs:              []string{"198.51.100.0/24", "2001:db8:96::/108"},
+		SurviveUnavailableServers: 1,
+		OneServerLossReceipt: OneServerLossReceiptBinding{
+			ReceiptSHA256:           receipt.ReceiptSHA256,
+			RunNonceSHA256:          receipt.RunNonceSHA256,
+			TargetNodeUIDSHA256:     receipt.TargetNodeUIDSHA256,
+			KubectlExecutableSHA256: receipt.KubectlExecutableSHA256,
+			ProbeAdapterSHA256:      receipt.ProbeAdapterSHA256,
+		},
 		CiliumDualStackReady:                   true,
 		CiliumAPIEndpoint:                      "api.synthetic.example:6443",
 		ControlPlaneTransportDevice:            "transport0",
@@ -602,9 +772,9 @@ func readyInventory() StandInventory {
 		CoreDNSSpreadReady:                     true,
 		PodDisruptionBudgetsReady:              true,
 		Nodes: []NodeInventory{
-			{Name: "node-a", Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.11", NodeIPv6: "2001:db8::11"},
-			{Name: "node-b", Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.12", NodeIPv6: "2001:db8::12"},
-			{Name: "node-c", Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.13", NodeIPv6: "2001:db8::13"},
+			{Name: "node-a", UIDSHA256: receipt.TargetNodeUIDSHA256, Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.11", NodeIPv6: "2001:db8::11"},
+			{Name: "node-b", UIDSHA256: testSHA256("node-b-uid"), Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.12", NodeIPv6: "2001:db8::12"},
+			{Name: "node-c", UIDSHA256: testSHA256("node-c-uid"), Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.13", NodeIPv6: "2001:db8::13"},
 		},
 		WorkflowContinuity: EvidenceInventory{
 			Summary: "tenant API, console, GitOps, DNS, and certificate workflows verified",
@@ -619,6 +789,101 @@ func readyInventory() StandInventory {
 			Items:   []string{"three-control-plane", "stacked-etcd", "one-server-loss"},
 		},
 	}
+}
+
+func testOneServerLossReceipt() oneserverloss.Receipt {
+	at := func(seconds int) string {
+		return time.Date(2026, 7, 19, 12, 0, seconds, 0, time.UTC).Format(time.RFC3339Nano)
+	}
+	targetUID := testSHA256("node-a-uid")
+	vmUID := testSHA256("vm-uid")
+	workloadBinding := testSHA256("workload-binding")
+	vmBinding := testSHA256("vm-binding")
+	probeBinding := testSHA256("probe-binding")
+	probeAdapter := testSHA256("probe-adapter")
+	dataDigest := testSHA256("business-state")
+	sample := func(sequence int64, phase string, second int, targetPresent, targetReady bool, members int, vmReady, vmiReady, vmiOnTarget bool) oneserverloss.SampleEvidence {
+		targetDigest := ""
+		if targetPresent {
+			targetDigest = targetUID
+		}
+		vmiUID := ""
+		if vmiReady || vmiOnTarget {
+			vmiUID = testSHA256("vmi-uid")
+		}
+		value := oneserverloss.SampleEvidence{
+			Sequence: sequence, Phase: phase, StartedAt: at(second), ObservedAt: at(second),
+			TargetNodePresent: targetPresent, TargetNodeReady: targetReady, TargetNodeUIDSHA256: targetDigest,
+			ReadyZPassed: true, ControlPlaneReadyNodes: members, EtcdReadyMembers: members, APIServerReadyMembers: members,
+			TargetHostsEtcd: targetReady, TargetHostsAPIServer: targetReady,
+			Workloads: []oneserverloss.WorkloadEvidence{{
+				ID: "control-workload", BindingSHA256: workloadBinding, ReadyPods: 1, DistinctReadyNodes: 1,
+				MinimumReadyPods: 1, MinimumReadyNodes: 1,
+			}},
+			VM: oneserverloss.VMEvidence{
+				ID: "continuity-vm", BindingSHA256: vmBinding, VMUIDSHA256: vmUID, VMIUIDSHA256: vmiUID,
+				VMReady: vmReady, VMIReady: vmiReady, VMIOnTarget: vmiOnTarget,
+			},
+			DataProbe: oneserverloss.DataProbeEvidence{
+				ID: "business-state", BindingSHA256: probeBinding, Implementation: "postgresql-probe", Version: "v1",
+				RequestSHA256:           testSHA256(fmt.Sprintf("probe-request-%d", sequence)),
+				AdapterExecutableSHA256: probeAdapter, HashAlgorithm: "sha256", DataSHA256: dataDigest, ValidatedBytes: 4096,
+				StartedAt: at(second), CompletedAt: at(second),
+			},
+		}
+		value.SampleSHA256 = testJSONDigest(value)
+		return value
+	}
+	pre := []oneserverloss.SampleEvidence{
+		sample(1, oneserverloss.PhasePreLoss, 0, true, true, 3, true, true, true),
+		sample(2, oneserverloss.PhasePreLoss, 1, true, true, 3, true, true, true),
+		sample(3, oneserverloss.PhasePreLoss, 2, true, true, 3, true, true, true),
+	}
+	loss := []oneserverloss.SampleEvidence{
+		sample(4, oneserverloss.PhaseLoss, 3, false, false, 2, false, false, false),
+		sample(5, oneserverloss.PhaseLoss, 4, false, false, 2, true, true, false),
+	}
+	recovered := []oneserverloss.SampleEvidence{
+		sample(6, oneserverloss.PhaseRecovered, 5, true, true, 3, true, true, false),
+		sample(7, oneserverloss.PhaseRecovered, 7, true, true, 3, true, true, false),
+	}
+	baseline := oneserverloss.Baseline{
+		ControlPlaneNodes: 3, EtcdMembers: 3, APIServerMembers: 3,
+		VMUIDSHA256: vmUID, DataSHA256: dataDigest, ValidatedBytes: 4096,
+	}
+	baseline.BaselineSHA256 = testJSONDigest(baseline)
+	phase := func(name, started, completed string, samples []oneserverloss.SampleEvidence) oneserverloss.PhaseEvidence {
+		return oneserverloss.PhaseEvidence{
+			Phase: name, StartedAt: started, CompletedAt: completed, Samples: samples, SamplesSHA256: testJSONDigest(samples),
+		}
+	}
+	receipt := oneserverloss.Receipt{
+		SchemaVersion: oneserverloss.ReceiptSchemaVersion, Status: oneserverloss.ReceiptStatus,
+		RequestSHA256: testSHA256("request"), RunNonceSHA256: testSHA256("nonce"), TargetNodeUIDSHA256: targetUID,
+		KubectlExecutableSHA256: testSHA256("kubectl"), ProbeAdapterSHA256: probeAdapter,
+		StartedAt: at(0), ReadyMarkerAt: at(2), CompletedAt: at(7),
+		PollInterval: "1s", FaultArrivalTimeout: "5s", MinimumLossWindow: "2s", RecoveryTimeout: "10s",
+		RecoveryStabilityWindow: "2s", MaximumVMUnavailable: "2s", MinimumControlPlane: 3, Baseline: baseline,
+		PreLoss:   phase(oneserverloss.PhasePreLoss, at(0), at(3), pre),
+		Loss:      phase(oneserverloss.PhaseLoss, at(3), at(5), loss),
+		Recovered: phase(oneserverloss.PhaseRecovered, at(5), at(7), recovered),
+	}
+	receipt.ReceiptSHA256 = testJSONDigest(receipt)
+	return receipt
+}
+
+func testJSONDigest(value any) string {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	sum := sha256.Sum256(payload)
+	return fmt.Sprintf("%x", sum)
+}
+
+func testSHA256(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", sum)
 }
 
 func assertAction(t *testing.T, actions []NodeAction, name string) {

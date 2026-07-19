@@ -95,15 +95,39 @@ func TestCLIRendersKubeadmBundleDeterministically(t *testing.T) {
 	}
 }
 
-func TestCLIVerifiesReadyAndBlockedKubeadmInventories(t *testing.T) {
+func TestCLIVerifierRequiresIdentityBoundOneServerLossReceipt(t *testing.T) {
 	inventoryPath := examplePath("kubeadm-stand-inventory.json")
-	var readyStdout, readyStderr bytes.Buffer
-	if code := run([]string{"verify-kubeadm", "--inventory", inventoryPath}, nil, &readyStdout, &readyStderr); code != exitSuccess {
-		t.Fatalf("verify-kubeadm failed with code %d: %s", code, readyStderr.String())
+	var absentStdout, absentStderr bytes.Buffer
+	if code := run(
+		[]string{"verify-kubeadm", "--inventory", inventoryPath},
+		nil,
+		&absentStdout,
+		&absentStderr,
+	); code != exitBlocked {
+		t.Fatalf("missing one-server-loss receipt returned code %d: %s", code, absentStderr.String())
 	}
-	var ready kubeadm.StandReport
-	if err := strictjson.DecodeExact(readyStdout.Bytes(), &ready); err != nil || ready.Status != "ready" {
-		t.Fatalf("ready inventory returned an invalid report: err=%v report=%#v", err, ready)
+	var absent kubeadm.StandReport
+	if err := strictjson.DecodeExact(absentStdout.Bytes(), &absent); err != nil ||
+		absent.Status != "blocked" || !hasBlocker(absent.Blockers, "missing_one_server_loss_evidence") {
+		t.Fatalf("missing receipt did not fail closed with its blocker: err=%v report=%#v", err, absent)
+	}
+
+	receiptPath := semanticInvalidReceiptPath(t)
+	var missingStdout, missingStderr bytes.Buffer
+	if code := run(
+		[]string{"verify-kubeadm", "--inventory", inventoryPath, "--one-server-loss-receipt", receiptPath},
+		nil,
+		&missingStdout,
+		&missingStderr,
+	); code != exitBlocked {
+		t.Fatalf("unverified one-server-loss evidence returned code %d: %s", code, missingStderr.String())
+	}
+	var missing kubeadm.StandReport
+	if err := strictjson.DecodeExact(missingStdout.Bytes(), &missing); err != nil || missing.Status != "blocked" {
+		t.Fatalf("unverified receipt returned an invalid report: err=%v report=%#v", err, missing)
+	}
+	if !hasBlocker(missing.Blockers, "missing_one_server_loss_evidence") {
+		t.Fatalf("unverified receipt omitted the evidence blocker: %#v", missing.Blockers)
 	}
 
 	blockedInput := strings.Replace(
@@ -114,7 +138,7 @@ func TestCLIVerifiesReadyAndBlockedKubeadmInventories(t *testing.T) {
 	)
 	var blockedStdout, blockedStderr bytes.Buffer
 	if code := run(
-		[]string{"verify-kubeadm", "--inventory", "-"},
+		[]string{"verify-kubeadm", "--inventory", "-", "--one-server-loss-receipt", receiptPath},
 		strings.NewReader(blockedInput),
 		&blockedStdout,
 		&blockedStderr,
@@ -125,14 +149,7 @@ func TestCLIVerifiesReadyAndBlockedKubeadmInventories(t *testing.T) {
 	if err := strictjson.DecodeExact(blockedStdout.Bytes(), &blocked); err != nil || blocked.Status != "blocked" {
 		t.Fatalf("blocked inventory returned an invalid report: err=%v report=%#v", err, blocked)
 	}
-	found := false
-	for _, blocker := range blocked.Blockers {
-		if blocker.ID == "control_plane_api_failover_unverified" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasBlocker(blocked.Blockers, "control_plane_api_failover_unverified") {
 		t.Fatalf("blocked report omitted API failover blocker: %#v", blocked.Blockers)
 	}
 }
@@ -173,8 +190,12 @@ func TestCLIKubeadmInputsFailClosedWithoutEcho(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
+			args := []string{test.command, test.flag, "-"}
+			if test.command == "verify-kubeadm" {
+				args = append(args, "--one-server-loss-receipt", semanticInvalidReceiptPath(t))
+			}
 			code := run(
-				[]string{test.command, test.flag, "-"},
+				args,
 				strings.NewReader(test.payload),
 				&stdout,
 				&stderr,
@@ -187,6 +208,24 @@ func TestCLIKubeadmInputsFailClosedWithoutEcho(t *testing.T) {
 			}
 		})
 	}
+}
+
+func semanticInvalidReceiptPath(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "receipt.json")
+	if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func hasBlocker(blockers []kubeadm.Blocker, id string) bool {
+	for _, blocker := range blockers {
+		if blocker.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCLIKubeadmSemanticValidationBlocksUnsafeContracts(t *testing.T) {
