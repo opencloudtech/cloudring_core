@@ -9,7 +9,14 @@ import (
 )
 
 func testPolicy(now time.Time) *Policy {
-	policy := NewPolicy(PolicyConfig{Clock: FixedClock{At: now}, AuthenticationVerifier: syntheticAuthenticationVerifier()})
+	policy := NewPolicy(PolicyConfig{
+		Clock:                         FixedClock{At: now},
+		AuditSink:                     NewMemoryAuditSink(),
+		AuthenticationVerifier:        syntheticContractAuthenticationVerifier(),
+		AuthenticationProofMaxAge:     time.Hour,
+		AuthenticationProofFutureSkew: time.Minute,
+		AllowEphemeralAudit:           true,
+	})
 	policy.Organizations["org-a"] = Organization{ID: "org-a", Name: "Org A"}
 	policy.Organizations["org-b"] = Organization{ID: "org-b", Name: "Org B"}
 	policy.Tenants["tenant-a"] = Tenant{

@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -32,23 +33,12 @@ type CookiePolicy struct {
 }
 
 func NewSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) {
-	if policy.Name == "" || policy.Value == "" {
-		return nil, errors.New("cookie name and value are required")
+	sameSite, err := validateHostCookiePolicy(policy.Name, policy.Value, policy.Path, policy.SameSite, true)
+	if err != nil {
+		return nil, err
 	}
-	if policy.Path == "" || policy.Path[0] != '/' {
-		return nil, errors.New("cookie path must be scoped")
-	}
-	if policy.Lifetime <= 0 || policy.Lifetime > 24*time.Hour {
+	if policy.Lifetime < time.Second || policy.Lifetime > 24*time.Hour {
 		return nil, errors.New("cookie lifetime must be positive and bounded")
-	}
-	sameSite := http.SameSiteLaxMode
-	switch policy.SameSite {
-	case SameSiteStrict:
-		sameSite = http.SameSiteStrictMode
-	case SameSiteLax, "":
-		sameSite = http.SameSiteLaxMode
-	default:
-		return nil, errors.New("cookie SameSite must be Lax or Strict")
 	}
 	// #nosec G124 -- every returned cookie is unconditionally Secure,
 	// HttpOnly, and at least SameSite=Lax; the policy cannot disable them.
@@ -64,12 +54,54 @@ func NewSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) 
 	}, nil
 }
 
+func ExpireSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) {
+	sameSite, err := validateHostCookiePolicy(policy.Name, "", policy.Path, policy.SameSite, false)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Cookie{
+		Name:     policy.Name,
+		Value:    "",
+		Path:     policy.Path,
+		Expires:  now.Add(-time.Hour),
+		MaxAge:   -1,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: sameSite,
+	}, nil
+}
+
+func validateHostCookiePolicy(name, value, path string, sameSitePolicy SameSiteMode, requireValue bool) (http.SameSite, error) {
+	if !strings.HasPrefix(name, "__Host-") {
+		return 0, errors.New("session cookie name must use the __Host- prefix")
+	}
+	if path != "/" {
+		return 0, errors.New("__Host- session cookie path must be /")
+	}
+	if requireValue && value == "" {
+		return 0, errors.New("cookie value is required")
+	}
+	candidate := &http.Cookie{Name: name, Value: value, Path: path}
+	if err := candidate.Valid(); err != nil {
+		return 0, errors.New("cookie name or value is invalid")
+	}
+	switch sameSitePolicy {
+	case SameSiteStrict:
+		return http.SameSiteStrictMode, nil
+	case SameSiteLax, "":
+		return http.SameSiteLaxMode, nil
+	default:
+		return 0, errors.New("cookie SameSite must be Lax or Strict")
+	}
+}
+
 type CSRFManager struct {
 	keyMaterial []byte
 	maxAge      time.Duration
 }
 
 const minCSRFKeyMaterialBytes = 32
+const maxEncodedCSRFTokenBytes = 128
 
 func NewCSRFManager(keyMaterial []byte, maxAge time.Duration) CSRFManager {
 	keyCopy := append([]byte(nil), keyMaterial...)
@@ -103,6 +135,9 @@ func (manager CSRFManager) Check(csrfValue, sessionID string, now time.Time) err
 	}
 	if csrfValue == "" {
 		return errors.New("csrf token is required")
+	}
+	if len(csrfValue) > maxEncodedCSRFTokenBytes {
+		return errors.New("csrf token is malformed")
 	}
 	if sessionID == "" {
 		return errors.New("session id is required")

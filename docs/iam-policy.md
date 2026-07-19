@@ -32,13 +32,31 @@ A subject ID or API-token reference is not authentication evidence. Every
 `Policy` requires a trusted `AuthenticationVerifier`; the default without one
 is deny. The verifier proves the referenced session or credential out of band
 through `AuthorizeContext` transport context and returns the authenticated
-subject, credential class, MFA result, and session assurance. Bearer material
-never enters the authorization request or audit record. Policy then enforces
-fresh/non-revoked sessions and MFA for privileged, support, and break-glass
-actions and records the assurance result in the decision and audit event. The
-configured policy maps, clock, verifier, and audit sink are trusted
-initialization inputs and must not be mutated while the policy serves
-concurrent requests.
+subject, credential class, MFA result, session assurance, and a bounded
+verification proof. `OIDCAuthenticationVerifier` is the reference adapter from
+a nonce-bound, signed ID token to this evidence: it always takes the subject
+from the verified `sub` claim, never from the authorization request. Bearer
+material never enters the authorization request or audit record. Policy rejects
+zero, stale, future-skewed, or expired authentication proofs, bounds
+`SessionAssurance.MaxAgeSeconds`, then enforces fresh/non-revoked sessions and
+MFA for privileged, support, and break-glass actions. The configured policy
+maps remain the source of role and object-scope authorization and must not be
+mutated while the policy serves concurrent requests.
+
+`NewPolicyFromState` is the production-oriented construction path. It loads a
+structurally validated `PolicyState` from a ready `PolicyStateLoader`, rejects
+mismatched entity references and cross-tenant membership/scope edges, copies
+the directory into immutable serving state, and requires the verifier, proof
+bounds, and durable audit dependency before returning a policy.
+
+Audit storage is explicit. A production policy requires a ready
+`DurableAuditSink`; omitting the sink, using a non-durable sink, failing
+readiness, or failing the durable append denies the decision.
+`MemoryAuditSink` is bounded and accepted only when
+`AllowEphemeralAudit` is explicitly enabled for synthetic or test-only use.
+`SecurityAuditSink` lets authentication, login, logout, registration, and
+bootstrap events use the same durable dependency without forcing those events
+into an authorization request.
 
 Tenant recovery always requires the explicit break-glass credential class,
 reason, and ticket; a platform-admin role alone cannot bypass that path.
@@ -47,8 +65,20 @@ reason, and ticket; a platform-admin role alone cannot bypass that path.
 and JWKS documents, verifies asymmetric `RS256` and `ES256` JWTs, rejects
 `none` and symmetric downgrade attempts, enforces issuer, audience, required
 claims, lifetime and key-rotation windows, and provides secure-cookie and
-session-bound CSRF primitives. Management visibility remains denied until
-authentication, token validation, and IAM all allow it.
+session-bound CSRF primitives. Standard external OIDC discovery validation is
+separate from optional CloudRING discovery extensions and permits harmless
+provider capability supersets. Authorization-code helpers generate random
+state, nonce, and RFC 7636 `S256` PKCE material, build public-client
+authorization/token parameters, validate callback state, and nonce-bind ID
+token verification. They never carry a client secret. Management visibility
+remains denied until authentication, token validation, and IAM all allow it.
+
+Browser transaction and session persistence are consumer-supplied through
+`AuthorizationStateStore` and `SessionStateStore`. Their contracts require a
+real readiness check, atomic one-time authorization-state consumption, hashed
+opaque identifiers, sealed PKCE material, bounded expiry cleanup, and session
+revocation. Raw state, nonce, authorization code, PKCE verifier, and session
+token values must not be persisted.
 
 The verifier uses an explicit JWT profile: exact JOSE `typ`, JWT-class claim,
 authorized party, audience, issuer, and asymmetric algorithm. It rejects
@@ -84,8 +114,8 @@ identity values, groups, namespaces, JWTs, or private issuer URLs.
 `cloudring-id contract` is explicitly a synthetic in-process contract check.
 Its status is `contract-valid`, `syntheticOnly` is true, and
 `readinessClaimed` is false; it neither contacts nor approves an installation.
-Deployment-specific keys, JWTs, bootstrap credentials, session stores, and
-live evidence remain outside the public repository.
+Deployment-specific keys, JWTs, bootstrap credentials, durable state
+implementations, and live evidence remain outside the public repository.
 
 ## Operational boundary
 

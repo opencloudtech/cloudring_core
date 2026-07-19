@@ -116,7 +116,10 @@ func runContract(args []string) error {
 		return err
 	}
 	discovery := runtime.Discovery()
-	if err := runtime.ValidateDiscovery(discovery); err != nil {
+	if err := runtime.ValidateOIDCDiscovery(discovery); err != nil {
+		return err
+	}
+	if err := runtime.ValidateCloudRINGDiscoveryPolicy(discovery); err != nil {
 		return err
 	}
 	report := contractEvidence{

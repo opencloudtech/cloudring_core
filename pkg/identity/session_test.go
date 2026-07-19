@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,6 +68,60 @@ func TestCSRFRejectsShortKeyMaterial(t *testing.T) {
 				t.Fatalf("Check returned %q, want %q", err.Error(), wantErr)
 			}
 		})
+	}
+}
+
+func TestHostSessionCookieFailsClosedAndExpiresWithSameBoundary(t *testing.T) {
+	now := time.Unix(1710000000, 0).UTC()
+	base := CookiePolicy{
+		Name:     "__Host-cloudring-session",
+		Value:    "opaque-session-id",
+		Path:     "/",
+		Lifetime: time.Minute,
+		SameSite: SameSiteStrict,
+	}
+	tests := []struct {
+		name   string
+		mutate func(*CookiePolicy)
+	}{
+		{name: "missing host prefix", mutate: func(value *CookiePolicy) { value.Name = "cloudring-session" }},
+		{name: "scoped path", mutate: func(value *CookiePolicy) { value.Path = "/portal" }},
+		{name: "invalid value", mutate: func(value *CookiePolicy) { value.Value = "bad\nvalue" }},
+		{name: "subsecond lifetime", mutate: func(value *CookiePolicy) { value.Lifetime = time.Millisecond }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := base
+			test.mutate(&candidate)
+			if _, err := NewSessionCookie(candidate, now); err == nil {
+				t.Fatalf("NewSessionCookie accepted %s", test.name)
+			}
+		})
+	}
+
+	expired, err := ExpireSessionCookie(base, now)
+	if err != nil {
+		t.Fatalf("ExpireSessionCookie: %v", err)
+	}
+	if expired.Name != base.Name || expired.Path != "/" || !expired.Secure || !expired.HttpOnly ||
+		expired.SameSite != http.SameSiteStrictMode || expired.MaxAge >= 0 || !expired.Expires.Before(now) {
+		t.Fatalf("logout cookie does not preserve the secure boundary: %#v", expired)
+	}
+}
+
+func TestCSRFFailsClosedOnOversizedFutureAndExpiredValues(t *testing.T) {
+	now := time.Unix(1710000000, 0).UTC()
+	manager := NewCSRFManager([]byte("0123456789abcdef0123456789abcdef"), 10*time.Minute)
+	if err := manager.Check(strings.Repeat("A", maxEncodedCSRFTokenBytes+1), "session-1", now); err == nil {
+		t.Fatal("oversized CSRF value was accepted")
+	}
+	future := csrfTokenSignedForTest(t, manager, "session-1", now.Add(time.Second))
+	if err := manager.Check(future, "session-1", now); err == nil {
+		t.Fatal("future CSRF value was accepted")
+	}
+	expired := csrfTokenSignedForTest(t, manager, "session-1", now.Add(-10*time.Minute-time.Second))
+	if err := manager.Check(expired, "session-1", now); err == nil {
+		t.Fatal("expired CSRF value was accepted")
 	}
 }
 

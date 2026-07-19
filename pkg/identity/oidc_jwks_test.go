@@ -238,7 +238,34 @@ func TestRuntimeRejectsUnsafeRotationAndCacheDurations(t *testing.T) {
 	}
 }
 
-func TestValidateDiscoveryRequiresExactSecurityContract(t *testing.T) {
+func TestValidateOIDCDiscoveryAcceptsSafeProviderSupersets(t *testing.T) {
+	now := time.Unix(1710000000, 0).UTC()
+	key := mustRSAKey(t)
+	runtime := mustRuntime(t, now, "main", &key.PublicKey)
+	discovery := runtime.Discovery()
+	discovery.ResponseTypesSupported = append(discovery.ResponseTypesSupported, "code id_token")
+	discovery.SubjectTypesSupported = append(discovery.SubjectTypesSupported, "pairwise")
+	discovery.IDTokenSigningAlgValuesSupported = append(discovery.IDTokenSigningAlgValuesSupported, "PS256")
+	discovery.TokenEndpointAuthMethodsSupported = append(discovery.TokenEndpointAuthMethodsSupported, "none")
+	discovery.ClaimsSupported = append(discovery.ClaimsSupported, "email")
+	discovery.CodeChallengeMethodsSupported = append(discovery.CodeChallengeMethodsSupported, "plain")
+	discovery.CloudRINGManagementPanelIAMGate = "external-provider-does-not-publish-this-policy"
+
+	if err := runtime.ValidateOIDCDiscovery(discovery); err != nil {
+		t.Fatalf("ValidateOIDCDiscovery rejected a safe provider superset: %v", err)
+	}
+	externalMinimal := cloneDiscoveryForTest(discovery)
+	externalMinimal.SubjectTypesSupported = []string{"pairwise"}
+	externalMinimal.ClaimsSupported = nil
+	if err := runtime.ValidateOIDCDiscovery(externalMinimal); err != nil {
+		t.Fatalf("ValidateOIDCDiscovery rejected optional claims or pairwise subjects: %v", err)
+	}
+	if err := runtime.ValidateCloudRINGDiscoveryPolicy(discovery); err == nil {
+		t.Fatal("CloudRING policy validator accepted a changed extension")
+	}
+}
+
+func TestValidateOIDCDiscoveryRequiresConsumedSecuritySubset(t *testing.T) {
 	now := time.Unix(1710000000, 0).UTC()
 	key := mustRSAKey(t)
 	runtime := mustRuntime(t, now, "main", &key.PublicKey)
@@ -247,27 +274,68 @@ func TestValidateDiscoveryRequiresExactSecurityContract(t *testing.T) {
 		name   string
 		mutate func(*DiscoveryMetadata)
 	}{
-		{name: "missing algorithm", mutate: func(value *DiscoveryMetadata) { value.IDTokenSigningAlgValuesSupported = []string{"RS256"} }},
+		{name: "missing configured algorithm", mutate: func(value *DiscoveryMetadata) { value.IDTokenSigningAlgValuesSupported = []string{"PS256"} }},
 		{name: "duplicate algorithm", mutate: func(value *DiscoveryMetadata) { value.IDTokenSigningAlgValuesSupported = []string{"RS256", "RS256"} }},
-		{name: "missing claim", mutate: func(value *DiscoveryMetadata) { value.ClaimsSupported = value.ClaimsSupported[1:] }},
+		{name: "duplicate optional claim", mutate: func(value *DiscoveryMetadata) {
+			value.ClaimsSupported = append(value.ClaimsSupported, value.ClaimsSupported[0])
+		}},
+		{name: "missing code", mutate: func(value *DiscoveryMetadata) { value.ResponseTypesSupported = []string{"id_token"} }},
 		{name: "pkce downgrade", mutate: func(value *DiscoveryMetadata) { value.CodeChallengeMethodsSupported = nil }},
-		{name: "subject type downgrade", mutate: func(value *DiscoveryMetadata) { value.SubjectTypesSupported = []string{"pairwise"} }},
-		{name: "token auth downgrade", mutate: func(value *DiscoveryMetadata) { value.TokenEndpointAuthMethodsSupported = []string{"none"} }},
-		{name: "management gate downgrade", mutate: func(value *DiscoveryMetadata) { value.CloudRINGManagementPanelIAMGate = "allow" }},
-		{name: "csrf downgrade", mutate: func(value *DiscoveryMetadata) { value.CloudRINGBrowserWriteCSRFRequirement = "optional" }},
+		{name: "subject type downgrade", mutate: func(value *DiscoveryMetadata) { value.SubjectTypesSupported = []string{"unsupported"} }},
+		{name: "token auth downgrade", mutate: func(value *DiscoveryMetadata) { value.TokenEndpointAuthMethodsSupported = []string{"tls_client_auth"} }},
+		{name: "endpoint mismatch", mutate: func(value *DiscoveryMetadata) { value.TokenEndpoint = "https://wrong.example/token" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			candidate := discovery
-			candidate.IDTokenSigningAlgValuesSupported = append([]string{}, discovery.IDTokenSigningAlgValuesSupported...)
-			candidate.ClaimsSupported = append([]string{}, discovery.ClaimsSupported...)
-			candidate.CodeChallengeMethodsSupported = append([]string{}, discovery.CodeChallengeMethodsSupported...)
+			candidate := cloneDiscoveryForTest(discovery)
 			test.mutate(&candidate)
-			if err := runtime.ValidateDiscovery(candidate); err == nil {
-				t.Fatalf("ValidateDiscovery accepted %s", test.name)
+			if err := runtime.ValidateOIDCDiscovery(candidate); err == nil {
+				t.Fatalf("ValidateOIDCDiscovery accepted %s", test.name)
 			}
 		})
 	}
+}
+
+func TestValidateCloudRINGDiscoveryPolicyIsSeparateAndFailClosed(t *testing.T) {
+	now := time.Unix(1710000000, 0).UTC()
+	key := mustRSAKey(t)
+	runtime := mustRuntime(t, now, "main", &key.PublicKey)
+	discovery := runtime.Discovery()
+	tests := []struct {
+		name   string
+		mutate func(*DiscoveryMetadata)
+	}{
+		{name: "cache ttl", mutate: func(value *DiscoveryMetadata) { value.CloudRINGJWKSCacheTTLSeconds++ }},
+		{name: "rotation overlap", mutate: func(value *DiscoveryMetadata) { value.CloudRINGJWKSRotationOverlapSeconds++ }},
+		{name: "management gate", mutate: func(value *DiscoveryMetadata) { value.CloudRINGManagementPanelIAMGate = "allow" }},
+		{name: "bootstrap policy", mutate: func(value *DiscoveryMetadata) { value.CloudRINGBootstrapAdminSecretPolicy = "plaintext" }},
+		{name: "csrf policy", mutate: func(value *DiscoveryMetadata) { value.CloudRINGBrowserWriteCSRFRequirement = "optional" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := cloneDiscoveryForTest(discovery)
+			test.mutate(&candidate)
+			if err := runtime.ValidateOIDCDiscovery(candidate); err != nil {
+				t.Fatalf("standard validator consumed CloudRING extension %s: %v", test.name, err)
+			}
+			if err := runtime.ValidateCloudRINGDiscoveryPolicy(candidate); err == nil {
+				t.Fatalf("CloudRING policy validator accepted %s", test.name)
+			}
+			if err := runtime.ValidateDiscovery(candidate); err == nil {
+				t.Fatalf("compatibility validator accepted %s", test.name)
+			}
+		})
+	}
+}
+
+func cloneDiscoveryForTest(value DiscoveryMetadata) DiscoveryMetadata {
+	value.ResponseTypesSupported = append([]string{}, value.ResponseTypesSupported...)
+	value.SubjectTypesSupported = append([]string{}, value.SubjectTypesSupported...)
+	value.IDTokenSigningAlgValuesSupported = append([]string{}, value.IDTokenSigningAlgValuesSupported...)
+	value.TokenEndpointAuthMethodsSupported = append([]string{}, value.TokenEndpointAuthMethodsSupported...)
+	value.ClaimsSupported = append([]string{}, value.ClaimsSupported...)
+	value.CodeChallengeMethodsSupported = append([]string{}, value.CodeChallengeMethodsSupported...)
+	return value
 }
 
 func runtimeConfigForTest(keys []SigningKey) RuntimeConfig {

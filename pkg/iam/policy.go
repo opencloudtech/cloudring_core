@@ -10,21 +10,27 @@ import (
 )
 
 type PolicyConfig struct {
-	Clock                  Clock
-	AuditSink              AuditSink
-	AuthenticationVerifier AuthenticationVerifier
+	Clock                         Clock
+	AuditSink                     AuditSink
+	AuthenticationVerifier        AuthenticationVerifier
+	AuthenticationProofMaxAge     time.Duration
+	AuthenticationProofFutureSkew time.Duration
+	AllowEphemeralAudit           bool
 }
 
 type Policy struct {
-	Organizations map[string]Organization
-	Tenants       map[string]Tenant
-	Projects      map[string]Project
-	Principals    map[string]Principal
-	APITokens     map[string]APIToken
-	SupportGrants map[string]SupportGrant
-	clock         Clock
-	AuditSink     AuditSink
-	authenticator AuthenticationVerifier
+	Organizations       map[string]Organization
+	Tenants             map[string]Tenant
+	Projects            map[string]Project
+	Principals          map[string]Principal
+	APITokens           map[string]APIToken
+	SupportGrants       map[string]SupportGrant
+	clock               Clock
+	AuditSink           AuditSink
+	authenticator       AuthenticationVerifier
+	proofMaxAge         time.Duration
+	proofSkew           time.Duration
+	allowEphemeralAudit bool
 }
 
 type resolvedSubject struct {
@@ -35,6 +41,7 @@ type resolvedSubject struct {
 	authnClass  CredentialClass
 	mfa         MFAAssurance
 	session     SessionAssurance
+	proof       AuthenticationProof
 }
 
 func NewPolicy(config PolicyConfig) *Policy {
@@ -42,28 +49,28 @@ func NewPolicy(config PolicyConfig) *Policy {
 	if clock == nil {
 		clock = systemClock{}
 	}
-	auditSink := config.AuditSink
-	if auditSink == nil {
-		auditSink = NewMemoryAuditSink()
-	}
 	return &Policy{
-		Organizations: map[string]Organization{},
-		Tenants:       map[string]Tenant{},
-		Projects:      map[string]Project{},
-		Principals:    map[string]Principal{},
-		APITokens:     map[string]APIToken{},
-		SupportGrants: map[string]SupportGrant{},
-		clock:         clock,
-		AuditSink:     auditSink,
-		authenticator: config.AuthenticationVerifier,
+		Organizations:       map[string]Organization{},
+		Tenants:             map[string]Tenant{},
+		Projects:            map[string]Project{},
+		Principals:          map[string]Principal{},
+		APITokens:           map[string]APIToken{},
+		SupportGrants:       map[string]SupportGrant{},
+		clock:               clock,
+		AuditSink:           config.AuditSink,
+		authenticator:       config.AuthenticationVerifier,
+		proofMaxAge:         config.AuthenticationProofMaxAge,
+		proofSkew:           config.AuthenticationProofFutureSkew,
+		allowEphemeralAudit: config.AllowEphemeralAudit,
 	}
 }
 
 func (policy *Policy) AuditEvents() []AuditEvent {
-	if policy.AuditSink == nil {
+	reader, ok := policy.AuditSink.(AuditEventReader)
+	if !ok {
 		return nil
 	}
-	return policy.AuditSink.Events()
+	return reader.Events()
 }
 
 func (policy *Policy) Authorize(request AuthorizationRequest) Decision {
@@ -74,6 +81,9 @@ func (policy *Policy) Authorize(request AuthorizationRequest) Decision {
 // transport-specific proof from ctx without placing bearer material in the
 // authorization request or audit record.
 func (policy *Policy) AuthorizeContext(ctx context.Context, request AuthorizationRequest) Decision {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	now := policy.requestTime()
 	authentication, authenticationErr := policy.authenticate(ctx, request, now)
 	subject, decision := policy.resolveSubject(request, authentication, authenticationErr, now)
@@ -87,7 +97,8 @@ func (policy *Policy) AuthorizeContext(ctx context.Context, request Authorizatio
 	decision.CredentialClass = subject.authnClass
 	decision.MFA = subject.mfa
 	decision.Session = subject.session
-	return policy.audit(request, subject, decision, now)
+	decision.Proof = subject.proof
+	return policy.audit(ctx, request, subject, decision, now)
 }
 
 func (policy *Policy) authenticate(ctx context.Context, request AuthorizationRequest, now time.Time) (AuthenticationResult, error) {
@@ -98,7 +109,42 @@ func (policy *Policy) authenticate(ctx context.Context, request AuthorizationReq
 	if err != nil {
 		return AuthenticationResult{}, ErrAuthentication
 	}
+	if err := policy.validateAuthenticationProof(result, now); err != nil {
+		return AuthenticationResult{}, ErrAuthentication
+	}
 	return result, nil
+}
+
+func (policy *Policy) validateAuthenticationProof(result AuthenticationResult, now time.Time) error {
+	const (
+		maxConfiguredProofAge  = 24 * time.Hour
+		maxConfiguredProofSkew = 5 * time.Minute
+	)
+	if policy.proofMaxAge <= 0 || policy.proofMaxAge > maxConfiguredProofAge ||
+		policy.proofSkew < 0 || policy.proofSkew > maxConfiguredProofSkew {
+		return ErrAuthentication
+	}
+	proof := result.Proof
+	if proof.VerifiedAt.IsZero() || proof.ExpiresAt.IsZero() ||
+		!proof.ExpiresAt.After(proof.VerifiedAt) || !now.Before(proof.ExpiresAt) ||
+		proof.VerifiedAt.After(now.Add(policy.proofSkew)) {
+		return ErrAuthentication
+	}
+	age := now.Sub(proof.VerifiedAt)
+	if age < 0 {
+		age = 0
+	}
+	if age > policy.proofMaxAge {
+		return ErrAuthentication
+	}
+	if result.CredentialClass != CredentialClassShortLivedAPIToken {
+		maxSessionSeconds := int64(policy.proofMaxAge / time.Second)
+		if result.Session.MaxAgeSeconds <= 0 || result.Session.MaxAgeSeconds > maxSessionSeconds ||
+			age > time.Duration(result.Session.MaxAgeSeconds)*time.Second {
+			return ErrAuthentication
+		}
+	}
+	return nil
 }
 
 func (policy *Policy) evaluate(request AuthorizationRequest, subject resolvedSubject, now time.Time) Decision {
@@ -159,6 +205,7 @@ func (policy *Policy) resolveSubject(request AuthorizationRequest, authenticatio
 		authnClass: authentication.CredentialClass,
 		mfa:        authentication.MFA,
 		session:    authentication.Session,
+		proof:      authentication.Proof,
 	}
 	if authenticationErr != nil || authentication.SubjectID == "" || authentication.SubjectID != request.Subject.ID {
 		return subject, deny(ErrAuthentication, "authentication_required")
@@ -196,6 +243,7 @@ func (policy *Policy) resolveSubject(request AuthorizationRequest, authenticatio
 			authnClass:  authentication.CredentialClass,
 			mfa:         authentication.MFA,
 			session:     authentication.Session,
+			proof:       authentication.Proof,
 		}
 		if !apiGrant.RevokedAt.IsZero() {
 			return subject, deny(ErrTokenRevoked, "api_token_denied")

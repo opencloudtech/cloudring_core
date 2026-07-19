@@ -4,11 +4,12 @@
 package iam
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
 
-func (policy *Policy) audit(request AuthorizationRequest, subject resolvedSubject, decision Decision, now time.Time) Decision {
+func (policy *Policy) audit(ctx context.Context, request AuthorizationRequest, subject resolvedSubject, decision Decision, now time.Time) Decision {
 	result := AuditResultDeny
 	if decision.Allowed {
 		result = AuditResultAllow
@@ -37,6 +38,7 @@ func (policy *Policy) audit(request AuthorizationRequest, subject resolvedSubjec
 		CredentialClass:    decision.CredentialClass,
 		MFA:                decision.MFA,
 		Session:            decision.Session,
+		Proof:              decision.Proof,
 	}
 	if decision.Err != nil {
 		event.Error = decision.Err.Error()
@@ -47,7 +49,11 @@ func (policy *Policy) audit(request AuthorizationRequest, subject resolvedSubjec
 	if event.Actor == "" {
 		event.Actor = request.Subject.ID
 	}
-	if policy.AuditSink == nil {
+	durableSink, ok := policy.AuditSink.(DurableAuditSink)
+	if !ok || (!policy.allowEphemeralAudit && !durableSink.Durable()) {
+		return auditDenied(decision, ErrAuditRequired)
+	}
+	if err := durableSink.Ready(ctx); err != nil {
 		return auditDenied(decision, ErrAuditRequired)
 	}
 	if err := policy.AuditSink.Append(event); err != nil {

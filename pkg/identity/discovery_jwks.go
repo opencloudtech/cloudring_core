@@ -68,6 +68,17 @@ func (runtime *Runtime) Discovery() DiscoveryMetadata {
 }
 
 func (runtime *Runtime) ValidateDiscovery(discovery DiscoveryMetadata) error {
+	if err := runtime.ValidateOIDCDiscovery(discovery); err != nil {
+		return err
+	}
+	return runtime.ValidateCloudRINGDiscoveryPolicy(discovery)
+}
+
+// ValidateOIDCDiscovery validates the standard provider capabilities that the
+// runtime actually consumes. Providers may advertise additional conforming
+// capabilities; CloudRING-specific policy extensions are deliberately not
+// evaluated here.
+func (runtime *Runtime) ValidateOIDCDiscovery(discovery DiscoveryMetadata) error {
 	if discovery.Issuer != runtime.config.Issuer {
 		return fmt.Errorf("discovery issuer mismatch: %w", errJWTRejected)
 	}
@@ -80,25 +91,53 @@ func (runtime *Runtime) ValidateDiscovery(discovery DiscoveryMetadata) error {
 	if discovery.TokenEndpoint != runtime.config.TokenEndpoint {
 		return fmt.Errorf("discovery token endpoint mismatch: %w", errJWTRejected)
 	}
-	if !sameStringSet(discovery.IDTokenSigningAlgValuesSupported, runtime.config.AllowedAlgorithms) {
-		return fmt.Errorf("discovery signing algorithms mismatch: %w", errJWTRejected)
-	}
-	for _, alg := range discovery.IDTokenSigningAlgValuesSupported {
-		if !isAllowedAlgorithm(runtime.config.AllowedAlgorithms, alg) {
-			return fmt.Errorf("discovery advertised forbidden algorithm %q: %w", alg, errJWTRejected)
+	for label, values := range map[string][]string{
+		"response types":     discovery.ResponseTypesSupported,
+		"subject types":      discovery.SubjectTypesSupported,
+		"signing algorithms": discovery.IDTokenSigningAlgValuesSupported,
+		"token auth methods": discovery.TokenEndpointAuthMethodsSupported,
+		"pkce methods":       discovery.CodeChallengeMethodsSupported,
+	} {
+		if !validUniqueStrings(values) {
+			return fmt.Errorf("discovery %s contain an empty or duplicate value: %w", label, errJWTRejected)
 		}
 	}
-	if !sameStringSet(discovery.ClaimsSupported, runtime.config.RequiredClaims) ||
-		!sameStringSet(discovery.ResponseTypesSupported, []string{"code"}) ||
-		!sameStringSet(discovery.SubjectTypesSupported, []string{"public"}) ||
-		!sameStringSet(discovery.TokenEndpointAuthMethodsSupported, []string{"client_secret_basic", "private_key_jwt"}) ||
-		!sameStringSet(discovery.CodeChallengeMethodsSupported, []string{"S256"}) ||
-		discovery.CloudRINGJWKSCacheTTLSeconds != int64(runtime.config.JWKSCacheTTL/time.Second) ||
+	if !containsString(discovery.ResponseTypesSupported, "code") {
+		return fmt.Errorf("discovery does not support authorization code: %w", errJWTRejected)
+	}
+	if !containsAnyString(discovery.SubjectTypesSupported, []string{"public", "pairwise"}) {
+		return fmt.Errorf("discovery has no standard subject type: %w", errJWTRejected)
+	}
+	if !containsString(discovery.CodeChallengeMethodsSupported, "S256") {
+		return fmt.Errorf("discovery does not support PKCE S256: %w", errJWTRejected)
+	}
+	if !containsAnyString(discovery.TokenEndpointAuthMethodsSupported, []string{"none", "client_secret_basic", "private_key_jwt"}) {
+		return fmt.Errorf("discovery has no supported token endpoint authentication method: %w", errJWTRejected)
+	}
+	// claims_supported is optional in OIDC discovery and often omits
+	// installation-specific claims. When present it must still be unambiguous;
+	// Runtime verifies all configured required claims in each signed token.
+	if len(discovery.ClaimsSupported) != 0 && !validUniqueStrings(discovery.ClaimsSupported) {
+		return fmt.Errorf("discovery claims contain an empty or duplicate value: %w", errJWTRejected)
+	}
+	for _, configured := range runtime.config.AllowedAlgorithms {
+		if containsString(discovery.IDTokenSigningAlgValuesSupported, configured) {
+			return nil
+		}
+	}
+	return fmt.Errorf("discovery has no configured asymmetric signing algorithm: %w", errJWTRejected)
+}
+
+// ValidateCloudRINGDiscoveryPolicy validates only the CloudRING extension
+// fields emitted by a CloudRING-controlled issuer. External OIDC providers are
+// not expected to publish these non-standard fields.
+func (runtime *Runtime) ValidateCloudRINGDiscoveryPolicy(discovery DiscoveryMetadata) error {
+	if discovery.CloudRINGJWKSCacheTTLSeconds != int64(runtime.config.JWKSCacheTTL/time.Second) ||
 		discovery.CloudRINGJWKSRotationOverlapSeconds != int64(runtime.config.RotationOverlap/time.Second) ||
 		discovery.CloudRINGManagementPanelIAMGate != "deny-until-authenticated-token-valid-and-iam-allow" ||
 		discovery.CloudRINGBootstrapAdminSecretPolicy != "exactly-one-admin-env-or-external-secret-references-only" ||
 		discovery.CloudRINGBrowserWriteCSRFRequirement != "required" {
-		return fmt.Errorf("discovery claims or authorization-code security contract mismatch: %w", errJWTRejected)
+		return fmt.Errorf("cloudring discovery policy mismatch: %w", errJWTRejected)
 	}
 	return nil
 }
@@ -162,26 +201,30 @@ func publicJWK(key SigningKey) (JWK, error) {
 	}
 }
 
-func sameStringSet(left, right []string) bool {
-	if len(left) != len(right) {
+func validUniqueStrings(values []string) bool {
+	if len(values) == 0 {
 		return false
 	}
-	seen := make(map[string]struct{}, len(left))
-	for _, value := range left {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
 		if value == "" {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
 			return false
 		}
 		seen[value] = struct{}{}
 	}
-	if len(seen) != len(left) {
-		return false
-	}
-	for _, value := range right {
-		if _, ok := seen[value]; !ok {
-			return false
+	return true
+}
+
+func containsAnyString(values, candidates []string) bool {
+	for _, candidate := range candidates {
+		if containsString(values, candidate) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func keyPublished(key SigningKey, now time.Time, cacheTTL, overlap time.Duration) bool {
