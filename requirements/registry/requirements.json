@@ -1,0 +1,7149 @@
+[
+  {
+    "id": "CR-FND-010",
+    "title": "Contract before technology",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "vendor",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-singular",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-020",
+    "title": "Go-first platform runtime",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "migration"
+    ],
+    "traceability": [
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-030",
+    "title": "Upstream-Kubernetes-only substrate target",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-040",
+    "title": "Layered replaceable capability profiles",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-singular",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-050",
+    "title": "Public-core / private-workspace boundary",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-060",
+    "title": "Declared product-primitive minimum",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "service-team",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-singular",
+      "req-acr-plural"
+    ]
+  },
+  {
+    "id": "CR-FND-070",
+    "title": "Portability and jurisdiction freedom by design",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-FND-080",
+    "title": "Documentation as operating contract",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent",
+      "vendor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-090",
+    "title": "Machine-checkable documentation and corpus",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-100",
+    "title": "English-only artifacts",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "service-team"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-110",
+    "title": "License and contribution clarity",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-120",
+    "title": "Production-honesty bans",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-singular",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-130",
+    "title": "Evidence before readiness; blocked stays blocked",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-140",
+    "title": "One product truth across surfaces",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "agent",
+      "service-team"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-150",
+    "title": "Real open baseline",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-160",
+    "title": "Source-safety boundary for all artifacts",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-170",
+    "title": "Gated public publication path",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-180",
+    "title": "Classified legacy references; no substitution shims",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "migration"
+    ],
+    "traceability": [
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-190",
+    "title": "Dated, rerunnable inventory baselines",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-200",
+    "title": "Requirements corpus governance",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FND-210",
+    "title": "Cross-platform operator workflows",
+    "domain": "FND",
+    "file": "domains/10-platform-foundation.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-010",
+    "title": "Instance lifecycle API with explicit state machine",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-020",
+    "title": "Long-running operation model",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CMP-030",
+    "title": "Durable, idempotent task execution framework",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-040",
+    "title": "Virtualization backend abstraction, KubeVirt primary",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-050",
+    "title": "Driver capability descriptor and conformance suite",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-060",
+    "title": "Bare-metal provisioning profile",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CMP-070",
+    "title": "Golden-image pipeline",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-080",
+    "title": "Per-zone image distribution and overlay provisioning",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CMP-090",
+    "title": "Content-addressed image store",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CMP-100",
+    "title": "Placement groups and affinity policy",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CMP-110",
+    "title": "Host maintenance and evacuation safety",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-120",
+    "title": "Live migration policy and evidence",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CMP-130",
+    "title": "Console and serial access",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-140",
+    "title": "Instance metadata service",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-150",
+    "title": "Workload identity for instances",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-160",
+    "title": "Compute quotas with two-phase reservation",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CMP-170",
+    "title": "Garbage collection of half-created resources",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "agent"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CMP-180",
+    "title": "Accelerator attachment model",
+    "domain": "CMP",
+    "file": "domains/11-compute-virtualization.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-010",
+    "title": "Virtual networks as first-class tenant resources",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-NET-020",
+    "title": "Subnets and IPAM contract",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-030",
+    "title": "Network-profile contract with replaceable SDN",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-NET-040",
+    "title": "Tenant-controlled routing",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider"
+    ],
+    "risk_classes": [
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-050",
+    "title": "Security groups and default-deny network policy",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-060",
+    "title": "L4 network load balancing",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-070",
+    "title": "Centralized health-check plane",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-080",
+    "title": "L7 application load balancing",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-NET-090",
+    "title": "Load-balancer capacity model",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-100",
+    "title": "NAT and edge gateways per function",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-110",
+    "title": "Floating and public addresses",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-120",
+    "title": "Dual-stack IPv4/IPv6 as a gate",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-130",
+    "title": "Tenant DNS zones",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-140",
+    "title": "Platform DNS/IPAM automation for provisioned resources",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-150",
+    "title": "Global server load balancing and anycast",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-160",
+    "title": "Anti-DDoS integration profile",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-170",
+    "title": "Private interconnect and provider wiring",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-180",
+    "title": "Egress controls and regulatory filtering profile",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-190",
+    "title": "Network connectivity evidence as readiness gate",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "exposure",
+      "migration"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-NET-200",
+    "title": "Network flow telemetry",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-210",
+    "title": "Active synthetic dataplane probing",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "trust",
+      "exposure",
+      "deletion",
+      "migration",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-NET-220",
+    "title": "Network resource reconciliation and cleanup",
+    "domain": "NET",
+    "file": "domains/12-network.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "agent"
+    ],
+    "risk_classes": [
+      "money",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-010",
+    "title": "Storage classes behind versioned contracts",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "tenant",
+      "vendor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-020",
+    "title": "Media taxonomy and deterministic performance model",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-030",
+    "title": "Per-volume QoS with token-bucket limits and burst credits",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-040",
+    "title": "Mount fencing, access modes, and session lifecycle",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "keys"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-050",
+    "title": "Encryption at rest with envelope keys",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "keys"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-060",
+    "title": "Crash-consistent checkpoints and changed-block tracking",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-070",
+    "title": "Content-addressed snapshot chunk store with integrity verification",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-080",
+    "title": "Platform backup control plane",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-090",
+    "title": "Signed backup barrier before any mutation",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-100",
+    "title": "Restore drills as promotion blockers",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-110",
+    "title": "Per-service RPO/RTO objectives declared and enforced",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "provider",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-120",
+    "title": "Tenant and namespace storage isolation",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-130",
+    "title": "Control-plane state (etcd) snapshot and restore",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-140",
+    "title": "Durability evidence states and freshness",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-STO-150",
+    "title": "Maintenance interlock for storage-dependent drains",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-160",
+    "title": "Offsite immutable backup copies with retention governance",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "auditor",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-170",
+    "title": "Non-replicated and local media with enforced restrictions",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-180",
+    "title": "Cross-zone volume migration workflow",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-190",
+    "title": "Shared filesystem service class",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-200",
+    "title": "Storage performance and fault-injection gates",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-210",
+    "title": "Operator storage toolset and capacity rebalancing",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-220",
+    "title": "Data-path endpoint lifecycle and transport fallback",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-STO-230",
+    "title": "Changed-block API for external backup integration",
+    "domain": "STO",
+    "file": "domains/13-storage-backup-dr.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-K8S-010",
+    "title": "Upstream-only Kubernetes substrate",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-020",
+    "title": "Highly available control plane",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-030",
+    "title": "etcd backup and restore",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-040",
+    "title": "Declarative cluster lifecycle provisioning",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "agent"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-050",
+    "title": "Tenant Kubernetes-as-a-Service",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-060",
+    "title": "Version support and upgrade policy",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-070",
+    "title": "Container image registry and mirroring",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-K8S-080",
+    "title": "Artifact signing, SBOM, and provenance",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "auditor",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-090",
+    "title": "GitOps-managed cluster add-ons",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "keys",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-100",
+    "title": "Admission policy with default-deny baselines",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor",
+      "tenant"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-110",
+    "title": "Ingress and Gateway API exposure contract",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-K8S-120",
+    "title": "CNI networking contract",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-130",
+    "title": "Node lifecycle operations with workload continuity",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-140",
+    "title": "Multi-cluster fleet management",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-K8S-150",
+    "title": "Kubernetes audit logging",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "auditor",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-160",
+    "title": "Cluster autoscaling and elastic node groups",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-K8S-170",
+    "title": "Service mesh readiness",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-K8S-180",
+    "title": "Ephemeral sandbox clusters and namespaces",
+    "domain": "K8S",
+    "file": "domains/14-kubernetes-containers.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-010",
+    "title": "Hierarchical resource model with inherited bindings",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-020",
+    "title": "Fine-grained permission grammar",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-030",
+    "title": "Service roles over primitive roles",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-040",
+    "title": "Subject model: users, service accounts, groups, pseudo-subjects",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-050",
+    "title": "Container membership join semantics guaranteeing full revocation",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-060",
+    "title": "Central authorization API with batch decisions and list semantics",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-070",
+    "title": "Per-service access-binding APIs proxied to the IAM core",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "service-team",
+      "vendor",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-080",
+    "title": "Short-lived token model with signed-JWT exchange and signer rotation",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "service-team",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-090",
+    "title": "Workload identity by default; static credentials exception-only",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "service-team",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-100",
+    "title": "Identity federation and multi-factor authentication",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-110",
+    "title": "Break-glass emergency access with expiring credentials and full audit",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-120",
+    "title": "Authorization availability: read-path split and bounded caching",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-130",
+    "title": "Key management with envelope encryption and hardware root of trust",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-140",
+    "title": "Secrets manager with auto-unseal and sealed-state honesty",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "tenant",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-150",
+    "title": "Immutable, queryable, SLA-bound audit log",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "auditor",
+      "operator",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-160",
+    "title": "Fail-closed authorization and hidden management surfaces",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "tenant"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-170",
+    "title": "Tenant isolation test gate",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-180",
+    "title": "Security scanning gates in CI/CD",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-190",
+    "title": "Privilege-escalation choke points as separate audited permissions",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor",
+      "service-team"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-200",
+    "title": "Operator duty role taxonomy with impersonation-based administration",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-210",
+    "title": "Threat modeling and security review for every feature",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-220",
+    "title": "Compliance mapping hooks (ISO/PCI-class)",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "auditor",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-IAM-230",
+    "title": "Service-side token handling contract",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "keys"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-IAM-240",
+    "title": "Cryptographic availability measurement",
+    "domain": "IAM",
+    "file": "domains/15-iam-identity-security.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-010",
+    "title": "Versioned usage-event schema",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-020",
+    "title": "Meter ingest API: authenticated, idempotent, replayable, dead-lettered",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "provider",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-BIL-030",
+    "title": "Mediation and enrichment pipeline",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-040",
+    "title": "Declarative SKU catalog: formulas, unit conversion, resolving rules",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-BIL-050",
+    "title": "Price history and per-installation price bundles",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-060",
+    "title": "Rating with fixed-point decimal precision",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "auditor",
+      "operator"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-070",
+    "title": "Billing account model: prepaid/postpaid, separated from IAM",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-080",
+    "title": "Grants and credits: expiry-ordered consumption, charge decomposition",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-090",
+    "title": "Budgets: advisory-only, notify never throttle",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-100",
+    "title": "Postpaid credit limit, arrears, suspension, retention timeline",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust",
+      "deletion",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-110",
+    "title": "Per-second VM usage heartbeat as metering evidence",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-120",
+    "title": "Invoices and billing documents (EDO-class)",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "auditor",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-130",
+    "title": "OCS billing connector surface: meters, rate-card evidence, replay dedup",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-BIL-140",
+    "title": "Billing-vs-observed-usage reconciliation evidence",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "auditor",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "trust",
+      "settlement"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-150",
+    "title": "Public billing API: accounts, SKUs, operations",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-BIL-160",
+    "title": "Tenant cost visibility in the console",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-170",
+    "title": "Revenue-sharing readiness",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "migration",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-BIL-180",
+    "title": "Metering integration as a launch gate for usage-bearing services",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-190",
+    "title": "Multi-currency pricing and minor-unit conversion",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-200",
+    "title": "Free-tier and trial mechanics as catalog data",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-BIL-210",
+    "title": "Public price calculator and cost estimation",
+    "domain": "BIL",
+    "file": "domains/16-billing-finops.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OCS-010",
+    "title": "Connector package as the sole service-integration unit",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-020",
+    "title": "Registration, capability announcement, and one service identity",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-030",
+    "title": "Mandatory lifecycle APIs: idempotent, rollback-referenced",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "tenant",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "req-acr-plural",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-040",
+    "title": "Typed user-visible states with remediation",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "agent",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-050",
+    "title": "Optional APIs and portable inter-service dependencies",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-060",
+    "title": "Billing connector and usage-metrics transmission",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-070",
+    "title": "Microfrontend contract: integrity, sandbox, guidelines",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "tenant",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-080",
+    "title": "Module registry with versioning and policy-aware lifecycle",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "vendor",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-090",
+    "title": "Conformance suite with machine-readable problems",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-100",
+    "title": "SDK and provider-neutral reference implementation",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-110",
+    "title": "Service-team onboarding journey and minimum-useful profile",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-120",
+    "title": "Versioning, deprecation, and compatibility gateways",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "migration"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-130",
+    "title": "Workload-identity-only secret references",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-140",
+    "title": "Declared durability surfaces and restore-test objectives",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "tenant",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-150",
+    "title": "Evidence bundles and machine receipts format",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor",
+      "agent",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-160",
+    "title": "Publication gate: catalog, tenant-access, support, and readiness surfaces",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-170",
+    "title": "Distribution profiles and optional-module honesty",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "vendor"
+    ],
+    "risk_classes": [
+      "exposure",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-180",
+    "title": "Migration bridge from broker-style service models",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-190",
+    "title": "Federation and commercial metadata declarations",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money",
+      "trust",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OCS-200",
+    "title": "Automation and analytics event declarations",
+    "domain": "OCS",
+    "file": "domains/17-ocs-service-connectors.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator",
+      "agent",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-MKT-010",
+    "title": "Catalog data model: publisher → product → family → version",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-MKT-020",
+    "title": "Product lifecycle state machine and visibility rules",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "operator",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-030",
+    "title": "Product↔SKU binding and publisher pricing drafts",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-040",
+    "title": "Installation-compatibility gate before purchase",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-MKT-050",
+    "title": "Publisher metering write API",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-060",
+    "title": "Artifact signing and verified distribution",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "operator",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-MKT-070",
+    "title": "Marketplace license classes and deployment tiers",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-MKT-080",
+    "title": "Service-store model: first-class third-party services",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "service-team",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-MKT-090",
+    "title": "Publisher commercial onboarding",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "settlement"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-100",
+    "title": "Platform commission model",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-110",
+    "title": "Per-service and per-component licensing with signed entitlements",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-120",
+    "title": "License expiry semantics and update channels",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-MKT-130",
+    "title": "License-rule evaluation on resource specifications",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-140",
+    "title": "PAYG metering modes and in-guest usage agent",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "tenant",
+      "provider"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-150",
+    "title": "Asynchronous artifact and image publication pipeline",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-160",
+    "title": "Cross-installation product synchronization",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "vendor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-MKT-170",
+    "title": "Order flow and provisioning handoff",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-MKT-180",
+    "title": "Partner and reseller deal registration",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money",
+      "data"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-MKT-190",
+    "title": "Advanced product kinds: BYOL, SaaS order forms, prebuilt stacks",
+    "domain": "MKT",
+    "file": "domains/18-marketplace-catalog.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "vendor",
+      "tenant",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CUX-010",
+    "title": "Cross-surface parity contract",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-020",
+    "title": "Canonical resource state vocabulary",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-030",
+    "title": "Information architecture: navigation, project home, create hub",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CUX-040",
+    "title": "Pre-commit review of cost, defaults, and exposure",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CUX-050",
+    "title": "Risk-classed confirmations",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-060",
+    "title": "Structured, actionable error envelope",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "agent",
+      "provider"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CUX-070",
+    "title": "Honest availability and readiness states, no dead ends",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-080",
+    "title": "Secrets shown as references only",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-090",
+    "title": "User-generated content rendered inertly",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "vendor",
+      "provider"
+    ],
+    "risk_classes": [
+      "exposure"
+    ],
+    "traceability": [
+      "req-ccp",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-100",
+    "title": "Deletion and exit semantics on every resource",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CUX-110",
+    "title": "Operation evidence bundles, party-scoped and redacted",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "vendor",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CUX-120",
+    "title": "Support handoff with audit trail",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "vendor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CUX-130",
+    "title": "Micro-frontend host with runtime registry",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-140",
+    "title": "Scope visibility and fail-closed management surfaces",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-150",
+    "title": "Idempotent mutations with operation identity",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "agent",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-CUX-160",
+    "title": "Accessibility baseline",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-ccp"
+    ]
+  },
+  {
+    "id": "CR-CUX-170",
+    "title": "Governed i18n terminology",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CUX-180",
+    "title": "Journey scenarios as acceptance contracts",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "req-ccp",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-CUX-190",
+    "title": "Uniform page-pattern contracts with agent-readable equivalents",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "req-ccp",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-CUX-200",
+    "title": "Empty states and documentation at point of need",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-ccp"
+    ]
+  },
+  {
+    "id": "CR-CUX-210",
+    "title": "Stateful honesty in console presentation",
+    "domain": "CUX",
+    "file": "domains/19-portal-ux-selfservice.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "vision-deck",
+      "req-ccp",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OBS-010",
+    "title": "Unified metrics platform",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OBS-020",
+    "title": "Single supported instrumentation library",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "keys"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-030",
+    "title": "Golden signals and outcome-aware metrics",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-040",
+    "title": "Structured logs with correlation",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "keys"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-050",
+    "title": "Per-application log pipelines",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-060",
+    "title": "Distributed tracing with declared retention",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "deletion"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OBS-070",
+    "title": "Multi-tenant metrics query API",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OBS-080",
+    "title": "Alert rules as code per service repository",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-090",
+    "title": "Central alert routing configuration via GitOps",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-100",
+    "title": "Notification gateway and alert ingress",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-110",
+    "title": "Tenant self-service alerting and dashboards",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-120",
+    "title": "Dashboards as code",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OBS-130",
+    "title": "Synthetic monitoring service",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "keys"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OBS-140",
+    "title": "SLO/SLI definitions with error budgets",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust",
+      "settlement"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OBS-150",
+    "title": "UTC-canonical observability records",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-160",
+    "title": "Monitoring of monitoring",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OBS-170",
+    "title": "Multi-cluster metrics fan-in over the event bus",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-180",
+    "title": "Non-Kubernetes estate discovery bridge",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-190",
+    "title": "Capacity and overbooking signals",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OBS-200",
+    "title": "Observability data lifecycle: retention, isolation, deletion",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-210",
+    "title": "Observability evidence as a readiness gate",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "vendor",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OBS-220",
+    "title": "Blackbox probing of internal endpoints",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OBS-230",
+    "title": "Product and billing-adjacent metrics over the metrics pipeline",
+    "domain": "OBS",
+    "file": "domains/20-observability.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-OPS-010",
+    "title": "Idempotent operations with plan/preview",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OPS-020",
+    "title": "Action risk classes visible before execution",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-030",
+    "title": "Backpressure with explicit pressure states",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "settlement"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-040",
+    "title": "Drain, recovery, and replay safety",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money",
+      "data"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-050",
+    "title": "Incident severity classification",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-060",
+    "title": "On-call model with response SLO",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-070",
+    "title": "Structured postmortems",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-080",
+    "title": "Operational decision memory (ADRs)",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OPS-090",
+    "title": "Change management with dated evidence and rollback plans",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OPS-100",
+    "title": "Maintenance windows with change-register interlock",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "tenant"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-110",
+    "title": "Quota-versus-limit model with reserve/commit/release",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant",
+      "service-team"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-120",
+    "title": "Support ticket system of record and SLA metrics",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-130",
+    "title": "Diagnostic CLI and aggregated tenant view",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OPS-140",
+    "title": "Audited support impersonation",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-150",
+    "title": "Version-skew and compatibility-window policy",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OPS-160",
+    "title": "Capacity management and hygiene automation",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-170",
+    "title": "Runbooks as code",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-OPS-180",
+    "title": "Disaster-recovery drill calendar",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "req-history",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-OPS-190",
+    "title": "Duty and support notification automation",
+    "domain": "OPS",
+    "file": "domains/21-ops-sre-support.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DPL-010",
+    "title": "Downloadable installer from single host to multi-node",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-020",
+    "title": "Abstract deployment profile in OSS, concrete provider profiles downstream",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-030",
+    "title": "Bootstrap DAG as a versioned, verified dependency graph",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-040",
+    "title": "Everything-as-code with dry-run-first GitOps reconciliation",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-050",
+    "title": "GitOps-per-environment repository with bootstrap self-reference",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-060",
+    "title": "Environment topology and naming convention",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DPL-070",
+    "title": "Environment ladder and promotion regulation",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-080",
+    "title": "Shared layered CI pipeline contract for services",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DPL-090",
+    "title": "CI gates and merge gating on the public repository",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-100",
+    "title": "Tag-only production releases with atomic rollout",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-110",
+    "title": "Secrets in CI and IaC: encrypted at rest, never plaintext",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-120",
+    "title": "Remote, locked, versioned IaC state — never committed",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DPL-130",
+    "title": "Golden image pipeline per datacenter",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DPL-140",
+    "title": "Canary-by-default progressive delivery",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-150",
+    "title": "Database-migration stage discipline",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-160",
+    "title": "Supply-chain integrity: pinned digests, SBOM, provenance, VEX",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DPL-170",
+    "title": "Versioned module, chart, and template distribution",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DPL-180",
+    "title": "Environment-scoped deployment isolation for CI",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DPL-190",
+    "title": "Base cluster templates with deep-merge environment customization",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DPL-200",
+    "title": "Change-record and post-incident evidence trail",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DPL-210",
+    "title": "Garbage-collection automation for transient resources",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DPL-220",
+    "title": "Ephemeral feature/sandbox environments with TTL",
+    "domain": "DPL",
+    "file": "domains/22-deployment-iac-cicd.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-010",
+    "title": "Federation-ready base schemas (no single-provider assumptions)",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FED-020",
+    "title": "Federation honesty boundary",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "agent",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FED-030",
+    "title": "Federation metadata in connector packages and listings",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "vendor",
+      "provider",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FED-040",
+    "title": "Federation participant registry contract",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "vendor",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "trust",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-050",
+    "title": "Federated identity trust",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-060",
+    "title": "Federation governance: admission, suspension, disputes, certification",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "vendor",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-070",
+    "title": "Bilateral cross-provider data synchronization",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-080",
+    "title": "Tenant migration between providers",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-090",
+    "title": "Jurisdiction portability and exit evidence",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-FED-100",
+    "title": "EDGE zones: disconnected and autonomous operation",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "keys",
+      "trust"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-110",
+    "title": "EDGE zones: connected mode and deferred sync reconciliation",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "trust",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-120",
+    "title": "P2P cross-provider data bus",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-130",
+    "title": "Cross-cloud connect interconnect",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-140",
+    "title": "Cross-provider resilience scenarios: DR, replication, backup, CDN",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure",
+      "migration"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-150",
+    "title": "Global cloud portal (white-label unified portal)",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "provider",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-160",
+    "title": "Requirement-based multi-provider placement",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "tenant",
+      "agent",
+      "provider"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-170",
+    "title": "Cross-provider settlement hooks",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "req-acr-plural",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-FED-180",
+    "title": "Revenue sharing and cross-licensing interfaces",
+    "domain": "FED",
+    "file": "domains/23-federation-global-portal.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "vendor",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust",
+      "settlement"
+    ],
+    "traceability": [
+      "vision-deck",
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DAT-010",
+    "title": "Desired-state metadb with layered configuration and revision history",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-020",
+    "title": "Durable task queue with dependencies and single-active-operation invariant",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "operator"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-030",
+    "title": "Explicit lifecycle state machine with error and offline paths",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-040",
+    "title": "Provider-adapter isolation of platform primitives",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DAT-050",
+    "title": "Secrets brokering for engine credentials, TLS, and backup keys",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DAT-060",
+    "title": "Staged deletion with purge and metadata barriers",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-b",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DAT-070",
+    "title": "PostgreSQL reference engine: automated HA and failover",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-080",
+    "title": "Object-storage-backed backup and restore with continuous archiving",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-090",
+    "title": "In-place engine version upgrades gated by backup evidence",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "migration"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-100",
+    "title": "Usage metering and billable backup intervals via durable outbox",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "money"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-110",
+    "title": "Data services onboard through OCS connector packages (dogfooding)",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "service-team",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust",
+      "exposure"
+    ],
+    "traceability": [
+      "vision-deck",
+      "current-core"
+    ]
+  },
+  {
+    "id": "CR-DAT-120",
+    "title": "Uniform dataplane engine agent contract",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-130",
+    "title": "Kafka-class managed streaming service lifecycle",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DAT-140",
+    "title": "Continuous rebalancing for streaming clusters (cruise-control-class)",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DAT-150",
+    "title": "Emergency produce-disable breaker for resource exhaustion",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "operator",
+      "tenant"
+    ],
+    "risk_classes": [
+      "money",
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a"
+    ]
+  },
+  {
+    "id": "CR-DAT-160",
+    "title": "Redis-class managed cache engine",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data",
+      "deletion"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-170",
+    "title": "Maintenance windows and config-driven maintenance waves",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "tenant",
+      "operator"
+    ],
+    "risk_classes": [
+      "data",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-180",
+    "title": "Lifecycle event emission to the platform audit/event bus",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "provider",
+      "auditor",
+      "tenant"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-a",
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-190",
+    "title": "Connection registry with envelope-encrypted credentials",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "tenant",
+      "vendor"
+    ],
+    "risk_classes": [
+      "keys",
+      "exposure"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-DAT-200",
+    "title": "Schema registry for streaming ecosystems",
+    "domain": "DAT",
+    "file": "domains/24-data-services.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "service-team",
+      "tenant",
+      "vendor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "legacy-platform-b"
+    ]
+  },
+  {
+    "id": "CR-AGT-010",
+    "title": "Effect-based risk classification of agent actions",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-020",
+    "title": "Evidence ladder per risk class",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-030",
+    "title": "Approval lifecycle: scoped, expiring, fail-closed",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-040",
+    "title": "Non-self-escalation and consume-once approval tuples",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-050",
+    "title": "Brokered secrets for agents, never in context",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-060",
+    "title": "Mandatory stop conditions and escalation",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-070",
+    "title": "Emergency containment authority",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "deletion",
+      "migration",
+      "settlement"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-080",
+    "title": "Actor authority matrix (human, agent, service)",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-090",
+    "title": "Append-only, restart-safe operations journal",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-100",
+    "title": "Action reproducibility from the journal",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "auditor",
+      "operator",
+      "agent",
+      "provider"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-110",
+    "title": "Phase-separated execution: plan, apply, validate, compensate",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-120",
+    "title": "Fail-closed denials and honest terminal states",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-130",
+    "title": "Agent runtime context export contract",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-140",
+    "title": "Documentation as machine-readable agent context",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "service-team",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-150",
+    "title": "Automation accounts with least privilege",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-160",
+    "title": "Money, data, keys, trust, and jurisdiction policy gates",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P0",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "provider",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [
+      "data",
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-170",
+    "title": "Learning loop: from postmortem to requirement",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "agent",
+      "provider",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-180",
+    "title": "Shared-workspace and concurrency safety",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "service-team"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-190",
+    "title": "Agent identity attribution and explainability",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P1",
+    "status": "proposed",
+    "actors": [
+      "agent",
+      "operator",
+      "tenant",
+      "auditor"
+    ],
+    "risk_classes": [],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-200",
+    "title": "Governance matrix change control",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "provider",
+      "auditor",
+      "agent"
+    ],
+    "risk_classes": [
+      "trust"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  },
+  {
+    "id": "CR-AGT-210",
+    "title": "Governance enforcement drills",
+    "domain": "AGT",
+    "file": "domains/25-agent-governance.md",
+    "priority": "P2",
+    "status": "proposed",
+    "actors": [
+      "operator",
+      "auditor",
+      "provider",
+      "agent"
+    ],
+    "risk_classes": [
+      "data"
+    ],
+    "traceability": [
+      "req-acr-singular",
+      "req-acr-plural",
+      "req-history"
+    ]
+  }
+]
