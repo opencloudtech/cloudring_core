@@ -9,10 +9,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -137,9 +137,19 @@ printf overlap-ok
 }
 
 func TestPinnedReplayKillsDescendantHoldingOutputAndKubeconfig(t *testing.T) {
-	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
+	readyPath, livenessPath, liveness := newDescendantLivenessProbe(t)
 	scriptPath := filepath.Join(t.TempDir(), "kubectl")
-	writeExecutable(t, scriptPath, "#!/bin/sh\ncat \"$KUBECONFIG\" >/dev/null\nsleep 300 &\nprintf '%s' \"$!\" > \"$1\"\nprintf ok\n")
+	writeExecutable(t, scriptPath, `#!/bin/sh
+cat "$KUBECONFIG" >/dev/null
+(
+  exec 3>"$2"
+  printf r >&3
+  : > "$1"
+  sleep 300
+) &
+while [ ! -e "$1" ]; do sleep 0.01; done
+printf ok
+`)
 	executable, err := PinAbsolute(scriptPath, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +158,7 @@ func TestPinnedReplayKillsDescendantHoldingOutputAndKubeconfig(t *testing.T) {
 	replay := newReplay(t, bytes.Repeat([]byte{'a'}, 1<<20))
 	defer replay.Close()
 	started := time.Now()
-	stdout, stderr, err := executable.Run(context.Background(), []string{pidPath}, nil, 1024, 1024, replay)
+	stdout, stderr, err := executable.Run(context.Background(), []string{readyPath, livenessPath}, nil, 1024, 1024, replay)
 	if err == nil {
 		t.Fatal("descendant retaining command descriptors unexpectedly passed")
 	}
@@ -158,13 +168,22 @@ func TestPinnedReplayKillsDescendantHoldingOutputAndKubeconfig(t *testing.T) {
 	if time.Since(started) > 4*time.Second {
 		t.Fatal("descendant cleanup exceeded the bounded wait")
 	}
-	assertProcessGone(t, pidPath)
+	assertDescendantResourcesReleased(t, liveness)
 }
 
 func TestPinnedUnreadReplayCannotBlockDescendantCleanup(t *testing.T) {
-	pidPath := filepath.Join(t.TempDir(), "descendant-pid")
+	readyPath, livenessPath, liveness := newDescendantLivenessProbe(t)
 	scriptPath := filepath.Join(t.TempDir(), "kubectl")
-	writeExecutable(t, scriptPath, "#!/bin/sh\nsleep 300 &\nprintf '%s' \"$!\" > \"$1\"\nprintf ok\n")
+	writeExecutable(t, scriptPath, `#!/bin/sh
+(
+  exec 3>"$2"
+  printf r >&3
+  : > "$1"
+  sleep 300
+) &
+while [ ! -e "$1" ]; do sleep 0.01; done
+printf ok
+`)
 	executable, err := PinAbsolute(scriptPath, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +192,7 @@ func TestPinnedUnreadReplayCannotBlockDescendantCleanup(t *testing.T) {
 	replay := newReplay(t, bytes.Repeat([]byte{'a'}, 1<<20))
 	defer replay.Close()
 	started := time.Now()
-	stdout, stderr, err := executable.Run(context.Background(), []string{pidPath}, nil, 1024, 1024, replay)
+	stdout, stderr, err := executable.Run(context.Background(), []string{readyPath, livenessPath}, nil, 1024, 1024, replay)
 	if err == nil {
 		t.Fatal("command that ignored kubeconfig unexpectedly passed")
 	}
@@ -183,7 +202,7 @@ func TestPinnedUnreadReplayCannotBlockDescendantCleanup(t *testing.T) {
 	if time.Since(started) > 4*time.Second {
 		t.Fatal("unread replay blocked descendant cleanup")
 	}
-	assertProcessGone(t, pidPath)
+	assertDescendantResourcesReleased(t, liveness)
 }
 
 func writeExecutable(t *testing.T, path, script string) {
@@ -214,24 +233,48 @@ func newReplay(t *testing.T, data []byte) *kubeconfigpipe.Replay {
 	return replay
 }
 
-func assertProcessGone(t *testing.T, path string) {
+func newDescendantLivenessProbe(t *testing.T) (string, string, *os.File) {
 	t.Helper()
-	// #nosec G304 -- path is a test-owned pid file inside t.TempDir().
-	payload, err := os.ReadFile(path)
+	dir := t.TempDir()
+	livenessPath := filepath.Join(dir, "descendant-liveness")
+	if err := syscall.Mkfifo(livenessPath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G304 -- livenessPath is a test-owned FIFO inside t.TempDir().
+	liveness, err := os.OpenFile(livenessPath, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(payload)))
-	if err != nil || pid <= 0 {
-		t.Fatalf("invalid descendant pid %q: %v", payload, err)
-	}
+	t.Cleanup(func() { _ = liveness.Close() })
+	return filepath.Join(dir, "descendant-ready"), livenessPath, liveness
+}
+
+func assertDescendantResourcesReleased(t *testing.T, liveness *os.File) {
+	t.Helper()
+	// A killed zombie can still retain a PID on Unix. FIFO EOF instead proves
+	// that the descendant cannot execute or retain command resources.
 	deadline := time.Now().Add(2 * time.Second)
+	buffer := make([]byte, 1)
+	observedReady := false
 	for time.Now().Before(deadline) {
-		err = syscall.Kill(pid, 0)
-		if errors.Is(err, syscall.ESRCH) {
+		count, err := liveness.Read(buffer)
+		if count == 1 {
+			if observedReady || buffer[0] != 'r' {
+				t.Fatalf("unexpected descendant liveness payload %q", buffer[:count])
+			}
+			observedReady = true
+			continue
+		}
+		if observedReady && (err == nil || errors.Is(err, io.EOF)) {
 			return
+		}
+		if err != nil && !errors.Is(err, syscall.EAGAIN) && !errors.Is(err, io.EOF) {
+			t.Fatal(err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("descendant process %d survived cleanup", pid)
+	if !observedReady {
+		t.Fatal("descendant did not establish its liveness descriptor before cleanup")
+	}
+	t.Fatal("descendant retained a live resource after process-group cleanup")
 }
