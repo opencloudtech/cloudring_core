@@ -113,6 +113,8 @@ jobs:
       - name: Verify generic platform manifests
         run: |
           go test ./internal/platformmanifest -count=1
+          kubectl kustomize deploy/kubernetes/storage/csi-snapshot-api/crds >/dev/null
+          kubectl kustomize deploy/kubernetes/storage/csi-snapshot-api/controller >/dev/null
           go run ./cmd/cloudring-manifestcheck --root .
 
   windows-go-test:

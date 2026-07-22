@@ -20,10 +20,13 @@ devices verified on three independent Kubernetes hosts. The overlay must keep
 three, and host failure-domain placement. Automatic discovery or consumption
 of unlisted disks is forbidden.
 
-The cluster stage also requires the Kubernetes CSI snapshot CRDs and snapshot
-controller to be installed before reconciliation. Apply the stages through
-separate Flux Kustomizations and make the cluster Kustomization depend on the
-Ready controllers Kustomization. Do not combine the stages into one apply.
+The provider-neutral [`../csi-snapshot-api`](../csi-snapshot-api) source is the
+only owner of the Kubernetes CSI snapshot CRDs and cluster-wide snapshot
+controller. Apply all stages through separate Flux Kustomizations in this
+fail-closed order: snapshot `crds`, snapshot `controller`, Rook `controllers`,
+then `cluster-example`. Each Kustomization must depend on the preceding Ready
+stage. Do not combine the stages into one apply or install another snapshot
+controller in this profile.
 
 This iteration intentionally exposes RBD only. CephFS, RGW, erasure-coded
 pools, a default StorageClass, and a second Velero snapshot-class label are

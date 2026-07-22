@@ -12,11 +12,11 @@ Use `longhorn-migratable` only for KubeVirt disks whose PVC explicitly requests
 `ReadWriteMany` and `volumeMode: Block`; the class enables Longhorn's
 `migratable` volume mode needed by live migration. The profile also publishes
 exactly one Velero-selected Retain VolumeSnapshotClass for
-`driver.longhorn.io` and installs the single cluster-wide, two-replica CSI
-snapshot controller that an upstream Kubernetes distribution requires. The
-controller version matches Longhorn's CSI snapshotter (`v8.5.0`), and its
-multi-architecture image is pinned by digest. The HelmRelease is suspended by
-default and the Longhorn UI is not exposed by an Ingress.
+`driver.longhorn.io`. The provider-neutral
+[`../csi-snapshot-api`](../csi-snapshot-api) source is the only owner of the
+cluster-wide VolumeSnapshot CRDs and HA snapshot controller. The Longhorn
+HelmRelease remains suspended by default and the Longhorn UI is not exposed by
+an Ingress.
 
 The snapshot class fixes `parameters.type: snap`, so Velero's CSI data mover
 starts from a local Longhorn snapshot and copies the volume data to the
@@ -25,11 +25,12 @@ backup mode: that is a separate workflow which requires a Longhorn backup
 target and would make this Velero restore path depend on redundant storage
 configuration.
 
-The Kubernetes CSI VolumeSnapshot v1 CRDs must already exist before this stage
-is activated. A cluster bootstrap or another explicitly selected storage
-profile may own those cluster-wide CRDs, but it must use schemas compatible
-with external-snapshotter `v8.5.0`. Do not install a second snapshot controller:
-one deployment serves every CSI driver in the cluster.
+Apply the canonical CSI snapshot source through separate Flux Kustomizations:
+`../csi-snapshot-api/crds` first, then its `controller`, then this `runtime`
+stage. The controller Kustomization must depend on the Ready CRD Kustomization,
+and this profile Kustomization must depend on the Ready controller
+Kustomization. Do not install CRDs or a second snapshot controller in this
+profile: one cluster-wide deployment serves every CSI driver.
 
 Before a downstream overlay activates the release, it must prove all intended
 storage nodes are Linux nodes with adequate independent capacity, mount

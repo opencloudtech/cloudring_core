@@ -14,7 +14,7 @@ func TestLonghornThreeNodeProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify Longhorn three-node profile: %v", err)
 	}
-	if report.Status != "ready" || report.Files != 2 || report.Documents != 12 || len(report.Checks) != 10 {
+	if report.Status != "ready" || report.Files != 2 || report.Documents != 6 || len(report.Checks) != 10 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -40,10 +40,7 @@ func TestLonghornThreeNodeProfileRejectsUnsafeChanges(t *testing.T) {
 		{"migratable mode disabled", "  migratable: \"true\"\n", "  migratable: \"false\"\n"},
 		{"delete snapshots", "deletionPolicy: Retain\n", "deletionPolicy: Delete\n"},
 		{"Longhorn native backup snapshot", "  type: snap\n", "  type: bak\n"},
-		{"mutable snapshot controller", "snapshot-controller:v8.5.0@sha256:74ca61ab13e978f03cf0f336a607281d15f04cda0a38a881306365473b28a3d8\n", "snapshot-controller:latest\n"},
-		{"single snapshot controller replica", "  replicas: 2\n  minReadySeconds: 35\n", "  replicas: 1\n  minReadySeconds: 35\n"},
-		{"snapshot controller leader election disabled", "            - --leader-election=true\n", "            - --leader-election=false\n"},
-		{"snapshot controller wildcard RBAC", "    resources: [\"persistentvolumes\"]\n", "    resources: [\"*\"]\n"},
+		{"missing canonical snapshot dependency", "    cloudring.org/requires-stage: deploy/kubernetes/storage/csi-snapshot-api/controller\n", ""},
 		{"ui ingress", "    ingress:\n      enabled: false\n", "    ingress:\n      enabled: true\n"},
 		{"second Velero selector", "    app.kubernetes.io/part-of: cloudring-storage\n  annotations:\n    storageclass.kubernetes.io/is-default-class: \"false\"\n", "    app.kubernetes.io/part-of: cloudring-storage\n    velero.io/csi-volumesnapshot-class: \"true\"\n  annotations:\n    storageclass.kubernetes.io/is-default-class: \"false\"\n"},
 	}
@@ -83,17 +80,21 @@ func copyLonghornThreeNodeProfile(t *testing.T) string {
 		t.Fatal(err)
 	}
 	defer destination.Close()
-	for _, relative := range []string{"runtime/kustomization.yaml", "runtime/resources.yaml"} {
-		sourcePath := filepath.Join(longhornThreeNodeProfilePath, relative)
+	for _, sourcePath := range append(
+		[]string{
+			filepath.Join(longhornThreeNodeProfilePath, "runtime/kustomization.yaml"),
+			filepath.Join(longhornThreeNodeProfilePath, "runtime/resources.yaml"),
+		},
+		csiSnapshotAPITestFiles()...,
+	) {
 		data, err := source.ReadFile(sourcePath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		destinationPath := filepath.Join(longhornThreeNodeProfilePath, relative)
-		if err := destination.MkdirAll(filepath.Dir(destinationPath), 0o700); err != nil {
+		if err := destination.MkdirAll(filepath.Dir(sourcePath), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := destination.WriteFile(destinationPath, data, 0o600); err != nil {
+		if err := destination.WriteFile(sourcePath, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

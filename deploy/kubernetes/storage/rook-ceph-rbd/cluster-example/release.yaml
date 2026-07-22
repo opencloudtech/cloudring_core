@@ -10,6 +10,7 @@ metadata:
     app.kubernetes.io/part-of: cloudring-storage
   annotations:
     cloudring.org/non-claim: example-node-and-device-references-must-be-replaced-before-activation
+    cloudring.org/requires-stage: deploy/kubernetes/storage/csi-snapshot-api/controller
 spec:
   suspend: true
   interval: 15m

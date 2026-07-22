@@ -136,6 +136,12 @@ func TestRookCephRBDProfileRejectsUnsafeChanges(t *testing.T) {
 			old:         "  suspend: true\n",
 			replacement: "  suspend: false\n",
 		},
+		{
+			name:        "missing canonical snapshot dependency",
+			file:        "cluster-example/release.yaml",
+			old:         "    cloudring.org/requires-stage: deploy/kubernetes/storage/csi-snapshot-api/controller\n",
+			replacement: "",
+		},
 	}
 
 	for _, test := range tests {
@@ -175,22 +181,23 @@ func copyRookCephRBDProfile(t *testing.T) string {
 		t.Fatal(err)
 	}
 	defer destination.Close()
-	for _, relative := range []string{
-		"controllers/kustomization.yaml",
-		"controllers/resources.yaml",
-		"cluster-example/kustomization.yaml",
-		"cluster-example/release.yaml",
-	} {
-		sourcePath := filepath.Join(rookCephRBDProfilePath, relative)
+	for _, sourcePath := range append(
+		[]string{
+			filepath.Join(rookCephRBDProfilePath, "controllers/kustomization.yaml"),
+			filepath.Join(rookCephRBDProfilePath, "controllers/resources.yaml"),
+			filepath.Join(rookCephRBDProfilePath, "cluster-example/kustomization.yaml"),
+			filepath.Join(rookCephRBDProfilePath, "cluster-example/release.yaml"),
+		},
+		csiSnapshotAPITestFiles()...,
+	) {
 		data, err := source.ReadFile(sourcePath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		destinationPath := filepath.Join(rookCephRBDProfilePath, relative)
-		if err := destination.MkdirAll(filepath.Dir(destinationPath), 0o700); err != nil {
+		if err := destination.MkdirAll(filepath.Dir(sourcePath), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := destination.WriteFile(destinationPath, data, 0o600); err != nil {
+		if err := destination.WriteFile(sourcePath, data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
