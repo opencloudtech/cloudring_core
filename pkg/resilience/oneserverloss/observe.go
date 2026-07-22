@@ -211,8 +211,8 @@ func sampleHealth(sample SampleEvidence, phase string, minimumControlPlane int, 
 		}
 	case PhaseLoss:
 		if sample.TargetNodeReady || sample.TargetNodePresent && sample.TargetNodeUIDSHA256 != targetUID ||
-			sample.ControlPlaneReadyNodes < baseline.ControlPlaneNodes/2+1 || sample.EtcdReadyMembers < baseline.EtcdMembers/2+1 ||
-			sample.APIServerReadyMembers < baseline.APIServerMembers/2+1 || !lossStarted.IsZero() && !vmReadyOffTarget(sample) && mustTimestamp(sample.ObservedAt).Sub(lossStarted) > vmUnavailable {
+			sample.ControlPlaneReadyNodes != baseline.ControlPlaneNodes-1 || sample.EtcdReadyMembers != baseline.EtcdMembers-1 ||
+			sample.APIServerReadyMembers != baseline.APIServerMembers-1 || !lossStarted.IsZero() && !vmReadyOffTarget(sample) && mustTimestamp(sample.ObservedAt).Sub(lossStarted) > vmUnavailable {
 			return errors.New("one-server-loss loss-state health failed")
 		}
 	case PhaseRecovered:

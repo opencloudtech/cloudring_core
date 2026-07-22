@@ -118,8 +118,8 @@ During loss, the observer requires:
 
 - the selected node is not Ready;
 - Kubernetes verbose readiness and etcd check still pass;
-- a majority of the baseline control-plane, etcd, and API-server members stay
-  ready;
+- exactly one fewer than the baseline control-plane, etcd, and API-server
+  member counts stays ready; quorum alone does not prove a one-server loss;
 - every declared workload remains above its ready-pod and distinct-node
   minima;
 - the exact VM object UID remains stable and its running VMI becomes ready off
@@ -151,9 +151,14 @@ evidence workflow before supporting a release decision.
 The kubeadm stand readiness gate accepts the receipt only as a separate
 owner-protected input. Its stand inventory must bind the exact receipt digest,
 run nonce, target Node UID hash, kubectl executable hash, and probe-adapter hash
-and must include unique current Node UID hashes. A
-`surviveUnavailableServers` integer or evidence-summary string without that
-validated receipt remains blocked as `missing_one_server_loss_evidence`.
+and must include unique current Node UID hashes. A legacy caller-declared
+survive count is accepted only for compatibility, ignored, and stripped from
+the observed report. The verifier publishes
+`verifiedSurviveUnavailableServers: 1` only after the validated receipt proves
+exactly one fewer ready control-plane Node, etcd member, and API-server member
+throughout the loss phase. A summary string, a bootstrap declaration, or a
+receipt showing two simultaneous losses remains blocked as
+`missing_one_server_loss_evidence`.
 
 ## Kubernetes permissions
 

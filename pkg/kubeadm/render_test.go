@@ -435,6 +435,9 @@ func TestUpstreamStandVerifierReportsReadinessInventory(t *testing.T) {
 	if report.Status != "ready" {
 		t.Fatalf("expected ready report, got %s", report.Status)
 	}
+	if report.VerifiedSurviveUnavailableServers != 1 {
+		t.Fatalf("verified unavailable-server count = %d, want 1", report.VerifiedSurviveUnavailableServers)
+	}
 	if report.WorkflowContinuity.Summary == "" || len(report.WorkflowContinuity.Items) == 0 {
 		t.Fatalf("expected workflow continuity inventory: %#v", report.WorkflowContinuity)
 	}
@@ -450,7 +453,10 @@ func TestUpstreamStandVerifierRequiresValidIdentityBoundReceipt(t *testing.T) {
 	inventory := readyInventory()
 	report, err := VerifyUpstreamStand(inventory)
 	if err == nil {
-		t.Fatal("self-declared surviveUnavailableServers passed without a verified receipt")
+		t.Fatal("stand passed without a verified one-server-loss receipt")
+	}
+	if report.VerifiedSurviveUnavailableServers != 0 {
+		t.Fatalf("unverified unavailable-server count = %d, want 0", report.VerifiedSurviveUnavailableServers)
 	}
 	assertBlocker(t, report.Blockers, "missing_one_server_loss_evidence")
 
@@ -472,6 +478,39 @@ func TestUpstreamStandVerifierRequiresValidIdentityBoundReceipt(t *testing.T) {
 	assertBlocker(t, report.Blockers, "missing_one_server_loss_evidence")
 }
 
+func TestUpstreamStandVerifierRejectsReceiptWithTwoUnavailableServersDespiteQuorum(t *testing.T) {
+	receipt := testOneServerLossReceipt()
+	receipt.Baseline.ControlPlaneNodes = 5
+	receipt.Baseline.EtcdMembers = 5
+	receipt.Baseline.APIServerMembers = 5
+	for phaseIndex, phase := range []*oneserverloss.PhaseEvidence{&receipt.PreLoss, &receipt.Loss, &receipt.Recovered} {
+		members := 5
+		if phaseIndex == 1 {
+			members = 3
+		}
+		for index := range phase.Samples {
+			phase.Samples[index].ControlPlaneReadyNodes = members
+			phase.Samples[index].EtcdReadyMembers = members
+			phase.Samples[index].APIServerReadyMembers = members
+		}
+	}
+	rehashTestReceipt(&receipt)
+
+	inventory := readyInventory()
+	inventory.ControlPlaneReplicas = 5
+	inventory.Nodes = append(inventory.Nodes,
+		NodeInventory{Name: "node-d", UIDSHA256: testSHA256("node-d-uid"), Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.14", NodeIPv6: "2001:db8::14"},
+		NodeInventory{Name: "node-e", UIDSHA256: testSHA256("node-e-uid"), Ready: true, ControlPlane: true, EtcdMember: true, NodeIPv4: "192.0.2.15", NodeIPv6: "2001:db8::15"},
+	)
+	inventory.OneServerLossReceipt.ReceiptSHA256 = receipt.ReceiptSHA256
+
+	report, err := VerifyUpstreamStand(inventory, &receipt)
+	if err == nil || report.VerifiedSurviveUnavailableServers != 0 {
+		t.Fatalf("quorum-preserving two-server loss was accepted: report=%#v err=%v", report, err)
+	}
+	assertBlocker(t, report.Blockers, "missing_one_server_loss_evidence")
+}
+
 func TestUpstreamStandVerifierRejectsImpossibleTopologyAndSanitizesNodeBlockers(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -483,13 +522,6 @@ func TestUpstreamStandVerifierRejectsImpossibleTopologyAndSanitizesNodeBlockers(
 			blocker: "even_control_plane_replicas",
 			mutate: func(inventory *StandInventory) {
 				inventory.ControlPlaneReplicas = 4
-			},
-		},
-		{
-			name:    "multi-server envelope is outside one-server-loss contract",
-			blocker: "unsupported_one_server_loss_envelope",
-			mutate: func(inventory *StandInventory) {
-				inventory.SurviveUnavailableServers = 2
 			},
 		},
 		{
@@ -752,7 +784,6 @@ func readyInventory() StandInventory {
 		EtcdTopology:              "stacked",
 		PodCIDRs:                  []string{"192.0.2.0/24", "2001:db8:244::/56"},
 		ServiceCIDRs:              []string{"198.51.100.0/24", "2001:db8:96::/108"},
-		SurviveUnavailableServers: 1,
 		OneServerLossReceipt: OneServerLossReceiptBinding{
 			ReceiptSHA256:           receipt.ReceiptSHA256,
 			RunNonceSHA256:          receipt.RunNonceSHA256,
@@ -870,6 +901,20 @@ func testOneServerLossReceipt() oneserverloss.Receipt {
 	}
 	receipt.ReceiptSHA256 = testJSONDigest(receipt)
 	return receipt
+}
+
+func rehashTestReceipt(receipt *oneserverloss.Receipt) {
+	receipt.Baseline.BaselineSHA256 = ""
+	receipt.Baseline.BaselineSHA256 = testJSONDigest(receipt.Baseline)
+	for _, phase := range []*oneserverloss.PhaseEvidence{&receipt.PreLoss, &receipt.Loss, &receipt.Recovered} {
+		for index := range phase.Samples {
+			phase.Samples[index].SampleSHA256 = ""
+			phase.Samples[index].SampleSHA256 = testJSONDigest(phase.Samples[index])
+		}
+		phase.SamplesSHA256 = testJSONDigest(phase.Samples)
+	}
+	receipt.ReceiptSHA256 = ""
+	receipt.ReceiptSHA256 = testJSONDigest(*receipt)
 }
 
 func testJSONDigest(value any) string {

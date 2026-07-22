@@ -18,6 +18,7 @@ markers and receipts remain deployment-private and require a separate trusted
 signature before they can support a release claim.
 
 Runtime validation in `pkg/resilience/oneserverloss` is authoritative. JSON
-Schema cannot by itself prove timeline continuity, quorum majority, stable
-Kubernetes UID, VM recovery SLO, adapter executable identity, or unchanged
-business-data digest.
+Schema cannot by itself prove timeline continuity, the exact one-unavailable
+loss envelope, stable Kubernetes UID, VM recovery SLO, adapter executable
+identity, or unchanged business-data digest. Preserving quorum after two
+simultaneous losses does not satisfy this one-server-loss contract.
