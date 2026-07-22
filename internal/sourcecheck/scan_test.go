@@ -855,6 +855,50 @@ func TestScan_gitlinks_require_exact_allowance_or_clean_recursion(t *testing.T) 
 	}
 }
 
+func TestScan_recursiveGitlink_preservesExactReviewedVendoredDocumentationException(t *testing.T) {
+	repositoryPath := filepath.Join("..", "..", filepath.FromSlash(reviewedVendoredPrivateKeyDocumentationPath))
+	// #nosec G304 -- this test reads one fixed repository fixture path assembled for platform portability.
+	data, err := os.ReadFile(repositoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	child := newRepository(t)
+	writeRepositoryFile(t, child, ".gitattributes", reviewedVendoredPrivateKeyDocumentationPath+" text eol=lf\n")
+	writeRepositoryFile(t, child, reviewedVendoredPrivateKeyDocumentationPath, string(data))
+	commitAll(t, child, "reviewed vendored documentation")
+
+	direct, err := Scan(Options{Root: child, Scope: ScopeTracked})
+	if err != nil {
+		t.Fatalf("scan direct child: %v", err)
+	}
+	if !direct.Passed {
+		t.Fatalf("direct child scan rejected reviewed documentation: %+v", direct.Findings)
+	}
+
+	parent := newRepository(t)
+	runGit(t, parent, "clone", "--quiet", child, "cloudring_core")
+	runGit(t, parent, "add", "cloudring_core")
+	recursive, err := Scan(Options{Root: parent, Scope: ScopeTracked, RecurseGitlinks: true})
+	if err != nil {
+		t.Fatalf("scan parent recursively: %v", err)
+	}
+	if !recursive.Passed {
+		t.Fatalf("recursive scan rejected reviewed documentation: %+v", recursive.Findings)
+	}
+
+	prefixedPath := "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath
+	variants := map[string]int{}
+	for _, input := range recursive.ScannedInputs {
+		if input.Path == prefixedPath {
+			variants[input.SourceVariant]++
+		}
+	}
+	if variants["gitlink/index"] != 1 || variants["gitlink/worktree"] != 1 || len(variants) != 2 {
+		t.Fatalf("recursive scan did not preserve exact index/worktree duplication semantics: %+v", variants)
+	}
+}
+
 func TestScan_files_rejects_repository_escape(t *testing.T) {
 	root := newRepository(t)
 	outside := filepath.Join(filepath.Dir(root), "outside.txt")

@@ -46,6 +46,12 @@ variables, network mutation, or live Kubernetes access. Passing it only means
 the CloudRING public tree is locally safe to publish and validate; it is not a
 production readiness claim.
 
+Reviewed content exceptions remain bound to their exact repository path and
+whole-file digest. A recursive gitlink scan may add exactly one canonical
+gitlink path segment, and only for inputs whose scanner provenance identifies
+the corresponding gitlink index or worktree variant; nested, traversing, or
+near-match paths remain blocked.
+
 ## SafePush trust boundary
 
 `.github/workflow-policy.json` binds every required workflow to its exact

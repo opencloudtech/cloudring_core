@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/netip"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
@@ -58,15 +57,15 @@ var (
 
 func scanContent(path string, content string) []Finding {
 	budget := newFindingBudget(nil)
-	findings, _ := scanContentWithBudget(path, content, budget)
+	findings, _ := scanContentWithBudget(path, "", "text", content, budget)
 	return findings
 }
 
-func scanContentWithBudget(path string, content string, budget *findingBudget) ([]Finding, error) {
+func scanContentWithBudget(path string, sourceVariant string, inputKind string, content string, budget *findingBudget) ([]Finding, error) {
 	var findings []Finding
 	lineNumber := 1
 	previousLine := ""
-	reviewedVendoredDocumentation := reviewedVendoredPrivateKeyDocumentation(path, content)
+	reviewedVendoredDocumentation := reviewedVendoredPrivateKeyDocumentation(path, sourceVariant, inputKind, content)
 	for start := 0; start <= len(content); {
 		end := strings.IndexByte(content[start:], '\n')
 		if end < 0 {
@@ -264,12 +263,32 @@ func structuralCredentialReference(raw string) bool {
 	}
 }
 
-func reviewedVendoredPrivateKeyDocumentation(path, content string) bool {
-	if filepath.ToSlash(path) != "deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn/values.yaml" {
+const reviewedVendoredPrivateKeyDocumentationPath = "deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn/values.yaml"
+
+func reviewedVendoredPrivateKeyDocumentation(path, sourceVariant, inputKind, content string) bool {
+	if inputKind != "text" || !exactReviewedVendoredPrivateKeyDocumentationPath(path, sourceVariant) {
 		return false
 	}
 	digest := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(digest[:]) == "70b801c79e6d54ac281dda702cd078249d9aa0bbdf13edaf1aced8e866c02876"
+}
+
+func exactReviewedVendoredPrivateKeyDocumentationPath(path, sourceVariant string) bool {
+	if strings.Contains(path, `\`) {
+		return false
+	}
+	canonical, err := canonicalPolicyPath(path)
+	if err != nil || canonical != path {
+		return false
+	}
+	if path == reviewedVendoredPrivateKeyDocumentationPath {
+		return !strings.HasPrefix(sourceVariant, "gitlink/")
+	}
+	if sourceVariant != "gitlink/index" && sourceVariant != "gitlink/worktree" {
+		return false
+	}
+	prefix, childPath, ok := strings.Cut(path, "/")
+	return ok && prefix != "" && childPath == reviewedVendoredPrivateKeyDocumentationPath
 }
 
 func exactVendoredPrivateKeyDocumentationLine(previousLine, line string) bool {

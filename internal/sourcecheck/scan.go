@@ -170,7 +170,7 @@ func Scan(options Options) (Report, error) {
 			}
 			continue
 		}
-		contentFindings, contentErr := scanContentWithBudget(input.path, string(input.data), findingLimit)
+		contentFindings, contentErr := scanContentWithBudget(input.path, input.variant, input.kind, string(input.data), findingLimit)
 		if contentErr != nil {
 			return Report{}, contentErr
 		}
