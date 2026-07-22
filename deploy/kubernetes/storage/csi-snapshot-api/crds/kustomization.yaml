@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+  - snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+  - snapshot.storage.k8s.io_volumesnapshots.yaml

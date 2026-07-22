@@ -23,6 +23,9 @@ func VerifyRookCephRBD(root string) (Report, error) {
 		return Report{}, err
 	}
 	report := Report{Status: "blocked", Profile: "cloudring-rook-ceph-rbd/v1"}
+	if _, err := VerifyCSISnapshotAPI(root); err != nil {
+		return report, errors.New("canonical CSI snapshot API dependency is invalid")
+	}
 	repository, err := os.OpenRoot(root)
 	if err != nil {
 		return report, errors.New("open confined repository root")
@@ -163,6 +166,7 @@ func validateRookCephRBDObjects(objects []object) error {
 		!exactBool(cluster.Data, true, "spec", "suspend") || !exactHelmChart(cluster.Data, "rook-ceph-cluster", "v1.20.2") ||
 		nested(cluster.Data, "spec", "valuesFrom") != nil || nested(cluster.Data, "spec", "postRenderers") != nil ||
 		nestedString(cluster.Data, "metadata", "annotations", "cloudring.org/non-claim") != "example-node-and-device-references-must-be-replaced-before-activation" ||
+		nestedString(cluster.Data, "metadata", "annotations", "cloudring.org/requires-stage") != "deploy/kubernetes/storage/csi-snapshot-api/controller" ||
 		!exactDependsOn(cluster.Data, "rook-ceph", "rook-ceph") {
 		return errors.New("Rook cluster stage activation boundary is invalid")
 	}

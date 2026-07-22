@@ -1,0 +1,211 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: snapshot-controller
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudring-snapshot-controller
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+  annotations:
+    cloudring.org/upstream-source: kubernetes-csi/external-snapshotter@v8.5.0
+    cloudring.org/upstream-commit: 5aab051d1af135e2c852f6fb7fc27fa709d877bf
+    cloudring.org/upstream-baseline-sha256: 99c4ac480b6c9563be0d85599e29cc7b68b25a82d250b0e789726727551e8d38
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents"]
+    verbs: ["create", "get", "list", "watch", "update", "delete", "patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshotcontents/status"]
+    verbs: ["patch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots/status"]
+    verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudring-snapshot-controller
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+subjects:
+  - kind: ServiceAccount
+    name: snapshot-controller
+    namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudring-snapshot-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudring-snapshot-controller-leader-election
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "watch", "list", "delete", "update", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudring-snapshot-controller-leader-election
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+subjects:
+  - kind: ServiceAccount
+    name: snapshot-controller
+    namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudring-snapshot-controller-leader-election
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snapshot-controller
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+  annotations:
+    cloudring.org/upstream-source: kubernetes-csi/external-snapshotter@v8.5.0
+    cloudring.org/upstream-commit: 5aab051d1af135e2c852f6fb7fc27fa709d877bf
+    cloudring.org/upstream-baseline-sha256: bab025e1fed9199c5d827f64febb572dd8b746928e48d656312a215bede74d92
+    cloudring.org/non-claim: downstream-crd-controller-snapshot-restore-and-one-node-loss-evidence-required
+    cloudring.org/requires-stage: deploy/kubernetes/storage/csi-snapshot-api/crds
+spec:
+  replicas: 2
+  minReadySeconds: 35
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snapshot-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snapshot-controller
+        app.kubernetes.io/component: csi-snapshot-control-plane
+        app.kubernetes.io/part-of: cloudring-storage
+    spec:
+      serviceAccountName: snapshot-controller
+      priorityClassName: system-cluster-critical
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: snapshot-controller
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: snapshot-controller
+          image: registry.k8s.io/sig-storage/snapshot-controller:v8.5.0@sha256:74ca61ab13e978f03cf0f336a607281d15f04cda0a38a881306365473b28a3d8
+          imagePullPolicy: IfNotPresent
+          args:
+            - --v=2
+            - --leader-election=true
+            - --http-endpoint=:8080
+          ports:
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz/leader-election
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz/leader-election
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: snapshot-controller
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: snapshot-controller
+    app.kubernetes.io/component: csi-snapshot-control-plane
+    app.kubernetes.io/part-of: cloudring-storage
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snapshot-controller
