@@ -4,6 +4,7 @@
 package transactionalstate
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -126,6 +127,7 @@ func TestPostgreSQLDocumentLifecycleAndConcurrency(t *testing.T) {
 	if _, err := store.pool.Exec(ctx, `CREATE TABLE cloudring_state.forbidden_ddl (value text)`); err == nil {
 		t.Fatal("application role received schema DDL privileges")
 	}
+	testPostgreSQLAuditJournal(t, ctx, store)
 
 	if _, err := admin.Exec(ctx, `ALTER TABLE cloudring_state.documents ADD COLUMN unexpected_column text`); err != nil {
 		t.Fatal("inject isolated catalog drift")
@@ -153,6 +155,28 @@ func TestPostgreSQLDocumentLifecycleAndConcurrency(t *testing.T) {
 	}
 
 	if _, err := admin.Exec(ctx, `DROP SCHEMA cloudring_state CASCADE`); err != nil {
+		t.Fatal("reset schema for additive migration test")
+	}
+	for _, statement := range renderedMigrationOne(ownerRole, applicationRole) {
+		if _, err := admin.Exec(ctx, statement); err != nil {
+			t.Fatal("create version-one integration schema")
+		}
+	}
+	if _, err := admin.Exec(ctx, `
+		INSERT INTO cloudring_state.schema_migrations (version, checksum)
+		VALUES (1, $1)
+	`, migrationOneChecksum()); err != nil {
+		t.Fatal("record version-one integration schema")
+	}
+	if err := Migrate(ctx, migrationConfig); err != nil {
+		t.Fatalf("additive audit journal migration failed: %v", err)
+	}
+	var journalCreated bool
+	if err := admin.QueryRow(ctx, `SELECT to_regclass('cloudring_state.audit_journal') IS NOT NULL`).Scan(&journalCreated); err != nil || !journalCreated {
+		t.Fatal("additive migration did not create the audit journal")
+	}
+
+	if _, err := admin.Exec(ctx, `DROP SCHEMA cloudring_state CASCADE`); err != nil {
 		t.Fatal("reset schema for pre-existing-object test")
 	}
 	ownerIdentifier := pgx.Identifier{ownerRole}.Sanitize()
@@ -165,6 +189,91 @@ func TestPostgreSQLDocumentLifecycleAndConcurrency(t *testing.T) {
 	var historyCreated bool
 	if err := admin.QueryRow(ctx, `SELECT to_regclass('cloudring_state.schema_migrations') IS NOT NULL`).Scan(&historyCreated); err != nil || historyCreated {
 		t.Fatal("failed migration recorded history for a conflicting schema")
+	}
+}
+
+func testPostgreSQLAuditJournal(t *testing.T, ctx context.Context, store *Store) {
+	t.Helper()
+	scope := "tenant-a"
+	original, err := store.AppendAuditEvent(ctx, scope, "event-02", []byte(`{"amount":1e2,"actor":"portal"}`))
+	if err != nil || original.Scope != scope || original.ID != "event-02" || original.CreatedAt.IsZero() {
+		t.Fatalf("append audit event = %#v, %v", original, err)
+	}
+	retried, err := store.AppendAuditEvent(ctx, scope, "event-02", []byte(` {"actor":"portal", "amount":1e2} `))
+	if err != nil || !retried.CreatedAt.Equal(original.CreatedAt) || string(retried.Value) != string(original.Value) {
+		t.Fatalf("idempotent audit append = %#v, %v, want %#v", retried, err, original)
+	}
+	if _, err := store.AppendAuditEvent(ctx, scope, "event-02", []byte(`{"actor":"different"}`)); !errors.Is(err, ErrConflict) {
+		t.Fatalf("conflicting audit append = %v, want conflict", err)
+	}
+	for _, fixture := range []struct {
+		id    string
+		value string
+	}{
+		{id: "event-01", value: `{"order":1}`},
+		{id: "event-03", value: `{"order":3}`},
+	} {
+		if _, err := store.AppendAuditEvent(ctx, scope, fixture.id, []byte(fixture.value)); err != nil {
+			t.Fatalf("append ordered audit fixture %s: %v", fixture.id, err)
+		}
+	}
+	otherScope, err := store.AppendAuditEvent(ctx, "tenant-b", "event-02", []byte(`{"tenant":"b"}`))
+	if err != nil || string(otherScope.Value) != `{"tenant":"b"}` {
+		t.Fatalf("append isolated audit event = %#v, %v", otherScope, err)
+	}
+
+	firstPage, err := store.ListAuditEvents(ctx, scope, "", 2)
+	if err != nil || len(firstPage.Events) != 2 || firstPage.Events[0].ID != "event-01" || firstPage.Events[1].ID != "event-02" || firstPage.NextAfterID != "event-02" {
+		t.Fatalf("first audit page = %#v, %v", firstPage, err)
+	}
+	secondPage, err := store.ListAuditEvents(ctx, scope, firstPage.NextAfterID, 2)
+	if err != nil || len(secondPage.Events) != 1 || secondPage.Events[0].ID != "event-03" || secondPage.NextAfterID != "" {
+		t.Fatalf("second audit page = %#v, %v", secondPage, err)
+	}
+	isolatedPage, err := store.ListAuditEvents(ctx, "tenant-b", "", MaximumAuditPageSize)
+	if err != nil || len(isolatedPage.Events) != 1 || isolatedPage.Events[0].ID != "event-02" || string(isolatedPage.Events[0].Value) != `{"tenant":"b"}` {
+		t.Fatalf("isolated audit page = %#v, %v", isolatedPage, err)
+	}
+	loaded, err := store.ReadAuditEvent(ctx, scope, "event-02")
+	if err != nil || loaded.ID != original.ID || string(loaded.Value) != string(original.Value) {
+		t.Fatalf("read audit event = %#v, %v", loaded, err)
+	}
+	if _, err := store.ReadAuditEvent(ctx, "tenant-c", "event-02"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-scope audit read = %v, want not found", err)
+	}
+	if _, err := store.ListAuditEvents(ctx, scope, "", MaximumAuditPageSize+1); err == nil {
+		t.Fatal("audit list accepted an oversized page")
+	}
+	if _, err := store.AppendAuditEvent(ctx, scope, "event-oversized", bytes.Repeat([]byte(" "), MaximumAuditEventBytes+1)); err == nil {
+		t.Fatal("audit append accepted an oversized event")
+	}
+
+	const retries = 12
+	var wait sync.WaitGroup
+	var failures atomic.Int32
+	for range retries {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			event, err := store.AppendAuditEvent(ctx, scope, "event-concurrent", []byte(`{"retry":true}`))
+			if err != nil || event.ID != "event-concurrent" {
+				failures.Add(1)
+			}
+		}()
+	}
+	wait.Wait()
+	if failures.Load() != 0 {
+		t.Fatalf("concurrent idempotent audit append failures = %d", failures.Load())
+	}
+
+	for name, statement := range map[string]string{
+		"update":   `UPDATE cloudring_state.audit_journal SET body = '{"mutated":true}' WHERE scope = 'tenant-a'`,
+		"delete":   `DELETE FROM cloudring_state.audit_journal WHERE scope = 'tenant-a'`,
+		"truncate": `TRUNCATE cloudring_state.audit_journal`,
+	} {
+		if _, err := store.pool.Exec(ctx, statement); err == nil {
+			t.Fatalf("application role received audit journal %s privilege", name)
+		}
 	}
 }
 

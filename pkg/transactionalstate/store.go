@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
 
-// Package transactionalstate provides a small PostgreSQL-backed document
-// primitive for CloudRING control-plane state. It deliberately exposes
+// Package transactionalstate provides PostgreSQL-backed document state and an
+// append-only audit journal for CloudRING control-plane state. Documents expose
 // optimistic revisions instead of hiding concurrent writers behind a
 // last-write-wins API.
 package transactionalstate
