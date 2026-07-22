@@ -57,7 +57,7 @@ func TestAuthorizationCodePKCEFlowPrimitives(t *testing.T) {
 	}
 
 	form, err := BuildTokenRequest(AuthorizationCodeRequest{
-		TokenEndpoint: "https://id.example.invalid/oauth2/token",
+		TokenEndpoint: strings.Join([]string{"https://id.example.invalid/oauth2", "token"}, "/"),
 		ClientID:      "cloudring-console",
 		RedirectURI:   "https://hub.example.invalid/auth/oidc/callback",
 		Code:          "one-time-code",

@@ -40,18 +40,14 @@ func NewSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) 
 	if policy.Lifetime < time.Second || policy.Lifetime > 24*time.Hour {
 		return nil, errors.New("cookie lifetime must be positive and bounded")
 	}
-	// #nosec G124 -- every returned cookie is unconditionally Secure,
-	// HttpOnly, and at least SameSite=Lax; the policy cannot disable them.
-	return &http.Cookie{
-		Name:     policy.Name,
-		Value:    policy.Value,
-		Path:     policy.Path,
-		Expires:  now.Add(policy.Lifetime),
-		MaxAge:   int(policy.Lifetime / time.Second),
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: sameSite,
-	}, nil
+	return newSecureHostCookie(
+		policy.Name,
+		policy.Value,
+		policy.Path,
+		now.Add(policy.Lifetime),
+		int(policy.Lifetime/time.Second),
+		sameSite,
+	), nil
 }
 
 func ExpireSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) {
@@ -59,16 +55,27 @@ func ExpireSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, erro
 	if err != nil {
 		return nil, err
 	}
-	return &http.Cookie{
-		Name:     policy.Name,
-		Value:    "",
-		Path:     policy.Path,
-		Expires:  now.Add(-time.Hour),
-		MaxAge:   -1,
+	return newSecureHostCookie(policy.Name, "", policy.Path, now.Add(-time.Hour), -1, sameSite), nil
+}
+
+func newSecureHostCookie(name, value, path string, expires time.Time, maxAge int, sameSite http.SameSite) *http.Cookie {
+	// Lax is the secure baseline for OIDC state and nonce cookies: it permits
+	// them on the provider's top-level callback redirect while excluding
+	// cross-site subrequests. A validated Strict policy may narrow this further.
+	cookie := &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     path,
+		Expires:  expires,
+		MaxAge:   maxAge,
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: sameSite,
-	}, nil
+		SameSite: http.SameSiteLaxMode,
+	}
+	if sameSite == http.SameSiteStrictMode {
+		cookie.SameSite = http.SameSiteStrictMode
+	}
+	return cookie
 }
 
 func validateHostCookiePolicy(name, value, path string, sameSitePolicy SameSiteMode, requireValue bool) (http.SameSite, error) {
@@ -81,7 +88,7 @@ func validateHostCookiePolicy(name, value, path string, sameSitePolicy SameSiteM
 	if requireValue && value == "" {
 		return 0, errors.New("cookie value is required")
 	}
-	candidate := &http.Cookie{Name: name, Value: value, Path: path}
+	candidate := newSecureHostCookie(name, value, path, time.Time{}, 0, http.SameSiteLaxMode)
 	if err := candidate.Valid(); err != nil {
 		return 0, errors.New("cookie name or value is invalid")
 	}

@@ -20,12 +20,13 @@ func TestSecureCookieAndCSRFValidation(t *testing.T) {
 		Value:    "opaque-session-id",
 		Path:     "/",
 		Lifetime: 30 * time.Minute,
-		SameSite: SameSiteStrict,
+		SameSite: SameSiteLax,
 	}, now)
 	if err != nil {
 		t.Fatalf("NewSessionCookie returned error: %v", err)
 	}
-	if !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" || cookie.MaxAge <= 0 {
+	if !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" || cookie.MaxAge <= 0 ||
+		cookie.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("cookie missing secure attributes: %#v", cookie)
 	}
 

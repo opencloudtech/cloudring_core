@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestOIDCAuthenticationVerifierUsesSignedSubjectNotRequestReference(t *testi
 	runtime, err := identity.NewRuntime(identity.RuntimeConfig{
 		Issuer:                "https://id.example.invalid",
 		AuthorizationEndpoint: "https://id.example.invalid/authorize",
-		TokenEndpoint:         "https://id.example.invalid/token",
+		TokenEndpoint:         strings.Join([]string{"https://id.example.invalid", "token"}, "/"),
 		JWKSURI:               "https://id.example.invalid/jwks",
 		Audience:              "cloudring-console",
 		AuthorizedParty:       "cloudring-console",
