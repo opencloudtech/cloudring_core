@@ -45,6 +45,10 @@ full platform extraction or a production installation is complete.
 ## Developer entry points
 
 - Read `docs/public-boundary.md` before adding public material.
+- Read `docs/product-architecture-invariants.md` for the stable platform,
+  product, operation, durability, and federation boundaries.
+- Use `roadmap/README.md` for the evidence-gated public goal sequence and the
+  active goal contract.
 - Follow `docs/developer-guide.md` for the developer path.
 - Use `docs/conformance.md` to validate OCSv3 module packages.
 - Use `docs/http-transport-security.md` for the provider-neutral public HTTP

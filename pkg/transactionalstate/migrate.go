@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	migrationVersion       = 1
+	migrationVersion       = 2
 	defaultMigrationOwner  = "cloudring_owner"
 	defaultApplicationRole = "cloudring_app"
 )
@@ -49,6 +49,23 @@ var (
 		`GRANT USAGE ON SCHEMA cloudring_state TO {{application}}`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE cloudring_state.documents TO {{application}}`,
 	}
+	migrationTwoSQL = []string{
+		`CREATE TABLE cloudring_state.audit_journal (
+			scope text COLLATE "C" NOT NULL,
+			event_id text COLLATE "C" NOT NULL,
+			body jsonb NOT NULL,
+			payload_sha256 text NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+			CONSTRAINT audit_journal_pkey PRIMARY KEY (scope, event_id),
+			CONSTRAINT audit_journal_scope_format CHECK (scope ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'),
+			CONSTRAINT audit_journal_event_id_format CHECK (event_id ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'),
+			CONSTRAINT audit_journal_payload_sha256_format CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
+			CONSTRAINT audit_journal_body_size CHECK (octet_length(body::text) <= 262144)
+		)`,
+		`REVOKE ALL PRIVILEGES ON TABLE cloudring_state.audit_journal FROM PUBLIC`,
+		`REVOKE ALL PRIVILEGES ON TABLE cloudring_state.audit_journal FROM {{application}}`,
+		`GRANT SELECT, INSERT ON TABLE cloudring_state.audit_journal TO {{application}}`,
+	}
 )
 
 type catalogColumn struct {
@@ -72,10 +89,11 @@ type catalogRelation struct {
 	Kind  string
 }
 
-// Migrate applies the one known schema version under a transaction-scoped
-// advisory lock. It creates only a completely absent schema and otherwise
-// verifies the recorded checksum, catalog shape, ownership, and effective
-// privileges without repairing or blessing unexpected pre-existing objects.
+// Migrate applies additive schema versions under a transaction-scoped advisory
+// lock. It creates only a completely absent schema and otherwise verifies the
+// recorded checksums, catalog shape, ownership, and effective privileges before
+// applying the next version. Unexpected pre-existing objects are never repaired
+// or blessed.
 func Migrate(ctx context.Context, config Config) error {
 	ownerRole, applicationRole, err := migrationRoles(config)
 	if err != nil {
@@ -104,16 +122,17 @@ func Migrate(ctx context.Context, config Config) error {
 		return errors.New("verify transactional state migration identities")
 	}
 
-	var schemaExists, migrationTableExists, documentsTableExists bool
+	var schemaExists, migrationTableExists, documentsTableExists, auditJournalTableExists bool
 	if err := tx.QueryRow(migrationCtx, `
 		SELECT
 			to_regnamespace('cloudring_state') IS NOT NULL,
 			to_regclass('cloudring_state.schema_migrations') IS NOT NULL,
-			to_regclass('cloudring_state.documents') IS NOT NULL
-	`).Scan(&schemaExists, &migrationTableExists, &documentsTableExists); err != nil {
+			to_regclass('cloudring_state.documents') IS NOT NULL,
+			to_regclass('cloudring_state.audit_journal') IS NOT NULL
+	`).Scan(&schemaExists, &migrationTableExists, &documentsTableExists, &auditJournalTableExists); err != nil {
 		return errors.New("inspect transactional state migration")
 	}
-	if !schemaExists && !migrationTableExists && !documentsTableExists {
+	if !schemaExists && !migrationTableExists && !documentsTableExists && !auditJournalTableExists {
 		statements := renderedMigrationOne(ownerRole, applicationRole)
 		for _, statement := range statements {
 			if _, err := tx.Exec(migrationCtx, statement); err != nil {
@@ -123,16 +142,38 @@ func Migrate(ctx context.Context, config Config) error {
 		if _, err := tx.Exec(migrationCtx, `
 			INSERT INTO cloudring_state.schema_migrations (version, checksum)
 			VALUES ($1, $2)
-		`, migrationVersion, migrationOneChecksum()); err != nil {
+		`, 1, migrationOneChecksum()); err != nil {
 			return errors.New("record transactional state migration")
 		}
 	} else if !schemaExists || !migrationTableExists || !documentsTableExists {
 		return errors.New("transactional state schema conflicts with migration history")
 	}
+	versions, err := readMigrationRecords(migrationCtx, tx)
+	if err != nil {
+		return errors.New("verify transactional state migration history")
+	}
+	if reflect.DeepEqual(versions, []migrationRecord{{Version: 1, Checksum: migrationOneChecksum()}}) {
+		if auditJournalTableExists || verifyMigrationContract(migrationCtx, tx, ownerRole, applicationRole, 1) != nil {
+			return errors.New("verify transactional state migration contract")
+		}
+		for _, statement := range renderedMigrationTwo(applicationRole) {
+			if _, err := tx.Exec(migrationCtx, statement); err != nil {
+				return errors.New("apply transactional state migration")
+			}
+		}
+		if _, err := tx.Exec(migrationCtx, `
+			INSERT INTO cloudring_state.schema_migrations (version, checksum)
+			VALUES ($1, $2)
+		`, 2, migrationTwoChecksum()); err != nil {
+			return errors.New("record transactional state migration")
+		}
+	} else if !reflect.DeepEqual(versions, expectedMigrationRecords()) {
+		return errors.New("verify transactional state migration history")
+	}
 	if err := verifyMigrationRecord(migrationCtx, tx); err != nil {
 		return errors.New("verify transactional state migration history")
 	}
-	if err := verifyMigrationContract(migrationCtx, tx, ownerRole, applicationRole); err != nil {
+	if err := verifyMigrationContract(migrationCtx, tx, ownerRole, applicationRole, migrationVersion); err != nil {
 		return errors.New("verify transactional state migration contract")
 	}
 	if err := tx.Commit(migrationCtx); err != nil {
@@ -167,6 +208,16 @@ func renderedMigrationOne(ownerRole, applicationRole string) []string {
 	return statements
 }
 
+func renderedMigrationTwo(applicationRole string) []string {
+	application := pgx.Identifier{applicationRole}.Sanitize()
+	replacer := strings.NewReplacer("{{application}}", application)
+	statements := make([]string, 0, len(migrationTwoSQL))
+	for _, statement := range migrationTwoSQL {
+		statements = append(statements, replacer.Replace(statement))
+	}
+	return statements
+}
+
 func verifyMigrationRoles(ctx context.Context, tx pgx.Tx, ownerRole, applicationRole string) error {
 	var currentUser, databaseOwner string
 	if err := tx.QueryRow(ctx, `
@@ -196,25 +247,57 @@ func verifyMigrationRoles(ctx context.Context, tx pgx.Tx, ownerRole, application
 	return nil
 }
 
-func verifyMigrationRecord(ctx context.Context, tx pgx.Tx) error {
-	var count, minimum, maximum int
-	var observedChecksum string
-	if err := tx.QueryRow(ctx, `
-		SELECT count(*), COALESCE(min(version), 0), COALESCE(max(version), 0), COALESCE(min(checksum), '')
+type migrationRecord struct {
+	Version  int
+	Checksum string
+}
+
+func readMigrationRecords(ctx context.Context, tx pgx.Tx) ([]migrationRecord, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT version, checksum
 		FROM cloudring_state.schema_migrations
-	`).Scan(&count, &minimum, &maximum, &observedChecksum); err != nil ||
-		count != migrationVersion || minimum != 1 || maximum != migrationVersion || observedChecksum != migrationOneChecksum() {
+		ORDER BY version
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []migrationRecord
+	for rows.Next() {
+		var record migrationRecord
+		if err := rows.Scan(&record.Version, &record.Checksum); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func expectedMigrationRecords() []migrationRecord {
+	return []migrationRecord{
+		{Version: 1, Checksum: migrationOneChecksum()},
+		{Version: 2, Checksum: migrationTwoChecksum()},
+	}
+}
+
+func verifyMigrationRecord(ctx context.Context, tx pgx.Tx) error {
+	records, err := readMigrationRecords(ctx, tx)
+	if err != nil || !reflect.DeepEqual(records, expectedMigrationRecords()) {
 		return errors.New("migration history is invalid")
 	}
 	return nil
 }
 
-func verifyMigrationContract(ctx context.Context, tx pgx.Tx, ownerRole, applicationRole string) error {
-	relations, err := readCatalogRelations(ctx, tx)
-	if err != nil || !reflect.DeepEqual(relations, []catalogRelation{
+func verifyMigrationContract(ctx context.Context, tx pgx.Tx, ownerRole, applicationRole string, version int) error {
+	expectedRelations := []catalogRelation{
 		{Name: "documents", Owner: ownerRole, Kind: "r"},
 		{Name: "schema_migrations", Owner: ownerRole, Kind: "r"},
-	}) {
+	}
+	if version >= 2 {
+		expectedRelations = append([]catalogRelation{{Name: "audit_journal", Owner: ownerRole, Kind: "r"}}, expectedRelations...)
+	}
+	relations, err := readCatalogRelations(ctx, tx)
+	if err != nil || !reflect.DeepEqual(relations, expectedRelations) {
 		return errors.New("database relation inventory is invalid")
 	}
 	var schemaOwner string
@@ -226,14 +309,14 @@ func verifyMigrationContract(ctx context.Context, tx pgx.Tx, ownerRole, applicat
 		return errors.New("database schema owner is invalid")
 	}
 	columns, err := readCatalogColumns(ctx, tx)
-	if err != nil || !reflect.DeepEqual(columns, expectedCatalogColumns()) {
+	if err != nil || !reflect.DeepEqual(columns, expectedCatalogColumns(version)) {
 		return errors.New("database column contract is invalid")
 	}
 	constraints, err := readCatalogConstraints(ctx, tx)
-	if err != nil || !reflect.DeepEqual(constraints, expectedCatalogConstraints()) {
+	if err != nil || !reflect.DeepEqual(constraints, expectedCatalogConstraints(version)) {
 		return errors.New("database constraint contract is invalid")
 	}
-	if err := verifyApplicationPrivileges(ctx, tx, applicationRole); err != nil {
+	if err := verifyApplicationPrivileges(ctx, tx, applicationRole, version); err != nil {
 		return err
 	}
 	return nil
@@ -313,32 +396,52 @@ func readCatalogConstraints(ctx context.Context, tx pgx.Tx) ([]catalogConstraint
 	return result, rows.Err()
 }
 
-func expectedCatalogColumns() []catalogColumn {
-	return []catalogColumn{
-		{Table: "documents", Name: "scope", DataType: "text", NotNull: true},
-		{Table: "documents", Name: "document_key", DataType: "text", NotNull: true},
-		{Table: "documents", Name: "revision", DataType: "bigint", NotNull: true, Default: "1"},
-		{Table: "documents", Name: "body", DataType: "jsonb", NotNull: true},
-		{Table: "documents", Name: "updated_at", DataType: "timestamp with time zone", NotNull: true, Default: "clock_timestamp()"},
-		{Table: "schema_migrations", Name: "version", DataType: "integer", NotNull: true},
-		{Table: "schema_migrations", Name: "checksum", DataType: "text", NotNull: true},
-		{Table: "schema_migrations", Name: "applied_at", DataType: "timestamp with time zone", NotNull: true, Default: "clock_timestamp()"},
+func expectedCatalogColumns(version int) []catalogColumn {
+	columns := []catalogColumn{}
+	if version >= 2 {
+		columns = append(columns,
+			catalogColumn{Table: "audit_journal", Name: "scope", DataType: "text", NotNull: true},
+			catalogColumn{Table: "audit_journal", Name: "event_id", DataType: "text", NotNull: true},
+			catalogColumn{Table: "audit_journal", Name: "body", DataType: "jsonb", NotNull: true},
+			catalogColumn{Table: "audit_journal", Name: "payload_sha256", DataType: "text", NotNull: true},
+			catalogColumn{Table: "audit_journal", Name: "created_at", DataType: "timestamp with time zone", NotNull: true, Default: "clock_timestamp()"},
+		)
 	}
+	return append(columns,
+		catalogColumn{Table: "documents", Name: "scope", DataType: "text", NotNull: true},
+		catalogColumn{Table: "documents", Name: "document_key", DataType: "text", NotNull: true},
+		catalogColumn{Table: "documents", Name: "revision", DataType: "bigint", NotNull: true, Default: "1"},
+		catalogColumn{Table: "documents", Name: "body", DataType: "jsonb", NotNull: true},
+		catalogColumn{Table: "documents", Name: "updated_at", DataType: "timestamp with time zone", NotNull: true, Default: "clock_timestamp()"},
+		catalogColumn{Table: "schema_migrations", Name: "version", DataType: "integer", NotNull: true},
+		catalogColumn{Table: "schema_migrations", Name: "checksum", DataType: "text", NotNull: true},
+		catalogColumn{Table: "schema_migrations", Name: "applied_at", DataType: "timestamp with time zone", NotNull: true, Default: "clock_timestamp()"},
+	)
 }
 
-func expectedCatalogConstraints() []catalogConstraint {
-	return []catalogConstraint{
-		{Table: "documents", Name: "documents_body_size", Type: "c", Definition: "CHECK ((octet_length((body)::text) <= 8388608))"},
-		{Table: "documents", Name: "documents_key_format", Type: "c", Definition: "CHECK ((document_key ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text))"},
-		{Table: "documents", Name: "documents_pkey", Type: "p", Definition: "PRIMARY KEY (scope, document_key)"},
-		{Table: "documents", Name: "documents_revision_positive", Type: "c", Definition: "CHECK ((revision > 0))"},
-		{Table: "documents", Name: "documents_scope_format", Type: "c", Definition: "CHECK ((scope ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text))"},
-		{Table: "schema_migrations", Name: "schema_migrations_checksum_format", Type: "c", Definition: "CHECK ((checksum ~ '^[0-9a-f]{64}$'::text))"},
-		{Table: "schema_migrations", Name: "schema_migrations_pkey", Type: "p", Definition: "PRIMARY KEY (version)"},
+func expectedCatalogConstraints(version int) []catalogConstraint {
+	constraints := []catalogConstraint{}
+	if version >= 2 {
+		constraints = append(constraints,
+			catalogConstraint{Table: "audit_journal", Name: "audit_journal_body_size", Type: "c", Definition: "CHECK ((octet_length((body)::text) <= 262144))"},
+			catalogConstraint{Table: "audit_journal", Name: "audit_journal_event_id_format", Type: "c", Definition: "CHECK ((event_id ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text))"},
+			catalogConstraint{Table: "audit_journal", Name: "audit_journal_payload_sha256_format", Type: "c", Definition: "CHECK ((payload_sha256 ~ '^[0-9a-f]{64}$'::text))"},
+			catalogConstraint{Table: "audit_journal", Name: "audit_journal_pkey", Type: "p", Definition: "PRIMARY KEY (scope, event_id)"},
+			catalogConstraint{Table: "audit_journal", Name: "audit_journal_scope_format", Type: "c", Definition: "CHECK ((scope ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text))"},
+		)
 	}
+	return append(constraints,
+		catalogConstraint{Table: "documents", Name: "documents_body_size", Type: "c", Definition: "CHECK ((octet_length((body)::text) <= 8388608))"},
+		catalogConstraint{Table: "documents", Name: "documents_key_format", Type: "c", Definition: "CHECK ((document_key ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text))"},
+		catalogConstraint{Table: "documents", Name: "documents_pkey", Type: "p", Definition: "PRIMARY KEY (scope, document_key)"},
+		catalogConstraint{Table: "documents", Name: "documents_revision_positive", Type: "c", Definition: "CHECK ((revision > 0))"},
+		catalogConstraint{Table: "documents", Name: "documents_scope_format", Type: "c", Definition: "CHECK ((scope ~ '^[a-z0-9][a-z0-9._:-]{0,127}$'::text))"},
+		catalogConstraint{Table: "schema_migrations", Name: "schema_migrations_checksum_format", Type: "c", Definition: "CHECK ((checksum ~ '^[0-9a-f]{64}$'::text))"},
+		catalogConstraint{Table: "schema_migrations", Name: "schema_migrations_pkey", Type: "p", Definition: "PRIMARY KEY (version)"},
+	)
 }
 
-func verifyApplicationPrivileges(ctx context.Context, tx pgx.Tx, applicationRole string) error {
+func verifyApplicationPrivileges(ctx context.Context, tx pgx.Tx, applicationRole string, version int) error {
 	var schemaUsage, schemaCreate bool
 	var selectDocument, insertDocument, updateDocument, deleteDocument bool
 	var truncateDocument, referencesDocument, triggerDocument, maintainDocument bool
@@ -359,6 +462,26 @@ func verifyApplicationPrivileges(ctx context.Context, tx pgx.Tx, applicationRole
 		&deleteDocument, &truncateDocument, &referencesDocument, &triggerDocument, &maintainDocument,
 	); err != nil || !schemaUsage || schemaCreate || !selectDocument || !insertDocument || !updateDocument || !deleteDocument || truncateDocument || referencesDocument || triggerDocument || maintainDocument {
 		return errors.New("application document privileges are invalid")
+	}
+	if version >= 2 {
+		var selectJournal, insertJournal, updateJournal, deleteJournal bool
+		var truncateJournal, referencesJournal, triggerJournal, maintainJournal bool
+		if err := tx.QueryRow(ctx, `
+			SELECT
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'SELECT'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'INSERT'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'UPDATE'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'DELETE'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'TRUNCATE'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'REFERENCES'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'TRIGGER'),
+				has_table_privilege($1, 'cloudring_state.audit_journal', 'MAINTAIN')
+		`, applicationRole).Scan(
+			&selectJournal, &insertJournal, &updateJournal, &deleteJournal,
+			&truncateJournal, &referencesJournal, &triggerJournal, &maintainJournal,
+		); err != nil || !selectJournal || !insertJournal || updateJournal || deleteJournal || truncateJournal || referencesJournal || triggerJournal || maintainJournal {
+			return errors.New("application audit journal privileges are invalid")
+		}
 	}
 	for _, role := range []string{applicationRole, "public"} {
 		var usage, create, migrationsAny bool
@@ -392,10 +515,31 @@ func verifyApplicationPrivileges(ctx context.Context, tx pgx.Tx, applicationRole
 	`).Scan(&publicDocumentPrivileges); err != nil || publicDocumentPrivileges {
 		return errors.New("public document privileges are invalid")
 	}
+	if version >= 2 {
+		var publicJournalPrivileges bool
+		if err := tx.QueryRow(ctx, `
+			SELECT
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'SELECT') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'INSERT') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'UPDATE') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'DELETE') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'TRUNCATE') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'REFERENCES') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'TRIGGER') OR
+				has_table_privilege('public', 'cloudring_state.audit_journal', 'MAINTAIN')
+		`).Scan(&publicJournalPrivileges); err != nil || publicJournalPrivileges {
+			return errors.New("public audit journal privileges are invalid")
+		}
+	}
 	return nil
 }
 
 func migrationOneChecksum() string {
 	sum := sha256.Sum256([]byte(strings.Join(migrationOneSQL, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func migrationTwoChecksum() string {
+	sum := sha256.Sum256([]byte(strings.Join(migrationTwoSQL, "\x00")))
 	return hex.EncodeToString(sum[:])
 }
