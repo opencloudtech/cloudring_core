@@ -4,6 +4,7 @@
 package iam
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -159,6 +160,112 @@ func TestAuthorizeSamplesClockOnceForDecisionAndAudit(t *testing.T) {
 	if event := policy.AuditEvents()[0]; !event.Timestamp.Equal(now) {
 		t.Fatalf("audit timestamp = %s, want %s", event.Timestamp, now)
 	}
+}
+
+func TestAuditDependencyMustBeExplicitDurableAndReady(t *testing.T) {
+	now := time.Unix(1710000000, 0).UTC()
+	request := AuthorizationRequest{
+		Subject: PrincipalRef{ID: "user-tenant-admin"},
+		Action:  ActionProjectRead,
+		Target:  testTarget("org-a", "tenant-a", "project-a"),
+		Context: RequestContext{CorrelationID: "corr-audit-dependency", Reason: "audit dependency contract"},
+	}
+
+	t.Run("nil sink", func(t *testing.T) {
+		policy := testPolicy(now)
+		policy.AuditSink = nil
+		decision := policy.Authorize(request)
+		if decision.Allowed || !errors.Is(decision.Err, ErrAuditRequired) {
+			t.Fatalf("Authorize accepted nil audit sink: %#v", decision)
+		}
+	})
+
+	t.Run("ephemeral sink without explicit test allowance", func(t *testing.T) {
+		policy := testPolicy(now)
+		policy.allowEphemeralAudit = false
+		decision := policy.Authorize(request)
+		if decision.Allowed || !errors.Is(decision.Err, ErrAuditRequired) {
+			t.Fatalf("Authorize accepted implicit ephemeral audit: %#v", decision)
+		}
+	})
+
+	t.Run("unready durable sink", func(t *testing.T) {
+		policy := testPolicy(now)
+		policy.AuditSink = unavailableDurableAuditSink{}
+		decision := policy.Authorize(request)
+		if decision.Allowed || !errors.Is(decision.Err, ErrAuditRequired) {
+			t.Fatalf("Authorize accepted unready durable audit: %#v", decision)
+		}
+	})
+}
+
+func TestMemoryAuditSinkIsBounded(t *testing.T) {
+	sink := NewBoundedMemoryAuditSink(1)
+	if err := sink.Append(AuditEvent{}); err != nil {
+		t.Fatalf("first memory audit append failed: %v", err)
+	}
+	if err := sink.Append(AuditEvent{}); err == nil {
+		t.Fatal("bounded memory audit accepted an event beyond capacity")
+	}
+}
+
+func TestAppendDurableSecurityEventUsesSameFailClosedBoundary(t *testing.T) {
+	now := time.Unix(1710000000, 0).UTC()
+	event := SecurityEvent{
+		Type:          "identity.login",
+		Actor:         "verified-subject",
+		Subject:       "verified-subject",
+		Result:        AuditResultAllow,
+		Reason:        "oidc authentication succeeded",
+		CorrelationID: "corr-security-audit",
+		Timestamp:     now,
+	}
+	if err := AppendDurableSecurityEvent(context.Background(), NewMemoryAuditSink(), event); !errors.Is(err, ErrAuditRequired) {
+		t.Fatalf("ephemeral security audit error = %v, want ErrAuditRequired", err)
+	}
+	sink := &recordingSecurityAuditSink{}
+	if err := AppendDurableSecurityEvent(context.Background(), sink, event); err != nil {
+		t.Fatalf("AppendDurableSecurityEvent: %v", err)
+	}
+	if len(sink.events) != 1 || sink.events[0].CorrelationID != event.CorrelationID {
+		t.Fatalf("security event was not durably appended: %#v", sink.events)
+	}
+	sink.readyErr = errors.New("unavailable")
+	if err := AppendDurableSecurityEvent(context.Background(), sink, event); !errors.Is(err, ErrAuditRequired) {
+		t.Fatalf("unready security audit error = %v, want ErrAuditRequired", err)
+	}
+}
+
+type unavailableDurableAuditSink struct{}
+
+func (unavailableDurableAuditSink) Append(AuditEvent) error {
+	return nil
+}
+
+func (unavailableDurableAuditSink) Ready(context.Context) error {
+	return errors.New("unavailable")
+}
+
+func (unavailableDurableAuditSink) Durable() bool {
+	return true
+}
+
+type recordingSecurityAuditSink struct {
+	events   []SecurityEvent
+	readyErr error
+}
+
+func (sink *recordingSecurityAuditSink) AppendSecurityEvent(_ context.Context, event SecurityEvent) error {
+	sink.events = append(sink.events, event)
+	return nil
+}
+
+func (sink *recordingSecurityAuditSink) Ready(context.Context) error {
+	return sink.readyErr
+}
+
+func (*recordingSecurityAuditSink) Durable() bool {
+	return true
 }
 
 type countingClock struct {

@@ -108,9 +108,18 @@ const (
 )
 
 type SessionAssurance struct {
-	State                    SessionState
+	State SessionState
+	// MaxAgeSeconds is the verifier-declared maximum age of Proof.VerifiedAt
+	// for this session. Policy also applies its own stricter maximum.
 	MaxAgeSeconds            int64
 	ReauthenticationRequired bool
+}
+
+type AuthenticationProof struct {
+	// VerifiedAt is when the trusted verifier completed credential validation.
+	// ExpiresAt is the credential or proof expiry, whichever comes first.
+	VerifiedAt time.Time
+	ExpiresAt  time.Time
 }
 
 // AuthenticationResult is returned only by the trusted verifier configured
@@ -122,6 +131,7 @@ type AuthenticationResult struct {
 	CredentialClass CredentialClass
 	MFA             MFAAssurance
 	Session         SessionAssurance
+	Proof           AuthenticationProof
 }
 
 type AuthenticationVerifier interface {
@@ -222,6 +232,7 @@ type Decision struct {
 	CredentialClass CredentialClass
 	MFA             MFAAssurance
 	Session         SessionAssurance
+	Proof           AuthenticationProof
 }
 
 type APIToken struct {

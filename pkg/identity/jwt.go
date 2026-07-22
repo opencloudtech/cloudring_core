@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -30,8 +31,26 @@ type VerifiedClaims struct {
 	ExpiresAt  time.Time
 	IssuedAt   time.Time
 	Subject    string
+	Nonce      string
 	Groups     []string
 	Namespaces []string
+}
+
+// VerifyIDToken verifies the configured JWT profile and binds the ID token to
+// the nonce issued for the browser authorization transaction.
+func (runtime *Runtime) VerifyIDToken(token string, now time.Time, expectedNonce string) (VerifiedClaims, error) {
+	if !validOpaqueAuthorizationValue(expectedNonce) {
+		return VerifiedClaims{}, fmt.Errorf("expected nonce is invalid: %w", errJWTRejected)
+	}
+	claims, err := runtime.VerifyJWT(token, now)
+	if err != nil {
+		return VerifiedClaims{}, err
+	}
+	if len(claims.Nonce) != len(expectedNonce) ||
+		subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(expectedNonce)) != 1 {
+		return VerifiedClaims{}, fmt.Errorf("id token nonce mismatch: %w", errJWTRejected)
+	}
+	return claims, nil
 }
 
 func (runtime *Runtime) VerifyJWT(token string, now time.Time) (VerifiedClaims, error) {
@@ -141,6 +160,7 @@ func (runtime *Runtime) validateClaims(raw map[string]any, now time.Time) (Verif
 	if subject == "" {
 		return VerifiedClaims{}, fmt.Errorf("missing subject: %w", errJWTRejected)
 	}
+	nonce, _ := raw["nonce"].(string)
 	groups, err := claimStrings(raw[runtime.config.GroupsClaim])
 	if err != nil || len(groups) == 0 {
 		return VerifiedClaims{}, fmt.Errorf("missing groups claim: %w", errJWTRejected)
@@ -155,6 +175,7 @@ func (runtime *Runtime) validateClaims(raw map[string]any, now time.Time) (Verif
 		ExpiresAt:  exp,
 		IssuedAt:   iat,
 		Subject:    subject,
+		Nonce:      nonce,
 		Groups:     groups,
 		Namespaces: namespaces,
 	}, nil

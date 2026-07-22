@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -32,36 +33,73 @@ type CookiePolicy struct {
 }
 
 func NewSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) {
-	if policy.Name == "" || policy.Value == "" {
-		return nil, errors.New("cookie name and value are required")
+	sameSite, err := validateHostCookiePolicy(policy.Name, policy.Value, policy.Path, policy.SameSite, true)
+	if err != nil {
+		return nil, err
 	}
-	if policy.Path == "" || policy.Path[0] != '/' {
-		return nil, errors.New("cookie path must be scoped")
-	}
-	if policy.Lifetime <= 0 || policy.Lifetime > 24*time.Hour {
+	if policy.Lifetime < time.Second || policy.Lifetime > 24*time.Hour {
 		return nil, errors.New("cookie lifetime must be positive and bounded")
 	}
-	sameSite := http.SameSiteLaxMode
-	switch policy.SameSite {
-	case SameSiteStrict:
-		sameSite = http.SameSiteStrictMode
-	case SameSiteLax, "":
-		sameSite = http.SameSiteLaxMode
-	default:
-		return nil, errors.New("cookie SameSite must be Lax or Strict")
+	return newSecureHostCookie(
+		policy.Name,
+		policy.Value,
+		policy.Path,
+		now.Add(policy.Lifetime),
+		int(policy.Lifetime/time.Second),
+		sameSite,
+	), nil
+}
+
+func ExpireSessionCookie(policy CookiePolicy, now time.Time) (*http.Cookie, error) {
+	sameSite, err := validateHostCookiePolicy(policy.Name, "", policy.Path, policy.SameSite, false)
+	if err != nil {
+		return nil, err
 	}
-	// #nosec G124 -- every returned cookie is unconditionally Secure,
-	// HttpOnly, and at least SameSite=Lax; the policy cannot disable them.
-	return &http.Cookie{
-		Name:     policy.Name,
-		Value:    policy.Value,
-		Path:     policy.Path,
-		Expires:  now.Add(policy.Lifetime),
-		MaxAge:   int(policy.Lifetime / time.Second),
+	return newSecureHostCookie(policy.Name, "", policy.Path, now.Add(-time.Hour), -1, sameSite), nil
+}
+
+func newSecureHostCookie(name, value, path string, expires time.Time, maxAge int, sameSite http.SameSite) *http.Cookie {
+	// Lax is the secure baseline for OIDC state and nonce cookies: it permits
+	// them on the provider's top-level callback redirect while excluding
+	// cross-site subrequests. A validated Strict policy may narrow this further.
+	cookie := &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     path,
+		Expires:  expires,
+		MaxAge:   maxAge,
 		Secure:   true,
 		HttpOnly: true,
-		SameSite: sameSite,
-	}, nil
+		SameSite: http.SameSiteLaxMode,
+	}
+	if sameSite == http.SameSiteStrictMode {
+		cookie.SameSite = http.SameSiteStrictMode
+	}
+	return cookie
+}
+
+func validateHostCookiePolicy(name, value, path string, sameSitePolicy SameSiteMode, requireValue bool) (http.SameSite, error) {
+	if !strings.HasPrefix(name, "__Host-") {
+		return 0, errors.New("session cookie name must use the __Host- prefix")
+	}
+	if path != "/" {
+		return 0, errors.New("__Host- session cookie path must be /")
+	}
+	if requireValue && value == "" {
+		return 0, errors.New("cookie value is required")
+	}
+	candidate := newSecureHostCookie(name, value, path, time.Time{}, 0, http.SameSiteLaxMode)
+	if err := candidate.Valid(); err != nil {
+		return 0, errors.New("cookie name or value is invalid")
+	}
+	switch sameSitePolicy {
+	case SameSiteStrict:
+		return http.SameSiteStrictMode, nil
+	case SameSiteLax, "":
+		return http.SameSiteLaxMode, nil
+	default:
+		return 0, errors.New("cookie SameSite must be Lax or Strict")
+	}
 }
 
 type CSRFManager struct {
@@ -70,6 +108,7 @@ type CSRFManager struct {
 }
 
 const minCSRFKeyMaterialBytes = 32
+const maxEncodedCSRFTokenBytes = 128
 
 func NewCSRFManager(keyMaterial []byte, maxAge time.Duration) CSRFManager {
 	keyCopy := append([]byte(nil), keyMaterial...)
@@ -103,6 +142,9 @@ func (manager CSRFManager) Check(csrfValue, sessionID string, now time.Time) err
 	}
 	if csrfValue == "" {
 		return errors.New("csrf token is required")
+	}
+	if len(csrfValue) > maxEncodedCSRFTokenBytes {
+		return errors.New("csrf token is malformed")
 	}
 	if sessionID == "" {
 		return errors.New("session id is required")

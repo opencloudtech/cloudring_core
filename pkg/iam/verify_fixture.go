@@ -12,13 +12,17 @@ func fixedVerifierTime() time.Time {
 	return time.Date(2026, 6, 24, 12, 0, 0, 0, time.UTC)
 }
 
-func syntheticAuthenticationVerifier() AuthenticationVerifier {
-	return AuthenticationFunc(func(_ context.Context, request AuthorizationRequest, _ time.Time) (AuthenticationResult, error) {
+// syntheticContractAuthenticationVerifier exists only to exercise the
+// non-serving Verify contract. It echoes fixture request references and must
+// never be used as a serving authenticator.
+func syntheticContractAuthenticationVerifier() AuthenticationVerifier {
+	return AuthenticationFunc(func(_ context.Context, request AuthorizationRequest, at time.Time) (AuthenticationResult, error) {
 		result := AuthenticationResult{
 			SubjectID:       request.Subject.ID,
 			CredentialClass: CredentialClassInteractiveSession,
 			MFA:             MFAAssurance{Required: true, Satisfied: true, MethodClass: MFAMethodExternalIDP},
 			Session:         SessionAssurance{State: SessionStateFresh, MaxAgeSeconds: 3600},
+			Proof:           AuthenticationProof{VerifiedAt: at, ExpiresAt: at.Add(time.Hour)},
 		}
 		switch {
 		case request.Subject.APITokenRef != "":
@@ -36,7 +40,14 @@ func syntheticAuthenticationVerifier() AuthenticationVerifier {
 }
 
 func happyPolicy(now time.Time) *Policy {
-	policy := NewPolicy(PolicyConfig{Clock: FixedClock{At: now}, AuthenticationVerifier: syntheticAuthenticationVerifier()})
+	policy := NewPolicy(PolicyConfig{
+		Clock:                         FixedClock{At: now},
+		AuditSink:                     NewMemoryAuditSink(),
+		AuthenticationVerifier:        syntheticContractAuthenticationVerifier(),
+		AuthenticationProofMaxAge:     time.Hour,
+		AuthenticationProofFutureSkew: time.Minute,
+		AllowEphemeralAudit:           true,
+	})
 	policy.Organizations["org-a"] = Organization{ID: "org-a", Name: "Synthetic Organization A"}
 	policy.Tenants["tenant-a"] = Tenant{
 		ID:    "tenant-a",
@@ -177,7 +188,7 @@ func policyWithoutAuthentication(now time.Time) *Policy {
 func policyWithMFADenied(now time.Time) *Policy {
 	policy := edgePolicy(now)
 	policy.authenticator = AuthenticationFunc(func(ctx context.Context, request AuthorizationRequest, _ time.Time) (AuthenticationResult, error) {
-		result, _ := syntheticAuthenticationVerifier().Authenticate(ctx, request, now)
+		result, _ := syntheticContractAuthenticationVerifier().Authenticate(ctx, request, now)
 		result.MFA.Satisfied = false
 		return result, nil
 	})
@@ -187,7 +198,7 @@ func policyWithMFADenied(now time.Time) *Policy {
 func policyWithStaleSession(now time.Time) *Policy {
 	policy := edgePolicy(now)
 	policy.authenticator = AuthenticationFunc(func(ctx context.Context, request AuthorizationRequest, _ time.Time) (AuthenticationResult, error) {
-		result, _ := syntheticAuthenticationVerifier().Authenticate(ctx, request, now)
+		result, _ := syntheticContractAuthenticationVerifier().Authenticate(ctx, request, now)
 		result.Session.State = SessionStateStale
 		return result, nil
 	})
