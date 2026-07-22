@@ -4,7 +4,7 @@ This matrix records exact public requirements owned by the active goal. `accepte
 requires the final public SHA plus fresh downstream evidence; local tests or a live
 observation alone do not change status.
 
-## Goal 01 — Hub survivability
+## Goal 01 — Reference-cell critical-path survivability
 
 | Requirement | Goal 01 acceptance slice | Status | Evidence |
 | --- | --- | --- | --- |
@@ -32,6 +32,6 @@ observation alone do not change status.
 | CR-DPL-050 | Reference environment self-reconciles from its signed Git source | in_progress | pending Flux source proof |
 | CR-DPL-150 | Mixed-version-safe database migration discipline | in_progress | pending PostgreSQL cutover proof |
 
-Requirements for the remote OCS runtime, dynamic microfrontends, product moderation,
-regional offers, quota, billing, marketplace, multi-cell operation, and federation are
-not owned by Goal 01 and remain pending for later roadmap goals.
+Requirements for the local or remote OCS runtime, dynamic microfrontends, product
+moderation, offers, entitlements, quota, billing, marketplace, multi-cell operation,
+and federation are not owned by Goal 01 and remain pending for later roadmap goals.

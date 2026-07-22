@@ -1,14 +1,16 @@
-# Goal 01 — Hub Survivability: Operations Debt Zero
+# Goal 01 — Reference-Cell Critical-Path Survivability
 
-**Slug:** `hub-survivability`
+**Slug:** `reference-cell-critical-path-survivability`
 
 **Outcome:** the declared critical path of the three-server reference cell survives
 loss of any one server within its SLO, with no acknowledged order, support-ticket, or
 audit-event loss. Bad changes in the covered GitOps and state-migration paths are
 rejected or rolled back to the prior signed revision.
 
-This is a one-cell claim. It is not a multi-region, whole-provider, off-cell runtime,
-marketplace, or federation survivability claim.
+This claim covers only the enumerated critical path of one three-server reference
+cell in one region. It is not a claim of uninterrupted service, availability of every
+cell component, whole-provider availability, multi-region operation, off-cell product
+runtime, marketplace operation, or federation survivability.
 
 ## Verified starting point
 
@@ -42,7 +44,7 @@ The remaining verified debt is material:
 - A critical-path survivability inventory and machine-readable Goal 01 gate inputs.
 - Generic runbooks and tests with synthetic values.
 
-### Reference deployment
+### Reference cell
 
 - A stable vRack/private management path independent of public SSH, plus a separately
   brokered and audited break-glass fallback.
@@ -66,8 +68,9 @@ not belong in the public repository.
 - New tenant-facing features or products.
 - The installer, observability overhaul, general upgrade train, or external OIDC
   cutover.
-- Remote OCS runtime, marketplace, billing implementation, multi-cell operation, or
-  federation. Goal 01 only preserves their architecture invariants.
+- Local or remote OCS runtime, product moderation, offers and entitlements, billing,
+  marketplace, multi-cell operation, or federation. Goal 01 only preserves their
+  architecture invariants.
 
 ## Critical-path inventory
 
