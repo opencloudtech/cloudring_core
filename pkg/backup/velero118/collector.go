@@ -27,6 +27,7 @@ const (
 	providerAbsenceMinimumInterval = 10 * time.Second
 	providerAbsenceClockSkewMargin = time.Second
 	serverStatusMaximumAge         = time.Minute
+	serverStatusAllowedFutureSkew  = 30 * time.Second
 	sourceBaselineMaximumAge       = 15 * time.Minute
 )
 
@@ -58,6 +59,7 @@ func BuildSourceBaseline(ctx context.Context, reader KubernetesReader, request B
 	if clock == nil {
 		clock = SystemClock()
 	}
+	reader = withReadRetries(reader, clock)
 	payload, err := reader.Get(ctx, restoreproof.CoreV1PVCGVR, request.SourceNamespace, request.SourcePVC)
 	if err != nil {
 		return restoreproof.SourceBaseline{}, errors.New("read source PVC baseline")
@@ -73,8 +75,8 @@ func BuildSourceBaseline(ctx context.Context, reader KubernetesReader, request B
 		UIDSHA256:                   restoreproof.SHA256(pvc.Identity.Metadata.UID),
 		ResourceVersionBeforeSHA256: restoreproof.SHA256(pvc.Identity.Metadata.ResourceVersion),
 		ResourceVersionAfterSHA256:  restoreproof.SHA256(pvc.Identity.Metadata.ResourceVersion),
-		StateBeforeSHA256:           pvc.Identity.StateSHA256,
-		StateAfterSHA256:            pvc.Identity.StateSHA256,
+		StateBeforeSHA256:           pvc.Identity.ProofStateSHA256,
+		StateAfterSHA256:            pvc.Identity.ProofStateSHA256,
 	}
 	baseline := restoreproof.SourceBaseline{
 		SchemaVersion: restoreproof.BaselineSchemaVersion,
@@ -109,6 +111,7 @@ func CollectCSIDataMoverVolumeLineage(
 	if clock == nil {
 		clock = SystemClock()
 	}
+	reader = withReadRetries(reader, clock)
 	if err := validateBaseline(request, baseline); err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
@@ -158,10 +161,11 @@ func CollectCSIDataMoverVolumeLineage(
 	}
 
 	probeRequest := ProbeRequest{
-		SchemaVersion:           AdapterRequestSchemaVersion,
-		AdapterExecutableSHA256: probeObserver.IdentitySHA256(),
-		Source:                  ObjectQuery{GVR: restoreproof.CoreV1PVCGVR, Namespace: request.SourceNamespace, Name: request.SourcePVC, UIDSHA256: sourceProof.UIDSHA256},
-		Target:                  ObjectQuery{GVR: restoreproof.CoreV1PVCGVR, Namespace: request.TargetNamespace, Name: request.TargetPVC, UIDSHA256: restoreproof.SHA256(targetPVC.Identity.Metadata.UID)},
+		SchemaVersion:                 AdapterRequestSchemaVersion,
+		RequestDigestCanonicalization: AdapterRequestCanonicalization,
+		AdapterExecutableSHA256:       probeObserver.IdentitySHA256(),
+		Source:                        ObjectQuery{GVR: restoreproof.CoreV1PVCGVR, Namespace: request.SourceNamespace, Name: request.SourcePVC, UIDSHA256: sourceProof.UIDSHA256},
+		Target:                        ObjectQuery{GVR: restoreproof.CoreV1PVCGVR, Namespace: request.TargetNamespace, Name: request.TargetPVC, UIDSHA256: restoreproof.SHA256(targetPVC.Identity.Metadata.UID)},
 	}
 	probeObservation, err := observeProbe(ctx, probeObserver, probeRequest, clock)
 	if err != nil {
@@ -190,7 +194,7 @@ func CollectCSIDataMoverVolumeLineage(
 	}
 	autoCleanedTarget := observedTarget{GVR: restoreproof.CoreV1CMGVR, Namespace: request.VeleroNamespace, Name: resultConfigMap.Identity.Metadata.Name, Proof: resultConfigMap.Identity.Target("configmaps")}
 	allTargets := append(append([]observedTarget(nil), cleanupTargets...), autoCleanedTarget)
-	if err := fenceExactCleanupTargets(ctx, reader, cleanupTargets); err != nil {
+	if err := fenceProofRelevantCleanupTargets(ctx, reader, cleanupTargets); err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
 	if err := requireExactAbsentObservedTarget(ctx, reader, autoCleanedTarget); err != nil {
@@ -208,7 +212,7 @@ func CollectCSIDataMoverVolumeLineage(
 	backend.LineageSHA256 = restoreproof.BackendLineageSHA256(restoreproof.MethodCSIDataMover, &backend)
 	querySHA256 := restoreproof.ProviderAbsenceQuerySHA256(&backend)
 	backend.PresenceObservation = providerObservationProof(presentObservation, "present", querySHA256)
-	if err := fenceExactCleanupTargets(ctx, reader, cleanupTargets); err != nil {
+	if err := fenceProofRelevantCleanupTargets(ctx, reader, cleanupTargets); err != nil {
 		return restoreproof.VolumeReceipt{}, err
 	}
 	if err := requireExactAbsentObservedTarget(ctx, reader, autoCleanedTarget); err != nil {
@@ -407,7 +411,7 @@ func readVeleroRuntime(ctx context.Context, reader KubernetesReader, request Col
 	processedAt, _ := time.Parse(time.RFC3339Nano, status.Status.ProcessedTimestamp)
 	restoreCompleted, _ := time.Parse(time.RFC3339Nano, restoreObject.Status.CompletionTimestamp)
 	observedAt := clock.Now().UTC()
-	if !processedAt.After(restoreCompleted) || observedAt.Before(processedAt) || observedAt.Sub(processedAt) > serverStatusMaximumAge {
+	if !processedAt.After(restoreCompleted) || observedAt.Before(processedAt.Add(-serverStatusAllowedFutureSkew)) || observedAt.After(processedAt.Add(serverStatusMaximumAge)) {
 		return restoreproof.VeleroRuntimeAttestation{}, errors.New("Velero ServerStatusRequest is stale or outside the restore timeline")
 	}
 	attestation := restoreproof.VeleroRuntimeAttestation{
@@ -452,8 +456,8 @@ func readPVCLineage(ctx context.Context, reader KubernetesReader, request Collec
 	}
 	sourceProof := baseline.Source
 	sourceProof.ResourceVersionAfterSHA256 = restoreproof.SHA256(sourcePVC.Identity.Metadata.ResourceVersion)
-	sourceProof.StateAfterSHA256 = sourcePVC.Identity.StateSHA256
-	if sourceProof.UIDSHA256 != restoreproof.SHA256(sourcePVC.Identity.Metadata.UID) || sourceProof.ResourceVersionBeforeSHA256 != sourceProof.ResourceVersionAfterSHA256 || sourceProof.StateBeforeSHA256 != sourceProof.StateAfterSHA256 {
+	sourceProof.StateAfterSHA256 = sourcePVC.Identity.ProofStateSHA256
+	if sourceProof.UIDSHA256 != restoreproof.SHA256(sourcePVC.Identity.Metadata.UID) || sourceProof.StateBeforeSHA256 != sourceProof.StateAfterSHA256 {
 		return PersistentVolumeClaim{}, PersistentVolume{}, PersistentVolumeClaim{}, PersistentVolume{}, restoreproof.SourceResource{}, errors.New("source PVC changed after baseline")
 	}
 	sourcePVBytes, err := reader.Get(ctx, restoreproof.CoreV1PVGVR, "", sourcePVC.Spec.VolumeName)
@@ -526,7 +530,7 @@ func readObservedDataUploadResult(request CollectionRequest, restoreObject Resto
 		SourceNamespace: request.SourceNamespace, SourcePVC: request.SourcePVC,
 		DataUploadName: request.DataUploadName, EvidencePrefix: request.EvidencePrefix,
 	}
-	if observation.RequestSHA256 != adapterRequestSHA256(observationRequest) || observation.EvidenceRef != request.EvidencePrefix+"/velero-data-upload-result-observation" {
+	if observation.RequestSHA256 != requestJSONSHA256(observationRequest) || observation.EvidenceRef != request.EvidencePrefix+"/velero-data-upload-result-observation" {
 		return ConfigMap{}, "", DataUploadResult{}, "", errors.New("Velero DataUploadResult observation request binding is invalid")
 	}
 	restoreUID := restoreObject.Identity.Metadata.UID
@@ -717,7 +721,7 @@ func requireExactCleanup(ctx context.Context, reader KubernetesReader, targets [
 	return true, nil
 }
 
-func fenceExactCleanupTargets(ctx context.Context, reader KubernetesReader, targets []observedTarget) error {
+func fenceProofRelevantCleanupTargets(ctx context.Context, reader KubernetesReader, targets []observedTarget) error {
 	for _, target := range targets {
 		payload, err := reader.Get(ctx, target.GVR, target.Namespace, target.Name)
 		if err != nil {
@@ -726,7 +730,7 @@ func fenceExactCleanupTargets(ctx context.Context, reader KubernetesReader, targ
 		identity, decodeErr := decodeCleanupIdentity(payload, target)
 		if decodeErr != nil || identity.Metadata.DeletionTimestamp != nil && strings.TrimSpace(*identity.Metadata.DeletionTimestamp) != "" ||
 			restoreproof.SHA256(identity.Metadata.UID) != target.Proof.UIDSHA256 ||
-			restoreproof.SHA256(identity.Metadata.ResourceVersion) != target.Proof.ResourceVersionSHA256 || identity.StateSHA256 != target.Proof.ValidatedStateSHA256 {
+			identity.ProofStateSHA256 != target.Proof.ValidatedStateSHA256 {
 			return errors.New("cleanup target identity changed before readiness")
 		}
 	}
@@ -757,7 +761,11 @@ func decodeCleanupIdentity(payload []byte, target observedTarget) (Identity, err
 	if err != nil {
 		return Identity{}, errors.New("cleanup target state is invalid")
 	}
-	return Identity{Metadata: envelope.Metadata, StateSHA256: stateSHA256}, nil
+	proofStateSHA256, err := proofRelevantKubernetesStateSHA256(raw, expectedKind)
+	if err != nil {
+		return Identity{}, errors.New("cleanup target proof state is invalid")
+	}
+	return Identity{Metadata: envelope.Metadata, StateSHA256: stateSHA256, ProofStateSHA256: proofStateSHA256, Raw: raw}, nil
 }
 
 func sourceStillUnchanged(ctx context.Context, reader KubernetesReader, request CollectionRequest, baseline restoreproof.SourceBaseline, sourcePVProof restoreproof.SourceResource) error {
@@ -767,7 +775,7 @@ func sourceStillUnchanged(ctx context.Context, reader KubernetesReader, request 
 	}
 	pvc, err := DecodePersistentVolumeClaim(payload)
 	if err != nil || restoreproof.SHA256(pvc.Identity.Metadata.UID) != baseline.Source.UIDSHA256 ||
-		restoreproof.SHA256(pvc.Identity.Metadata.ResourceVersion) != baseline.Source.ResourceVersionBeforeSHA256 || pvc.Identity.StateSHA256 != baseline.Source.StateBeforeSHA256 {
+		pvc.Identity.ProofStateSHA256 != baseline.Source.StateBeforeSHA256 {
 		return errors.New("source PVC changed from its baseline")
 	}
 	pvPayload, err := reader.Get(ctx, restoreproof.CoreV1PVGVR, "", sourcePVProof.Name)
@@ -776,7 +784,7 @@ func sourceStillUnchanged(ctx context.Context, reader KubernetesReader, request 
 	}
 	pv, err := DecodePersistentVolume(pvPayload)
 	if err != nil || restoreproof.SHA256(pv.Identity.Metadata.UID) != sourcePVProof.UIDSHA256 ||
-		restoreproof.SHA256(pv.Identity.Metadata.ResourceVersion) != sourcePVProof.ResourceVersionBeforeSHA256 || pv.Identity.StateSHA256 != sourcePVProof.StateBeforeSHA256 {
+		pv.Identity.ProofStateSHA256 != sourcePVProof.StateBeforeSHA256 {
 		return errors.New("source PV changed during restore-proof collection")
 	}
 	return nil
@@ -807,13 +815,14 @@ func observeBackend(ctx context.Context, observer BackendObserver, rawHandle str
 		return BackendObservation{}, errors.New("prepare provider adapter request")
 	}
 	request := BackendRequest{
-		SchemaVersion:           AdapterRequestSchemaVersion,
-		Challenge:               challenge,
-		AdapterExecutableSHA256: identity,
-		Operation:               "observe",
-		SourceKind:              "persistent-volume",
-		ArtifactHandle:          rawHandle,
-		ArtifactHandleSHA256:    restoreproof.SHA256(rawHandle),
+		SchemaVersion:                 AdapterRequestSchemaVersion,
+		RequestDigestCanonicalization: AdapterRequestCanonicalization,
+		Challenge:                     challenge,
+		AdapterExecutableSHA256:       identity,
+		Operation:                     "observe",
+		SourceKind:                    "persistent-volume",
+		ArtifactHandle:                rawHandle,
+		ArtifactHandleSHA256:          restoreproof.SHA256(rawHandle),
 	}
 	requestSHA256 := adapterRequestSHA256(request)
 	startedAt := clock.Now().UTC()
@@ -943,7 +952,7 @@ func buildProbeProof(source restoreproof.SourceResource, sourcePVC, targetPVC Pe
 		ValidatedBytes:               observation.ValidatedBytes,
 		StartedAt:                    observation.StartedAt,
 		CompletedAt:                  observation.CompletedAt,
-		ObservedDurationMilliseconds: completed.Sub(started).Milliseconds(),
+		ObservedDurationMilliseconds: durationMillisecondsCeiling(completed.Sub(started)),
 		EvidenceRef:                  observation.EvidenceRef,
 		EvidenceSHA256:               observation.EvidenceSHA256,
 	}
@@ -1114,7 +1123,7 @@ func validatePreCleanupTimeline(restoreObject Restore, probe ProbeObservation, p
 	readyAt, readyErr := time.Parse(time.RFC3339Nano, ready.ReadyAt)
 	probeDuration := probeCompleted.Sub(probeStarted)
 	if restoreErr != nil || probeStartErr != nil || probeCompleteErr != nil || presenceErr != nil || readyErr != nil ||
-		probeStarted.Before(restoreCompleted) || !probeStarted.Before(probeCompleted) || probeDuration%time.Millisecond != 0 ||
+		probeStarted.Before(restoreCompleted) || !probeStarted.Before(probeCompleted) || probeDuration <= 0 ||
 		probeCompleted.After(readyAt) || presenceObserved.Before(probeCompleted) || presenceObserved.After(readyAt) {
 		return errors.New("pre-cleanup validation timeline is invalid")
 	}
@@ -1148,6 +1157,10 @@ func newChallenge() (string, error) {
 }
 
 func adapterRequestSHA256(request any) string {
+	return AdapterRequestSHA256(request)
+}
+
+func requestJSONSHA256(request any) string {
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return ""
@@ -1161,6 +1174,17 @@ func timestampWithin(value string, lower, upper time.Time, tolerance time.Durati
 		return false
 	}
 	return !parsed.Before(lower.Add(-tolerance)) && !parsed.After(upper.Add(tolerance))
+}
+
+func durationMillisecondsCeiling(duration time.Duration) int64 {
+	if duration <= 0 {
+		return 0
+	}
+	milliseconds := duration / time.Millisecond
+	if duration%time.Millisecond != 0 {
+		milliseconds++
+	}
+	return int64(milliseconds)
 }
 
 func controllerOwner(owners []OwnerReference, apiVersion, kind, name string) (OwnerReference, bool) {
@@ -1197,7 +1221,7 @@ func sourceResourceFromIdentity(identity Identity, resource string) restoreproof
 	return restoreproof.SourceResource{
 		Resource: resource, Namespace: identity.Metadata.Namespace, Name: identity.Metadata.Name, UIDSHA256: uidSHA256,
 		ResourceVersionBeforeSHA256: resourceVersionSHA256, ResourceVersionAfterSHA256: resourceVersionSHA256,
-		StateBeforeSHA256: identity.StateSHA256, StateAfterSHA256: identity.StateSHA256,
+		StateBeforeSHA256: identity.ProofStateSHA256, StateAfterSHA256: identity.ProofStateSHA256,
 	}
 }
 func cloneStringMap(value map[string]string) map[string]string {

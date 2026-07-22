@@ -330,7 +330,7 @@ func (observer *ExecProbeObserver) Close() error {
 }
 
 func (observer *ExecProbeObserver) Observe(ctx context.Context, request ProbeRequest) (ProbeObservation, error) {
-	if observer == nil || observer.executable == nil || request.SchemaVersion != AdapterRequestSchemaVersion || !validSHA256(request.Challenge) ||
+	if observer == nil || observer.executable == nil || request.SchemaVersion != AdapterRequestSchemaVersion || request.RequestDigestCanonicalization != AdapterRequestCanonicalization || !validSHA256(request.Challenge) ||
 		request.AdapterExecutableSHA256 != observer.IdentitySHA256() {
 		return ProbeObservation{}, errors.New("invalid data probe adapter invocation")
 	}
@@ -338,7 +338,7 @@ func (observer *ExecProbeObserver) Observe(ctx context.Context, request ProbeReq
 	if err != nil {
 		return ProbeObservation{}, errors.New("encode data probe request")
 	}
-	requestSHA256 := restoreproof.SHA256(string(input))
+	requestSHA256 := adapterRequestSHA256(request)
 	output, childError, err := observer.executable.RunWithEnvironment(ctx, nil, input, maxAdapterResponseBytes, 64<<10, observer.environment, observer.kubeconfig)
 	zeroBytes(input)
 	zeroBytes(childError)
@@ -390,7 +390,7 @@ func (observer *ExecBackendObserver) Close() error {
 }
 
 func (observer *ExecBackendObserver) Observe(ctx context.Context, request BackendRequest) (BackendObservation, error) {
-	if observer == nil || observer.executable == nil || request.SchemaVersion != AdapterRequestSchemaVersion || !validSHA256(request.Challenge) ||
+	if observer == nil || observer.executable == nil || request.SchemaVersion != AdapterRequestSchemaVersion || request.RequestDigestCanonicalization != AdapterRequestCanonicalization || !validSHA256(request.Challenge) ||
 		request.AdapterExecutableSHA256 != observer.IdentitySHA256() || request.Operation != "observe" || request.SourceKind != "persistent-volume" ||
 		request.ArtifactHandle == "" || restoreproof.SHA256(request.ArtifactHandle) != request.ArtifactHandleSHA256 {
 		return BackendObservation{}, errors.New("invalid provider observer invocation")
@@ -399,7 +399,7 @@ func (observer *ExecBackendObserver) Observe(ctx context.Context, request Backen
 	if err != nil {
 		return BackendObservation{}, errors.New("encode provider observation request")
 	}
-	requestSHA256 := restoreproof.SHA256(string(input))
+	requestSHA256 := adapterRequestSHA256(request)
 	output, childError, err := observer.executable.RunWithEnvironment(ctx, nil, input, maxAdapterResponseBytes, 64<<10, observer.environment, nil)
 	zeroBytes(input)
 	zeroBytes(childError)

@@ -260,8 +260,71 @@ func decodeObject(data []byte, apiVersion, kind string, typed any) (Identity, er
 	if err != nil {
 		return Identity{}, err
 	}
+	proofStateSHA256, err := proofRelevantKubernetesStateSHA256(raw, kind)
+	if err != nil {
+		return Identity{}, err
+	}
 	if err := strictjson.Decode(data, typed); err != nil {
 		return Identity{}, errors.New("decode typed Kubernetes object")
 	}
-	return Identity{Metadata: metadata, StateSHA256: stateSHA256, Raw: raw}, nil
+	return Identity{Metadata: metadata, StateSHA256: stateSHA256, ProofStateSHA256: proofStateSHA256, Raw: raw}, nil
+}
+
+// proofRelevantKubernetesStateSHA256 excludes Kubernetes transport and
+// controller bookkeeping while retaining the exact identity, deletion fence,
+// desired state, and terminal fields used by the restore proof. Unknown spec
+// fields remain covered, so a material storage or lineage change still fails
+// closed.
+func proofRelevantKubernetesStateSHA256(raw map[string]any, kind string) (string, error) {
+	metadata, ok := raw["metadata"].(map[string]any)
+	if !ok {
+		return "", errors.New("Kubernetes proof state lacks metadata")
+	}
+	proofMetadata := map[string]any{}
+	for _, key := range []string{"name", "namespace", "uid", "deletionTimestamp"} {
+		if value, exists := metadata[key]; exists {
+			proofMetadata[key] = value
+		}
+	}
+	if kind == "DataDownload" {
+		copyProofFields(proofMetadata, metadata, "ownerReferences")
+		if labels, ok := metadata["labels"].(map[string]any); ok {
+			proofLabels := map[string]any{}
+			copyProofFields(proofLabels, labels, "velero.io/restore-name", "velero.io/restore-uid", "velero.io/async-operation-id")
+			proofMetadata["labels"] = proofLabels
+		}
+	}
+	projection := map[string]any{
+		"apiVersion": raw["apiVersion"],
+		"kind":       raw["kind"],
+		"metadata":   proofMetadata,
+	}
+	if spec, exists := raw["spec"]; exists {
+		projection["spec"] = spec
+	}
+	if data, exists := raw["data"]; exists {
+		projection["data"] = data
+	}
+	status, _ := raw["status"].(map[string]any)
+	proofStatus := map[string]any{}
+	switch kind {
+	case "PersistentVolumeClaim", "PersistentVolume":
+		copyProofFields(proofStatus, status, "phase")
+	case "DataDownload":
+		copyProofFields(proofStatus, status, "phase", "startTimestamp", "completionTimestamp", "progress")
+	default:
+		return restoreproof.CanonicalKubernetesStateSHA256(raw)
+	}
+	if len(proofStatus) != 0 {
+		projection["status"] = proofStatus
+	}
+	return restoreproof.CanonicalKubernetesStateSHA256(projection)
+}
+
+func copyProofFields(destination, source map[string]any, fields ...string) {
+	for _, field := range fields {
+		if value, exists := source[field]; exists {
+			destination[field] = value
+		}
+	}
 }

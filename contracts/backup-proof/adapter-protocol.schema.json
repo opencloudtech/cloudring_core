@@ -53,9 +53,10 @@
     "probeRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "challenge", "adapterExecutableSha256", "source", "target"],
+      "required": ["schemaVersion", "requestDigestCanonicalization", "challenge", "adapterExecutableSha256", "source", "target"],
       "properties": {
-        "schemaVersion": { "const": "cloudring.restore-proof.adapter-request/v1" },
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-request/v2" },
+        "requestDigestCanonicalization": { "const": "cloudring.restore-proof.adapter-canonical-json/v1" },
         "challenge": { "$ref": "#/$defs/digest" },
         "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
         "source": { "$ref": "#/$defs/objectQuery" },
@@ -65,9 +66,10 @@
     "backendRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "challenge", "adapterExecutableSha256", "operation", "sourceKind", "artifactHandle", "artifactHandleSha256"],
+      "required": ["schemaVersion", "requestDigestCanonicalization", "challenge", "adapterExecutableSha256", "operation", "sourceKind", "artifactHandle", "artifactHandleSha256"],
       "properties": {
-        "schemaVersion": { "const": "cloudring.restore-proof.adapter-request/v1" },
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-request/v2" },
+        "requestDigestCanonicalization": { "const": "cloudring.restore-proof.adapter-canonical-json/v1" },
         "challenge": { "$ref": "#/$defs/digest" },
         "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
         "operation": { "const": "observe" },
@@ -95,10 +97,10 @@
         "evidenceSha256"
       ],
       "properties": {
-        "schemaVersion": { "const": "cloudring.restore-proof.adapter-response/v1" },
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-response/v2" },
         "implementation": { "$ref": "#/$defs/runtimeId" },
         "version": { "$ref": "#/$defs/versionId" },
-        "requestSha256": { "$ref": "#/$defs/digest" },
+        "requestSha256": { "$ref": "#/$defs/digest", "description": "SHA-256 of cloudring.restore-proof.adapter-canonical-json/v1 request bytes" },
         "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
         "hashAlgorithm": { "const": "sha256" },
         "sourceSha256": { "$ref": "#/$defs/digest" },
@@ -115,10 +117,10 @@
       "additionalProperties": false,
       "required": ["schemaVersion", "implementation", "version", "requestSha256", "adapterExecutableSha256", "artifactHandleSha256", "present", "observedAt", "evidenceRef", "evidenceSha256"],
       "properties": {
-        "schemaVersion": { "const": "cloudring.restore-proof.adapter-response/v1" },
+        "schemaVersion": { "const": "cloudring.restore-proof.adapter-response/v2" },
         "implementation": { "$ref": "#/$defs/runtimeId" },
         "version": { "$ref": "#/$defs/versionId" },
-        "requestSha256": { "$ref": "#/$defs/digest" },
+        "requestSha256": { "$ref": "#/$defs/digest", "description": "SHA-256 of cloudring.restore-proof.adapter-canonical-json/v1 request bytes" },
         "adapterExecutableSha256": { "$ref": "#/$defs/digest" },
         "artifactHandleSha256": { "$ref": "#/$defs/digest" },
         "present": { "type": "boolean" },

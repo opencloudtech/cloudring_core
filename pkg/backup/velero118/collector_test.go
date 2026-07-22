@@ -470,11 +470,6 @@ func TestCleanupBarrierRejectsPreMarkerStateDrift(t *testing.T) {
 				object["data"].(map[string]any)["restore-uid"] = `{"changed":true}`
 			})
 		}},
-		{name: "source PVC mutation", mutate: func(t *testing.T, reader *fakeReader) {
-			mutateObject(t, reader, restoreproof.CoreV1PVCGVR, "source", "volume", func(object map[string]any) {
-				object["metadata"].(map[string]any)["resourceVersion"] = "11"
-			})
-		}},
 	}
 	for _, test := range cases {
 		test := test
@@ -567,7 +562,6 @@ func TestCleanupBarrierIsNotPublishedBeforePreCleanupTimelineIsValid(t *testing.
 	}{
 		{name: "probe starts before restore completion", mutateProbe: func(probe *ProbeObservation) { probe.StartedAt = "2026-07-14T12:01:59Z" }},
 		{name: "probe completes after readiness", mutateProbe: func(probe *ProbeObservation) { probe.CompletedAt = "2026-07-14T12:02:10Z" }},
-		{name: "probe duration is not whole milliseconds", mutateProbe: func(probe *ProbeObservation) { probe.CompletedAt = "2026-07-14T12:02:01.0015Z" }},
 		{name: "provider presence predates probe completion", providerFirstObservedAt: "2026-07-14T12:02:01Z"},
 		{name: "provider presence follows readiness", providerFirstObservedAt: "2026-07-14T12:02:10Z"},
 	}
@@ -736,6 +730,147 @@ func TestReadArchivedDataUploadRejectsUnsafeAndMismatchedArchives(t *testing.T) 
 	if _, err := ReadArchivedDataUpload(bytes.NewReader(mismatch), "velero", "backup-volume-1"); err == nil {
 		t.Fatal("mismatched archive copies unexpectedly passed")
 	}
+	wrongIdentity := bytes.ReplaceAll(dataUpload, []byte("backup-volume-1"), []byte("backup-volume-2"))
+	wrongIdentityArchive := makeArchive(t, []archiveEntry{
+		{name: archivedDataUploadPath("velero", "backup-volume-1", false), body: wrongIdentity},
+		{name: archivedDataUploadPath("velero", "backup-volume-1", true), body: wrongIdentity},
+	})
+	if _, err := ReadArchivedDataUpload(bytes.NewReader(wrongIdentityArchive), "velero", "backup-volume-1"); err == nil {
+		t.Fatal("selected archive path with a different DataUpload identity unexpectedly passed")
+	}
+}
+
+func TestReadArchivedDataUploadSelectsExactObjectFromMultiVolumeArchive(t *testing.T) {
+	t.Parallel()
+	_, selected := validRuntimeFixture(t)
+	other := bytes.ReplaceAll(selected, []byte("backup-volume-1"), []byte("backup-volume-2"))
+	archive := makeArchive(t, []archiveEntry{
+		{name: archivedDataUploadPath("velero", "backup-volume-2", false), body: other},
+		{name: archivedDataUploadPath("velero", "backup-volume-1", false), body: selected},
+		{name: archivedDataUploadPath("velero", "backup-volume-2", true), body: other},
+		{name: archivedDataUploadPath("velero", "backup-volume-1", true), body: selected},
+	})
+	got, err := ReadArchivedDataUpload(bytes.NewReader(archive), "velero", "backup-volume-1")
+	if err != nil {
+		t.Fatalf("multi-volume archive selection failed: %v", err)
+	}
+	defer zeroBytes(got)
+	if canonicalJSONSHA256(got) != canonicalJSONSHA256(selected) {
+		t.Fatal("archive reader did not return the exact selected DataUpload")
+	}
+}
+
+func TestCollectorAcceptsBoundedServerStatusClockSkew(t *testing.T) {
+	t.Parallel()
+	reader, _ := validRuntimeFixture(t)
+	restorePayload := reader.objects[readerKey(restoreproof.VeleroV1RestoreGVR, "velero", "restore-copy")]
+	restoreObject, err := DecodeRestore(restorePayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validCollectionRequest()
+	processedAt := mustTime(t, "2026-07-14T12:02:01Z")
+	for _, test := range []struct {
+		name    string
+		now     time.Time
+		wantErr bool
+	}{
+		{name: "within negative skew", now: processedAt.Add(-serverStatusAllowedFutureSkew)},
+		{name: "beyond negative skew", now: processedAt.Add(-serverStatusAllowedFutureSkew - time.Nanosecond), wantErr: true},
+		{name: "maximum age", now: processedAt.Add(serverStatusMaximumAge)},
+		{name: "older than maximum age", now: processedAt.Add(serverStatusMaximumAge + time.Nanosecond), wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := readVeleroRuntime(t.Context(), reader, request, restoreObject, &fakeClock{now: test.now})
+			if (err != nil) != test.wantErr {
+				t.Fatalf("readVeleroRuntime() error = %v, wantErr=%t", err, test.wantErr)
+			}
+		})
+	}
+
+	receiptReader, archive, collectionRequest, baseline, collectionClock := preparedCollectionFixture(t)
+	receipt, err := CollectCSIDataMoverVolumeLineage(t.Context(), receiptReader, fakeProbeObserver{observation: validProbeObservationFixture()}, &fakeBackendObserver{clock: collectionClock}, &fakeCleanupBarrier{}, collectionRequest, baseline, archive, collectionClock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt.VeleroRuntime.ObservedAt = processedAt.Add(-serverStatusAllowedFutureSkew).Format(time.RFC3339Nano)
+	receipt.VeleroRuntime.EvidenceSHA256 = restoreproof.VeleroRuntimeEvidenceSHA256(receipt.VeleroRuntime)
+	receipt.ReceiptSHA256 = restoreproof.ReceiptSHA256(receipt)
+	if err := restoreproof.ValidateCSIDataMoverVolumeReceipt(&receipt); err != nil {
+		t.Fatalf("receipt validator rejected bounded clock skew: %v", err)
+	}
+	receipt.VeleroRuntime.ObservedAt = processedAt.Add(-serverStatusAllowedFutureSkew - time.Nanosecond).Format(time.RFC3339Nano)
+	receipt.VeleroRuntime.EvidenceSHA256 = restoreproof.VeleroRuntimeEvidenceSHA256(receipt.VeleroRuntime)
+	receipt.ReceiptSHA256 = restoreproof.ReceiptSHA256(receipt)
+	if err := restoreproof.ValidateCSIDataMoverVolumeReceipt(&receipt); err == nil {
+		t.Fatal("receipt validator accepted excessive negative clock skew")
+	}
+}
+
+func TestCollectorAcceptsBenignMetadataAndResourceVersionChurn(t *testing.T) {
+	t.Parallel()
+	reader, archive, request, baseline, clock := preparedCollectionFixture(t)
+	mutateObject(t, reader, restoreproof.CoreV1PVCGVR, "source", "volume", func(object map[string]any) {
+		metadata := object["metadata"].(map[string]any)
+		metadata["resourceVersion"] = "11"
+		metadata["annotations"] = map[string]any{"controller.example/heartbeat": "new"}
+	})
+	probe := fakeProbeObserver{observation: ProbeObservation{}, onObserve: func() {
+		mutateObject(t, reader, restoreproof.CoreV1PVCGVR, "target", "volume", func(object map[string]any) {
+			metadata := object["metadata"].(map[string]any)
+			metadata["resourceVersion"] = "22"
+			metadata["annotations"] = map[string]any{"controller.example/heartbeat": "new"}
+		})
+	}}
+	probe.observation = validProbeObservationFixture()
+	receipt, err := CollectCSIDataMoverVolumeLineage(t.Context(), reader, probe, &fakeBackendObserver{clock: clock}, &fakeCleanupBarrier{}, request, baseline, archive, clock)
+	if err != nil {
+		t.Fatalf("benign object churn rejected: %v", err)
+	}
+	if receipt.Context.Cleanup.SourceResources[0].ResourceVersionBeforeSHA256 == receipt.Context.Cleanup.SourceResources[0].ResourceVersionAfterSHA256 {
+		t.Fatal("receipt did not record the observed source resourceVersion change")
+	}
+}
+
+func TestCollectorRejectsProofRelevantSameUIDChange(t *testing.T) {
+	t.Parallel()
+	reader, archive, request, baseline, clock := preparedCollectionFixture(t)
+	probe := fakeProbeObserver{observation: validProbeObservationFixture(), onObserve: func() {
+		mutateObject(t, reader, restoreproof.CoreV1PVCGVR, "target", "volume", func(object map[string]any) {
+			object["metadata"].(map[string]any)["resourceVersion"] = "22"
+			object["spec"].(map[string]any)["storageClassName"] = "other"
+		})
+	}}
+	if _, err := CollectCSIDataMoverVolumeLineage(t.Context(), reader, probe, &fakeBackendObserver{clock: clock}, &fakeCleanupBarrier{}, request, baseline, archive, clock); err == nil {
+		t.Fatal("proof-relevant same-UID change unexpectedly passed")
+	}
+}
+
+func TestPreCleanupTimelineAcceptsNanosecondProbeDuration(t *testing.T) {
+	t.Parallel()
+	restoreObject := Restore{Status: RestoreStatus{CompletionTimestamp: "2026-07-14T12:02:00Z"}}
+	probe := ProbeObservation{StartedAt: "2026-07-14T12:02:00.000000001Z", CompletedAt: "2026-07-14T12:02:00.001500002Z"}
+	present := BackendObservation{ObservedAt: "2026-07-14T12:02:00.001500003Z"}
+	ready := CleanupReady{ReadyAt: "2026-07-14T12:02:01Z"}
+	if err := validatePreCleanupTimeline(restoreObject, probe, present, ready); err != nil {
+		t.Fatalf("nanosecond probe timestamps rejected: %v", err)
+	}
+}
+
+func TestCollectorAcceptsSubMillisecondNanosecondProbe(t *testing.T) {
+	t.Parallel()
+	reader, archive, request, baseline, clock := preparedCollectionFixture(t)
+	probe := validProbeObservationFixture()
+	probe.StartedAt = "2026-07-14T12:02:01.000000001Z"
+	probe.CompletedAt = "2026-07-14T12:02:01.000000501Z"
+	receipt, err := CollectCSIDataMoverVolumeLineage(t.Context(), reader, fakeProbeObserver{observation: probe}, &fakeBackendObserver{clock: clock}, &fakeCleanupBarrier{}, request, baseline, archive, clock)
+	if err != nil {
+		t.Fatalf("sub-millisecond nanosecond probe rejected: %v", err)
+	}
+	if got := receipt.Lineage.Probes[0].ObservedDurationMilliseconds; got != 1 {
+		t.Fatalf("sub-millisecond receipt duration = %d, want 1", got)
+	}
+	assertReceiptMatchesSchema(t, receipt)
 }
 
 type fakeReader struct {
@@ -773,7 +908,7 @@ func (reader *fakeReader) Get(_ context.Context, gvr restoreproof.GVR, namespace
 		return nil, ErrNotFound
 	}
 	if reader.deleted && reader.mutateSourceOnCleanup && gvr == restoreproof.CoreV1PVCGVR && namespace == "source" {
-		mutated := bytes.Replace(value, []byte(`"resourceVersion":"10"`), []byte(`"resourceVersion":"11"`), 1)
+		mutated := bytes.Replace(value, []byte(`"volumeName":"source-pv"`), []byte(`"volumeName":"changed-source-pv"`), 1)
 		return mutated, nil
 	}
 	return append([]byte(nil), value...), nil
@@ -1101,7 +1236,7 @@ func validDataUploadResultObservation() *DataUploadResultObservation {
 		WatchStartedAt: "2026-07-14T12:00:30Z",
 		ObservedAt:     "2026-07-14T12:01:30Z",
 		CapturedAt:     "2026-07-14T12:01:31Z",
-		RequestSHA256:  adapterRequestSHA256(request),
+		RequestSHA256:  requestJSONSHA256(request),
 		EventType:      "ADDED",
 		Object:         raw,
 		ObjectSHA256:   canonicalJSONSHA256(raw),

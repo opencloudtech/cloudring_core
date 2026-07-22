@@ -16,8 +16,8 @@ import (
 const (
 	BaselineRequestSchemaVersion                    = "cloudring.restore-proof.baseline-request/v1"
 	CollectionRequestSchemaVersion                  = "cloudring.restore-proof.collection-request/v1"
-	AdapterRequestSchemaVersion                     = "cloudring.restore-proof.adapter-request/v1"
-	AdapterResponseSchemaVersion                    = "cloudring.restore-proof.adapter-response/v1"
+	AdapterRequestSchemaVersion                     = "cloudring.restore-proof.adapter-request/v2"
+	AdapterResponseSchemaVersion                    = "cloudring.restore-proof.adapter-response/v2"
 	CleanupReadySchemaVersion                       = "cloudring.restore-proof.cleanup-ready/v1"
 	CleanupReadyStatus                              = "ready-for-cleanup"
 	DataUploadResultObservationRequestSchemaVersion = "cloudring.restore-proof.data-upload-result-observation-request/v1"
@@ -46,9 +46,10 @@ type Metadata struct {
 }
 
 type Identity struct {
-	Metadata    Metadata
-	StateSHA256 string
-	Raw         map[string]any
+	Metadata         Metadata
+	StateSHA256      string
+	ProofStateSHA256 string
+	Raw              map[string]any
 }
 
 func (identity Identity) Target(resource string) restoreproof.TargetResource {
@@ -58,7 +59,7 @@ func (identity Identity) Target(resource string) restoreproof.TargetResource {
 		Name:                  identity.Metadata.Name,
 		UIDSHA256:             restoreproof.SHA256(identity.Metadata.UID),
 		ResourceVersionSHA256: restoreproof.SHA256(identity.Metadata.ResourceVersion),
-		ValidatedStateSHA256:  identity.StateSHA256,
+		ValidatedStateSHA256:  identity.ProofStateSHA256,
 	}
 }
 
@@ -248,11 +249,12 @@ type DataUploadResultObservationReadyBarrier interface {
 }
 
 type ProbeRequest struct {
-	SchemaVersion           string      `json:"schemaVersion"`
-	Challenge               string      `json:"challenge"`
-	AdapterExecutableSHA256 string      `json:"adapterExecutableSha256"`
-	Source                  ObjectQuery `json:"source"`
-	Target                  ObjectQuery `json:"target"`
+	SchemaVersion                 string      `json:"schemaVersion"`
+	RequestDigestCanonicalization string      `json:"requestDigestCanonicalization"`
+	Challenge                     string      `json:"challenge"`
+	AdapterExecutableSHA256       string      `json:"adapterExecutableSha256"`
+	Source                        ObjectQuery `json:"source"`
+	Target                        ObjectQuery `json:"target"`
 }
 
 type ObjectQuery struct {
@@ -284,13 +286,14 @@ type ProbeObserver interface {
 }
 
 type BackendRequest struct {
-	SchemaVersion           string `json:"schemaVersion"`
-	Challenge               string `json:"challenge"`
-	AdapterExecutableSHA256 string `json:"adapterExecutableSha256"`
-	Operation               string `json:"operation"`
-	SourceKind              string `json:"sourceKind"`
-	ArtifactHandle          string `json:"artifactHandle"`
-	ArtifactHandleSHA256    string `json:"artifactHandleSha256"`
+	SchemaVersion                 string `json:"schemaVersion"`
+	RequestDigestCanonicalization string `json:"requestDigestCanonicalization"`
+	Challenge                     string `json:"challenge"`
+	AdapterExecutableSHA256       string `json:"adapterExecutableSha256"`
+	Operation                     string `json:"operation"`
+	SourceKind                    string `json:"sourceKind"`
+	ArtifactHandle                string `json:"artifactHandle"`
+	ArtifactHandleSHA256          string `json:"artifactHandleSha256"`
 }
 
 type BackendObservation struct {

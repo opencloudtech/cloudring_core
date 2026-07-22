@@ -93,13 +93,13 @@ func runAdapter(mode string) error {
 	if err != nil || len(input) == 0 {
 		return errors.New("read adapter request")
 	}
-	requestSHA256 := restoreproof.SHA256(string(input))
 	switch mode {
 	case "probe":
 		var request velero118.ProbeRequest
 		if err := json.Unmarshal(input, &request); err != nil {
 			return err
 		}
+		requestSHA256 := velero118.AdapterRequestSHA256(request)
 		started := time.Now().UTC().Truncate(time.Millisecond)
 		completed := started.Add(time.Millisecond)
 		if wait := time.Until(completed); wait > 0 {
@@ -117,6 +117,7 @@ func runAdapter(mode string) error {
 		if err := json.Unmarshal(input, &request); err != nil {
 			return err
 		}
+		requestSHA256 := velero118.AdapterRequestSHA256(request)
 		present := request.ArtifactHandleSHA256 == restoreproof.SHA256("source-provider-volume-handle") || !fileExists(os.Getenv(cleanupEnvironment))
 		return json.NewEncoder(os.Stdout).Encode(velero118.BackendObservation{
 			SchemaVersion: velero118.AdapterResponseSchemaVersion, Implementation: "openstack-cinder", Version: "v1", Present: &present,

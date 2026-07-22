@@ -36,6 +36,7 @@ func ObserveDataUploadResult(
 	if clock == nil {
 		clock = SystemClock()
 	}
+	reader = withWatchReadRetries(reader, clock)
 	observationContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	ctx = observationContext
@@ -59,7 +60,7 @@ func ObserveDataUploadResult(
 		return DataUploadResultObservation{}, errors.New("initial DataUploadResult list is not an exact empty fence")
 	}
 	watchStartedAt := canonicalTimestamp(clock.Now())
-	requestSHA256 := adapterRequestSHA256(request)
+	requestSHA256 := requestJSONSHA256(request)
 	ready := DataUploadResultObservationReady{
 		SchemaVersion: DataUploadResultObservationReadySchemaVersion,
 		Status:        DataUploadResultObservationReadyStatus, WatchStartedAt: watchStartedAt, RequestSHA256: requestSHA256,

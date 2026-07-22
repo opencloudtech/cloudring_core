@@ -27,6 +27,8 @@ The first contract supports exactly:
 - distinct source and restored PV identities and CSI handles under the same
   observed provider implementation;
 - a retained DataUpload present after restore cleanup;
+- a BackupContents archive that may contain other volumes, while both normal
+  and preferred-version copies of the explicitly selected DataUpload match;
 - two provider absence observations at least ten seconds apart, followed by a
   source-handle presence observation and a final Kubernetes/source quiet fence
   after the second target absence observation.
@@ -66,6 +68,18 @@ Two executable adapters are required:
 
 The runtime copies each adapter into a private pinned executable snapshot,
 hashes it, and binds every invocation to a fresh nonce and exact request digest.
+Adapter request/response schema v2 requires the self-describing
+`requestDigestCanonicalization` request field; v1 adapters fail closed and must
+be upgraded before collection.
+The digest is computed from
+`cloudring.restore-proof.adapter-canonical-json/v1`, not from the byte order of
+Go's `encoding/json`. Object keys are sorted lexicographically at every depth;
+the UTF-8 JSON contains no insignificant whitespace; quotation mark, reverse
+solidus, and U+0000 through U+001F use the published JSON escapes; all other
+valid Unicode scalar values are emitted as UTF-8. Adapter requests contain no
+JSON numbers in this protocol version. The normative probe and provider
+vectors, canonical bytes, and SHA-256 values are published in
+`contracts/backup-proof/adapter-digest-conformance-vectors.json`.
 Each invocation has a hard timeout and Unix process-tree termination.
 Adapters receive an explicit minimal environment. When collection uses
 `--kubeconfig-fd`, only the data-probe adapter receives the same in-memory
@@ -115,6 +129,9 @@ derived from `synthetic-collection-request.json`. Start collection while that
 object is still present: Velero 1.18.2 expires processed requests after one
 minute. The collector requires `serverVersion: v1.18.2`, a processing timestamp
 after Restore completion, exact UID/GVK, and the one-minute freshness bound.
+Collector-host time may be at most 30 seconds behind the processed timestamp;
+older negative skew and observations more than one minute after processing
+still fail closed. This tolerance does not extend the upper freshness bound.
 The downstream workflow also generates a fresh random run nonce, puts only its
 SHA-256 digest in `cleanupRunNonceSha256`, and checks that exact digest in the
 cleanup-ready marker before acting. Keep all real names, UIDs, nonces, and
@@ -163,9 +180,20 @@ performs two target-provider absence reads, proves the distinct source provider
 handle is still present, and then runs a final source PVC/PV and target
 Kubernetes fence.
 Immediately before marker publication, the collector re-reads every cleanup
-target and verifies its original UID, resourceVersion, and canonical state,
-but that fence does not replace UID/resourceVersion preconditions or the
+target and verifies its original UID plus proof-relevant state. For PVCs and
+PVs this covers the complete spec and bound phase; for DataDownloads it also
+covers the terminal phase, timeline, and progress. ResourceVersion, annotations,
+labels, managed fields, and unknown controller status bookkeeping are not
+continuity failures by themselves. UID replacement, deletion start, spec
+changes, changes to DataDownload lineage labels/ownership, and changes to the
+selected terminal state still fail closed. This
+proof fence does not replace UID/resourceVersion delete preconditions or the
 downstream no-recreation rule after publication.
+
+Probe `startedAt` and `completedAt` accept canonical RFC 3339 timestamps with
+nanosecond precision. `observedDurationMilliseconds` is a compatibility field
+rounded up to the next whole millisecond, so every positive sub-millisecond
+duration remains schema-valid without discarding timestamp precision.
 
 Use a protected local directory with no concurrent writers. Artifact
 publication relies on a synced temporary file plus an atomic same-directory
@@ -245,6 +273,12 @@ belongs to the downstream workflow, not this collector. The BackupContents
 archive is supplied as an existing protected file; its acquisition policy
 remains downstream.
 
+`Get`, `ListPage`, and `ConfirmAbsent` are idempotent and receive at most three
+attempts under a 30-second per-read budget, with bounded 50ms/100ms backoff.
+NotFound is returned immediately because it is proof-relevant. Watch streams
+are never blindly retried: the observer resumes only from the exact returned
+resourceVersion so a retry cannot hide an observation gap.
+
 List pagination is bounded and must keep one resourceVersion. Duplicate
 identities, repeated continuation tokens, wrong GVK/GVR, source mutation,
 replacement races that are observed, unknown adapter output, and trailing or
@@ -253,7 +287,9 @@ absence is confirmed; deleting inputs before cleanup are rejected. Aggregate
 list bytes/items/pages and cleanup time are hard-bounded. Archive extraction
 enforces compressed, expanded, entry-count, and entry-size limits and rejects
 links, traversal, duplicate paths, mismatched preferred-version copies,
-concatenated gzip members, and trailing tar data.
+concatenated gzip members, and trailing tar data. Additional DataUploads are
+ignored only after their archive paths pass the same safety and uniqueness
+checks; the returned bytes remain bound to the one exact requested name.
 
 ## Recovery
 
