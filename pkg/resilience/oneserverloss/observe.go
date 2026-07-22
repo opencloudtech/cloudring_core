@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/opencloudtech/CloudRING/pkg/kubeidentity"
 )
 
 type systemClock struct{}
@@ -46,6 +48,7 @@ func Observe(ctx context.Context, reader Reader, probe Probe, barrier ReadyBarri
 	baseline := Baseline{
 		ControlPlaneNodes: first.ControlPlaneReadyNodes, EtcdMembers: first.EtcdReadyMembers, APIServerMembers: first.APIServerReadyMembers,
 		VMUIDSHA256: first.VM.VMUIDSHA256, DataSHA256: first.DataProbe.DataSHA256, ValidatedBytes: first.DataProbe.ValidatedBytes,
+		ControlPlaneMemberSetSHA256: first.ControlPlaneMemberSetSHA256,
 	}
 	baseline.BaselineSHA256 = baselineDigest(baseline)
 	targetUIDSHA256 := first.TargetNodeUIDSHA256
@@ -73,8 +76,10 @@ func Observe(ctx context.Context, reader Reader, probe Probe, barrier ReadyBarri
 	readyAt := preSamples[len(preSamples)-1].ObservedAt
 	marker := ReadyMarker{
 		SchemaVersion: ReadyMarkerSchemaVersion, Status: ReadyMarkerStatus, RequestSHA256: parsed.requestSHA256, RunNonceSHA256: request.RunNonceSHA256,
-		TargetNodeUIDSHA256: targetUIDSHA256, KubectlExecutableSHA256: reader.IdentitySHA256(), ProbeAdapterSHA256: probe.IdentitySHA256(),
-		BaselineControlPlaneNodes: baseline.ControlPlaneNodes, BaselineEtcdMembers: baseline.EtcdMembers, BaselineAPIServerMembers: baseline.APIServerMembers,
+		TargetNodeUIDSHA256: targetUIDSHA256, NodeUIDHashAlgorithm: kubeidentity.NodeUIDHashAlgorithm,
+		KubectlExecutableSHA256: reader.IdentitySHA256(), ProbeAdapterSHA256: probe.IdentitySHA256(),
+		ControlPlaneMemberSetSHA256: baseline.ControlPlaneMemberSetSHA256,
+		BaselineControlPlaneNodes:   baseline.ControlPlaneNodes, BaselineEtcdMembers: baseline.EtcdMembers, BaselineAPIServerMembers: baseline.APIServerMembers,
 		ReadyAt: readyAt,
 	}
 	marker.MarkerSHA256 = markerDigest(marker)
@@ -176,7 +181,8 @@ func Observe(ctx context.Context, reader Reader, probe Probe, barrier ReadyBarri
 	}
 	receipt := Receipt{
 		SchemaVersion: ReceiptSchemaVersion, Status: ReceiptStatus, RequestSHA256: parsed.requestSHA256, RunNonceSHA256: request.RunNonceSHA256,
-		TargetNodeUIDSHA256: targetUIDSHA256, KubectlExecutableSHA256: reader.IdentitySHA256(), ProbeAdapterSHA256: probe.IdentitySHA256(),
+		TargetNodeUIDSHA256: targetUIDSHA256, NodeUIDHashAlgorithm: kubeidentity.NodeUIDHashAlgorithm,
+		KubectlExecutableSHA256: reader.IdentitySHA256(), ProbeAdapterSHA256: probe.IdentitySHA256(),
 		StartedAt: first.StartedAt, ReadyMarkerAt: readyAt, CompletedAt: recoverySamples[len(recoverySamples)-1].ObservedAt,
 		PollInterval: request.PollInterval, FaultArrivalTimeout: request.FaultArrivalTimeout, MinimumLossWindow: request.MinimumLossWindow,
 		RecoveryTimeout: request.RecoveryTimeout, RecoveryStabilityWindow: request.RecoveryStabilityWindow,
@@ -194,7 +200,7 @@ func Observe(ctx context.Context, reader Reader, probe Probe, barrier ReadyBarri
 
 func sampleHealth(sample SampleEvidence, phase string, minimumControlPlane int, baseline Baseline, targetUID string, vmUnavailable time.Duration, lossStarted time.Time) error {
 	if sample.Phase != phase || !sample.ReadyZPassed || sample.VM.VMUIDSHA256 != baseline.VMUIDSHA256 || sample.DataProbe.DataSHA256 != baseline.DataSHA256 ||
-		sample.DataProbe.ValidatedBytes != baseline.ValidatedBytes {
+		sample.DataProbe.ValidatedBytes != baseline.ValidatedBytes || sample.ControlPlaneMemberSetSHA256 == "" {
 		return errors.New("one-server-loss identity or data continuity failed")
 	}
 	for _, workload := range sample.Workloads {
@@ -205,18 +211,21 @@ func sampleHealth(sample SampleEvidence, phase string, minimumControlPlane int, 
 	switch phase {
 	case PhasePreLoss:
 		if !sample.TargetNodePresent || !sample.TargetNodeReady || sample.TargetNodeUIDSHA256 != targetUID || sample.ControlPlaneReadyNodes < baseline.ControlPlaneNodes ||
+			sample.ControlPlaneMemberSetSHA256 != baseline.ControlPlaneMemberSetSHA256 ||
 			sample.EtcdReadyMembers < baseline.EtcdMembers || sample.APIServerReadyMembers < baseline.APIServerMembers || !sample.TargetHostsEtcd || !sample.TargetHostsAPIServer ||
 			!sample.VM.VMReady || !sample.VM.VMIReady || !sample.VM.VMIOnTarget || baseline.ControlPlaneNodes < minimumControlPlane || baseline.EtcdMembers < 3 || baseline.APIServerMembers < 3 {
 			return errors.New("one-server-loss pre-state health failed")
 		}
 	case PhaseLoss:
 		if sample.TargetNodeReady || sample.TargetNodePresent && sample.TargetNodeUIDSHA256 != targetUID ||
+			sample.ControlPlaneMemberSetSHA256 == baseline.ControlPlaneMemberSetSHA256 ||
 			sample.ControlPlaneReadyNodes != baseline.ControlPlaneNodes-1 || sample.EtcdReadyMembers != baseline.EtcdMembers-1 ||
 			sample.APIServerReadyMembers != baseline.APIServerMembers-1 || !lossStarted.IsZero() && !vmReadyOffTarget(sample) && mustTimestamp(sample.ObservedAt).Sub(lossStarted) > vmUnavailable {
 			return errors.New("one-server-loss loss-state health failed")
 		}
 	case PhaseRecovered:
 		if !sample.TargetNodePresent || !sample.TargetNodeReady || sample.TargetNodeUIDSHA256 != targetUID || sample.ControlPlaneReadyNodes < baseline.ControlPlaneNodes ||
+			sample.ControlPlaneMemberSetSHA256 != baseline.ControlPlaneMemberSetSHA256 ||
 			sample.EtcdReadyMembers < baseline.EtcdMembers || sample.APIServerReadyMembers < baseline.APIServerMembers || !sample.TargetHostsEtcd || !sample.TargetHostsAPIServer ||
 			!sample.VM.VMReady || !sample.VM.VMIReady {
 			return errors.New("one-server-loss recovery-state health failed")

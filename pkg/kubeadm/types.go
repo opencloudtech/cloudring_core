@@ -154,14 +154,17 @@ type NodeInventory struct {
 }
 
 // OneServerLossReceiptBinding binds the stand inventory to one exact,
-// independently validated resilience receipt without embedding the receipt in
-// the sanitized stand report.
+// independently validated resilience receipt and, when supplied, its complete
+// privacy-safe control-plane member set without embedding the receipt in the
+// sanitized stand report.
 type OneServerLossReceiptBinding struct {
-	ReceiptSHA256           string `json:"receiptSha256"`
-	RunNonceSHA256          string `json:"runNonceSha256"`
-	TargetNodeUIDSHA256     string `json:"targetNodeUidSha256"`
-	KubectlExecutableSHA256 string `json:"kubectlExecutableSha256"`
-	ProbeAdapterSHA256      string `json:"probeAdapterSha256"`
+	ReceiptSHA256               string `json:"receiptSha256"`
+	RunNonceSHA256              string `json:"runNonceSha256"`
+	TargetNodeUIDSHA256         string `json:"targetNodeUidSha256"`
+	KubectlExecutableSHA256     string `json:"kubectlExecutableSha256"`
+	ProbeAdapterSHA256          string `json:"probeAdapterSha256"`
+	NodeUIDHashAlgorithm        string `json:"nodeUidHashAlgorithm,omitempty"`
+	ControlPlaneMemberSetSHA256 string `json:"controlPlaneMemberSetSha256,omitempty"`
 }
 
 // EvidenceInventory records source-safe evidence identifiers and a summary.

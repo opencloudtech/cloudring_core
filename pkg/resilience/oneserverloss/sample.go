@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/opencloudtech/CloudRING/pkg/kubeidentity"
 )
 
 type sampler struct {
@@ -53,11 +55,19 @@ func (sampler *sampler) next(ctx context.Context, phase string) (SampleEvidence,
 		if node.Metadata.Name == sampler.request.TargetNodeName {
 			sample.TargetNodePresent = true
 			sample.TargetNodeReady = ready
-			sample.TargetNodeUIDSHA256 = digestJSON(node.Metadata.UID)
+			sample.TargetNodeUIDSHA256 = kubeidentity.NodeUIDSHA256(node.Metadata.UID)
 		}
 	}
 	zeroPayloads(nodePayloads)
 	sample.ControlPlaneReadyNodes = len(controlPlaneNodes)
+	memberUIDSHA256 := make([]string, 0, len(controlPlaneNodes))
+	for uid := range controlPlaneNodes {
+		memberUIDSHA256 = append(memberUIDSHA256, kubeidentity.NodeUIDSHA256(uid))
+	}
+	sample.ControlPlaneMemberSetSHA256 = ControlPlaneMemberSetSHA256(memberUIDSHA256)
+	if sample.ControlPlaneMemberSetSHA256 == "" {
+		return SampleEvidence{}, errors.New("control-plane member identity set is invalid")
+	}
 	if phase == PhasePreLoss && !sample.TargetNodeReady {
 		sample.Phase = PhaseLoss
 	} else if phase == PhaseLoss && sample.TargetNodeReady {

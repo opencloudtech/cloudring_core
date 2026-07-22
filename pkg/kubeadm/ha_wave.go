@@ -16,16 +16,17 @@ import (
 	"time"
 
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
+	"github.com/opencloudtech/CloudRING/pkg/kubeidentity"
 	"github.com/opencloudtech/CloudRING/pkg/resilience/oneserverloss"
 )
 
 const (
 	// HAWaveSchemaVersion is the versioned, provider-neutral evidence contract
 	// for one-member-at-a-time kubeadm control-plane expansion.
-	HAWaveSchemaVersion = "cloudring.kubeadm.ha-wave/v1"
+	HAWaveSchemaVersion = "cloudring.kubeadm.ha-wave/v2"
 	// HAWaveInventorySchemaVersion is the identity-bound captured topology
 	// receipt consumed by VerifyHAWave.
-	HAWaveInventorySchemaVersion = "cloudring.kubeadm.ha-wave-inventory/v1"
+	HAWaveInventorySchemaVersion = "cloudring.kubeadm.ha-wave-inventory/v2"
 
 	HAWavePhaseOneToTwo   = "one-to-two"
 	HAWavePhaseTwoToThree = "two-to-three"
@@ -48,7 +49,7 @@ var (
 	}
 	haWaveRollback = []string{
 		"stop before another member change",
-		"remove only the newly introduced member using the recorded kubeadm and etcd rollback procedure",
+		"remove only the newly introduced member identified by the verification receipt using the recorded kubeadm and etcd rollback procedure",
 		"verify the original live member set and workloads before retrying",
 	}
 )
@@ -72,7 +73,8 @@ type HAWaveMemberIdentity struct {
 
 // HAWaveInventoryReceipt is a sanitized, identity-bound preflight receipt.
 // Counts are derived from its Ready node identities and API-server identity
-// set; callers cannot supply counts separately to VerifyHAWave.
+// set; callers cannot supply counts separately to VerifyHAWave. Every Node UID
+// hash must use kubeidentity.NodeUIDSHA256 and declare its algorithm identifier.
 type HAWaveInventoryReceipt struct {
 	SchemaVersion               string                      `json:"schemaVersion"`
 	CapturedAt                  string                      `json:"capturedAt"`
@@ -80,6 +82,7 @@ type HAWaveInventoryReceipt struct {
 	Distribution                string                      `json:"distribution"`
 	Bootstrap                   string                      `json:"bootstrap"`
 	ServerVersion               string                      `json:"serverVersion"`
+	NodeUIDHashAlgorithm        string                      `json:"nodeUidHashAlgorithm"`
 	Members                     []HAWaveMemberIdentity      `json:"members"`
 	APIServerNodeUIDSHA256      []string                    `json:"apiServerNodeUidSha256"`
 	OneServerLossReceiptBinding OneServerLossReceiptBinding `json:"oneServerLossReceiptBinding"`
@@ -107,36 +110,45 @@ type HAWaveBackupValidator func(path, installationID string, now time.Time) (gen
 type HAWaveOneServerLossLoader func(path string, now time.Time) (receipt *oneserverloss.Receipt, artifactSHA256 string, err error)
 
 // HAWaveInventoryLoader loads one protected, sanitized preflight receipt.
-// VerifyHAWave independently validates its self-digest, identities, runtime
-// policy, freshness, and installation binding.
+// BuildHAWavePlan and VerifyHAWave independently validate its self-digest,
+// identities, runtime policy, freshness, and installation binding.
 type HAWaveInventoryLoader func(path string, now time.Time) (receipt *HAWaveInventoryReceipt, artifactSHA256 string, err error)
 
 type HAWavePlanOptions struct {
-	InstallationID    string
-	Current           HAWaveCounts
-	BackupBarrierPath string
-	PreviousWavePath  string
-	Now               func() time.Time
-	ValidateBackup    HAWaveBackupValidator
+	InstallationID string
+	// Current is retained for caller compatibility and, when non-zero, must
+	// match the topology derived from PreflightInventoryPath.
+	Current                HAWaveCounts
+	PreflightInventoryPath string
+	LoadPreflightInventory HAWaveInventoryLoader
+	BackupBarrierPath      string
+	PreviousWavePath       string
+	Now                    func() time.Time
+	ValidateBackup         HAWaveBackupValidator
 }
 
 // HAWavePlan is a read-only, one-member expansion plan. MutationAllowed is
 // always false; deployment-specific code owns any separately approved apply.
 type HAWavePlan struct {
-	SchemaVersion     string        `json:"schemaVersion"`
-	GeneratedAt       string        `json:"generatedAt"`
-	Status            string        `json:"status"`
-	Phase             string        `json:"phase,omitempty"`
-	InstallationID    string        `json:"installationId"`
-	From              HAWaveCounts  `json:"from"`
-	Target            HAWaveCounts  `json:"target"`
-	BackupGeneratedAt string        `json:"backupGeneratedAt,omitempty"`
-	Checks            []HAWaveCheck `json:"checks"`
-	Blockers          []string      `json:"blockers"`
-	Steps             []string      `json:"steps,omitempty"`
-	Rollback          []string      `json:"rollback,omitempty"`
-	MutationAllowed   bool          `json:"mutationAllowed"`
-	NonClaim          string        `json:"nonClaim"`
+	SchemaVersion                   string        `json:"schemaVersion"`
+	GeneratedAt                     string        `json:"generatedAt"`
+	Status                          string        `json:"status"`
+	Phase                           string        `json:"phase,omitempty"`
+	InstallationID                  string        `json:"installationId"`
+	From                            HAWaveCounts  `json:"from"`
+	Target                          HAWaveCounts  `json:"target"`
+	PreflightInventoryReceiptSHA256 string        `json:"preflightInventoryReceiptSha256"`
+	PreflightCapturedAt             string        `json:"preflightCapturedAt"`
+	NodeUIDHashAlgorithm            string        `json:"nodeUidHashAlgorithm"`
+	StartingMemberUIDSHA256         []string      `json:"startingMemberUidSha256"`
+	StartingMemberSetSHA256         string        `json:"startingMemberSetSha256"`
+	BackupGeneratedAt               string        `json:"backupGeneratedAt,omitempty"`
+	Checks                          []HAWaveCheck `json:"checks"`
+	Blockers                        []string      `json:"blockers"`
+	Steps                           []string      `json:"steps,omitempty"`
+	Rollback                        []string      `json:"rollback,omitempty"`
+	MutationAllowed                 bool          `json:"mutationAllowed"`
+	NonClaim                        string        `json:"nonClaim"`
 }
 
 type HAWaveVerifyOptions struct {
@@ -153,40 +165,48 @@ type HAWaveVerifyOptions struct {
 // HAWaveVerification is the sanitized read-only result for one completed
 // expansion phase.
 type HAWaveVerification struct {
-	SchemaVersion              string        `json:"schemaVersion"`
-	GeneratedAt                string        `json:"generatedAt"`
-	CompletedAt                string        `json:"completedAt"`
-	Status                     string        `json:"status"`
-	Phase                      string        `json:"phase,omitempty"`
-	InstallationID             string        `json:"installationId,omitempty"`
-	PlanSHA256                 string        `json:"planSha256,omitempty"`
-	InventoryReceiptSHA256     string        `json:"inventoryReceiptSha256,omitempty"`
-	OneServerLossReceiptSHA256 string        `json:"oneServerLossReceiptSha256,omitempty"`
-	Observed                   HAWaveCounts  `json:"observed"`
-	FreshBackupVerified        bool          `json:"freshBackupVerified"`
-	PreviousWaveVerified       bool          `json:"previousWaveVerified"`
-	FinalOneServerLossVerified bool          `json:"finalOneServerLossVerified"`
-	Checks                     []HAWaveCheck `json:"checks"`
-	Blockers                   []string      `json:"blockers"`
-	MutationAttempted          bool          `json:"mutationAttempted"`
-	NonClaim                   string        `json:"nonClaim"`
+	SchemaVersion                   string        `json:"schemaVersion"`
+	GeneratedAt                     string        `json:"generatedAt"`
+	CompletedAt                     string        `json:"completedAt"`
+	Status                          string        `json:"status"`
+	Phase                           string        `json:"phase,omitempty"`
+	InstallationID                  string        `json:"installationId,omitempty"`
+	PlanSHA256                      string        `json:"planSha256,omitempty"`
+	InventoryReceiptSHA256          string        `json:"inventoryReceiptSha256,omitempty"`
+	OneServerLossReceiptSHA256      string        `json:"oneServerLossReceiptSha256,omitempty"`
+	PreflightInventoryReceiptSHA256 string        `json:"preflightInventoryReceiptSha256,omitempty"`
+	NodeUIDHashAlgorithm            string        `json:"nodeUidHashAlgorithm,omitempty"`
+	StartingMemberUIDSHA256         []string      `json:"startingMemberUidSha256"`
+	StartingMemberSetSHA256         string        `json:"startingMemberSetSha256,omitempty"`
+	FinalMemberUIDSHA256            []string      `json:"finalMemberUidSha256"`
+	FinalMemberSetSHA256            string        `json:"finalMemberSetSha256,omitempty"`
+	IntroducedMemberUIDSHA256       string        `json:"introducedMemberUidSha256,omitempty"`
+	Observed                        HAWaveCounts  `json:"observed"`
+	FreshBackupVerified             bool          `json:"freshBackupVerified"`
+	PreviousWaveVerified            bool          `json:"previousWaveVerified"`
+	FinalOneServerLossVerified      bool          `json:"finalOneServerLossVerified"`
+	Checks                          []HAWaveCheck `json:"checks"`
+	Blockers                        []string      `json:"blockers"`
+	MutationAttempted               bool          `json:"mutationAttempted"`
+	NonClaim                        string        `json:"nonClaim"`
 }
 
 // BuildHAWavePlan builds a read-only 1->2 or 2->3 kubeadm HA expansion plan.
-// A fresh off-cell backup is required for every wave; 2->3 additionally
-// requires a ready 1->2 verification and a backup newer than its completion.
+// A fresh preflight inventory and off-cell backup are required for every wave;
+// 2->3 additionally requires a ready 1->2 verification, a backup newer than
+// its completion, and a preflight captured strictly after both.
 func BuildHAWavePlan(opts HAWavePlanOptions) HAWavePlan {
 	now := haWaveNow(opts.Now)
 	plan := HAWavePlan{
-		SchemaVersion:   HAWaveSchemaVersion,
-		GeneratedAt:     formatHAWaveTime(now),
-		Status:          "blocked",
-		InstallationID:  strings.TrimSpace(opts.InstallationID),
-		From:            opts.Current,
-		Checks:          []HAWaveCheck{},
-		Blockers:        []string{},
-		MutationAllowed: false,
-		NonClaim:        haWavePlanNonClaim,
+		SchemaVersion:           HAWaveSchemaVersion,
+		GeneratedAt:             formatHAWaveTime(now),
+		Status:                  "blocked",
+		InstallationID:          strings.TrimSpace(opts.InstallationID),
+		StartingMemberUIDSHA256: []string{},
+		Checks:                  []HAWaveCheck{},
+		Blockers:                []string{},
+		MutationAllowed:         false,
+		NonClaim:                haWavePlanNonClaim,
 	}
 	if now.IsZero() {
 		plan.block("ha_wave_clock_invalid", "clock", "a non-zero UTC planning time is required", "", "")
@@ -194,7 +214,34 @@ func BuildHAWavePlan(opts HAWavePlanOptions) HAWavePlan {
 	if !validDNS1123Subdomain(plan.InstallationID) {
 		plan.block("ha_wave_installation_id_invalid", "installation_id", "a source-safe DNS-1123 installation id is required", "", "")
 	}
-	from, phase, topologyOK := haWavePhase(opts.Current)
+	preflightArtifact := safeHAWaveArtifact(opts.PreflightInventoryPath)
+	if preflightArtifact == "" || opts.LoadPreflightInventory == nil {
+		plan.block("ha_wave_preflight_inventory_invalid", "preflight_inventory", "a fresh identity-bound preflight inventory receipt is required", preflightArtifact, "")
+	} else {
+		preflight, artifactSHA, loadErr := opts.LoadPreflightInventory(opts.PreflightInventoryPath, now)
+		if loadErr != nil || preflight == nil {
+			plan.block("ha_wave_preflight_inventory_invalid", "preflight_inventory", "a fresh identity-bound preflight inventory receipt is required", preflightArtifact, "")
+		} else {
+			counts, validateErr := ValidateHAWaveInventoryReceipt(preflight, now)
+			preflightAt, timeErr := parseHAWaveTime(preflight.CapturedAt)
+			if validateErr != nil || timeErr != nil || preflightAt.After(now) ||
+				!validHAWaveSHA256(artifactSHA) || preflight.InstallationID != plan.InstallationID {
+				plan.block("ha_wave_preflight_inventory_invalid", "preflight_inventory", "a fresh identity-bound preflight inventory receipt is required", preflightArtifact, "")
+			} else {
+				plan.From = counts
+				plan.PreflightInventoryReceiptSHA256 = preflight.ReceiptSHA256
+				plan.PreflightCapturedAt = preflight.CapturedAt
+				plan.NodeUIDHashAlgorithm = preflight.NodeUIDHashAlgorithm
+				plan.StartingMemberUIDSHA256 = haWaveInventoryMemberUIDs(preflight)
+				plan.StartingMemberSetSHA256 = HAWaveMemberSetSHA256(plan.StartingMemberUIDSHA256)
+				plan.pass("preflight_inventory", "starting control-plane and etcd member identities are bound by canonical SHA-256", preflightArtifact, artifactSHA)
+				if opts.Current != (HAWaveCounts{}) && opts.Current != counts {
+					plan.block("ha_wave_current_topology_invalid", "current_topology_binding", "caller-supplied current counts must match the identity-bound preflight inventory", "", "")
+				}
+			}
+		}
+	}
+	from, phase, topologyOK := haWavePhase(plan.From)
 	if !topologyOK {
 		plan.block("ha_wave_current_topology_invalid", "current_topology", "current control-plane, etcd, and API-server counts must be equal and exactly 1 or 2", "", "")
 	} else {
@@ -225,14 +272,19 @@ func BuildHAWavePlan(opts HAWavePlanOptions) HAWavePlan {
 	case HAWavePhaseTwoToThree:
 		previousArtifact := safeHAWaveArtifact(opts.PreviousWavePath)
 		previous, previousSHA, err := ReadHAWaveVerification(opts.PreviousWavePath)
-		if previousArtifact == "" || err != nil || previous.Phase != HAWavePhaseOneToTwo || previous.InstallationID != plan.InstallationID || previous.Observed != haWaveCounts(2) {
+		if previousArtifact == "" || err != nil || previous.Phase != HAWavePhaseOneToTwo || previous.InstallationID != plan.InstallationID ||
+			previous.Observed != haWaveCounts(2) || previous.FinalMemberSetSHA256 != plan.StartingMemberSetSHA256 ||
+			!slices.Equal(previous.FinalMemberUIDSHA256, plan.StartingMemberUIDSHA256) {
 			plan.block("ha_wave_previous_verification_invalid", "previous_wave", "a ready one-to-two verification with two healthy members is required", previousArtifact, "")
 		} else {
 			completedAt, parseErr := parseHAWaveTime(previous.CompletedAt)
+			preflightAt, preflightParseErr := parseHAWaveTime(plan.PreflightCapturedAt)
 			if parseErr != nil || !backupAt.After(completedAt) {
 				plan.block("ha_wave_interwave_backup_not_fresh", "previous_wave", "the two-to-three off-cell backup must be newer than completion of the one-to-two wave", previousArtifact, previousSHA)
+			} else if preflightParseErr != nil || !preflightAt.After(completedAt) || !preflightAt.After(backupAt) {
+				plan.block("ha_wave_interwave_preflight_not_fresh", "previous_wave", "the two-to-three preflight inventory must be newer than both the one-to-two verification and inter-wave backup", previousArtifact, previousSHA)
 			} else {
-				plan.pass("previous_wave", "one-to-two verification is ready and the inter-wave backup is newer", previousArtifact, previousSHA)
+				plan.pass("previous_wave", "one-to-two verification is ready; the inter-wave backup and subsequent preflight are strictly ordered", previousArtifact, previousSHA)
 			}
 		}
 	case HAWavePhaseOneToTwo:
@@ -277,6 +329,10 @@ func VerifyHAWave(opts HAWaveVerifyOptions) HAWaveVerification {
 	report.Phase = plan.Phase
 	report.InstallationID = plan.InstallationID
 	report.PlanSHA256 = planSHA
+	report.PreflightInventoryReceiptSHA256 = plan.PreflightInventoryReceiptSHA256
+	report.NodeUIDHashAlgorithm = plan.NodeUIDHashAlgorithm
+	report.StartingMemberUIDSHA256 = slices.Clone(plan.StartingMemberUIDSHA256)
+	report.StartingMemberSetSHA256 = plan.StartingMemberSetSHA256
 	report.PreviousWaveVerified = plan.Phase == HAWavePhaseOneToTwo || hasPassingHAWaveCheck(plan.Checks, "previous_wave")
 	report.pass("plan", "ready HA-wave plan is bound by SHA-256", planArtifact, planSHA)
 
@@ -304,14 +360,24 @@ func VerifyHAWave(opts HAWaveVerifyOptions) HAWaveVerification {
 		var inventoryErr error
 		inventory, inventorySHA, inventoryErr = opts.LoadInventory(opts.InventoryPath, now)
 		counts, validateErr := ValidateHAWaveInventoryReceipt(inventory, now)
-		if inventoryErr != nil || validateErr != nil || !validHAWaveSHA256(inventorySHA) || inventory.InstallationID != plan.InstallationID {
+		if inventoryErr != nil || validateErr != nil || !validHAWaveSHA256(inventorySHA) || inventory.InstallationID != plan.InstallationID ||
+			inventory.NodeUIDHashAlgorithm != plan.NodeUIDHashAlgorithm {
 			report.block("ha_wave_inventory_receipt_invalid", "inventory", "a fresh identity-bound kubeadm inventory receipt is required; manual counts are not accepted", inventoryArtifact, "")
 			inventory = nil
 		} else {
 			report.Observed = counts
 			report.InventoryReceiptSHA256 = inventory.ReceiptSHA256
+			report.FinalMemberUIDSHA256 = haWaveInventoryMemberUIDs(inventory)
+			report.FinalMemberSetSHA256 = HAWaveMemberSetSHA256(report.FinalMemberUIDSHA256)
 			report.pass("inventory", "healthy member counts were derived from an identity-bound kubeadm inventory receipt", inventoryArtifact, inventorySHA)
 		}
+	}
+	introducedMember, transitionErr := validateHAWaveMemberTransition(report.StartingMemberUIDSHA256, report.FinalMemberUIDSHA256)
+	if transitionErr != nil {
+		report.block("ha_wave_member_identity_transition_invalid", "member_identity_transition", "final members must equal the exact starting set plus one unique introduced identity", "", "")
+	} else {
+		report.IntroducedMemberUIDSHA256 = introducedMember
+		report.pass("member_identity_transition", "exactly one introduced member identity was added without replacement or deletion", "", "")
 	}
 	if report.Observed != plan.Target {
 		report.block("ha_wave_target_topology_not_observed", "target_topology", fmt.Sprintf("observed topology must exactly match target controlPlane=%d etcd=%d apiServer=%d", plan.Target.ControlPlane, plan.Target.Etcd, plan.Target.APIServer), "", "")
@@ -374,12 +440,13 @@ func ReadHAWaveVerification(path string) (HAWaveVerification, string, error) {
 func ValidateHAWaveInventoryReceipt(receipt *HAWaveInventoryReceipt, now time.Time) (HAWaveCounts, error) {
 	if receipt == nil || now.IsZero() || receipt.SchemaVersion != HAWaveInventorySchemaVersion ||
 		!validDNS1123Subdomain(receipt.InstallationID) || receipt.Distribution != "upstream" || receipt.Bootstrap != "kubeadm" ||
+		receipt.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
 		!kubernetesVersionPattern.MatchString(receipt.ServerVersion) || strings.Contains(strings.ToLower(receipt.ServerVersion), "+k3s") ||
 		!validHAWaveSHA256(receipt.ReceiptSHA256) || receipt.ReceiptSHA256 != HAWaveInventoryReceiptSHA256(*receipt) {
 		return HAWaveCounts{}, errors.New("HA-wave inventory receipt is invalid")
 	}
 	capturedAt, err := parseHAWaveTime(receipt.CapturedAt)
-	if err != nil || !freshHAWaveTime(capturedAt, now) || len(receipt.Members) < 2 || len(receipt.Members) > 3 ||
+	if err != nil || !freshHAWaveTime(capturedAt, now) || len(receipt.Members) < 1 || len(receipt.Members) > 3 ||
 		len(receipt.APIServerNodeUIDSHA256) != len(receipt.Members) {
 		return HAWaveCounts{}, errors.New("HA-wave inventory receipt topology is invalid")
 	}
@@ -421,10 +488,31 @@ func HAWaveInventoryReceiptSHA256(receipt HAWaveInventoryReceipt) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// HAWaveMemberSetSHA256 returns a deterministic, order-independent digest for
+// one privacy-safe set of unique member UID hashes. Malformed or duplicate
+// identities are rejected with an empty digest.
+func HAWaveMemberSetSHA256(memberUIDSHA256 []string) string {
+	canonical, err := canonicalHAWaveMemberUIDs(memberUIDSHA256)
+	if err != nil {
+		return ""
+	}
+	return oneserverloss.ControlPlaneMemberSetSHA256(canonical)
+}
+
 func validateReadyHAWavePlan(plan HAWavePlan) error {
 	from, phase, ok := haWavePhase(plan.From)
+	canonicalStart, startErr := canonicalHAWaveMemberUIDs(plan.StartingMemberUIDSHA256)
+	preflightAt, preflightTimeErr := parseHAWaveTime(plan.PreflightCapturedAt)
+	generatedAt, generatedTimeErr := parseHAWaveTime(plan.GeneratedAt)
+	backupAt, backupTimeErr := parseHAWaveTime(plan.BackupGeneratedAt)
 	if !ok || plan.SchemaVersion != HAWaveSchemaVersion || plan.Status != "ready" || plan.Phase != phase ||
 		plan.Target != haWaveCounts(from+1) || !validDNS1123Subdomain(plan.InstallationID) || plan.MutationAllowed ||
+		startErr != nil || len(canonicalStart) != from || !slices.Equal(canonicalStart, plan.StartingMemberUIDSHA256) ||
+		preflightTimeErr != nil || generatedTimeErr != nil || preflightAt.After(generatedAt) ||
+		backupTimeErr != nil || phase == HAWavePhaseTwoToThree && !preflightAt.After(backupAt) ||
+		plan.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
+		!validHAWaveSHA256(plan.PreflightInventoryReceiptSHA256) || !validHAWaveSHA256(plan.StartingMemberSetSHA256) ||
+		plan.StartingMemberSetSHA256 != HAWaveMemberSetSHA256(plan.StartingMemberUIDSHA256) ||
 		len(plan.Blockers) != 0 || plan.NonClaim != haWavePlanNonClaim || !slices.Equal(plan.Steps, haWaveSteps) ||
 		!slices.Equal(plan.Rollback, haWaveRollback) || !canonicalHAWaveTime(plan.GeneratedAt) || !canonicalHAWaveTime(plan.BackupGeneratedAt) ||
 		!hasExactHAWavePlanChecks(plan.Checks, phase == HAWavePhaseTwoToThree) {
@@ -445,9 +533,15 @@ func validateReadyHAWaveVerification(report HAWaveVerification) error {
 	default:
 		return errors.New("HA-wave verification phase is invalid")
 	}
+	introduced, transitionErr := validateHAWaveMemberTransition(report.StartingMemberUIDSHA256, report.FinalMemberUIDSHA256)
 	if report.SchemaVersion != HAWaveSchemaVersion || report.Status != "ready" || !validDNS1123Subdomain(report.InstallationID) ||
 		report.Observed != want || !report.FreshBackupVerified || !report.PreviousWaveVerified ||
+		report.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
 		report.FinalOneServerLossVerified != finalRequired || !validHAWaveSHA256(report.PlanSHA256) || report.MutationAttempted ||
+		transitionErr != nil || introduced != report.IntroducedMemberUIDSHA256 || len(report.FinalMemberUIDSHA256) != want.ControlPlane ||
+		!validHAWaveSHA256(report.PreflightInventoryReceiptSHA256) ||
+		report.StartingMemberSetSHA256 != HAWaveMemberSetSHA256(report.StartingMemberUIDSHA256) ||
+		report.FinalMemberSetSHA256 != HAWaveMemberSetSHA256(report.FinalMemberUIDSHA256) ||
 		!validHAWaveSHA256(report.InventoryReceiptSHA256) || finalRequired && !validHAWaveSHA256(report.OneServerLossReceiptSHA256) ||
 		!finalRequired && report.OneServerLossReceiptSHA256 != "" ||
 		len(report.Blockers) != 0 || report.NonClaim != haWaveVerifyNonClaim || !canonicalHAWaveTime(report.GeneratedAt) ||
@@ -467,9 +561,14 @@ func validateHAWaveOneServerLossReceipt(receipt *oneserverloss.Receipt, inventor
 		return errors.New("one-server-loss baseline does not match target topology")
 	}
 	binding := inventory.OneServerLossReceiptBinding
+	memberSetSHA256 := HAWaveMemberSetSHA256(haWaveInventoryMemberUIDs(inventory))
 	if binding.ReceiptSHA256 != receipt.ReceiptSHA256 || binding.RunNonceSHA256 != receipt.RunNonceSHA256 ||
 		binding.TargetNodeUIDSHA256 != receipt.TargetNodeUIDSHA256 || binding.KubectlExecutableSHA256 != receipt.KubectlExecutableSHA256 ||
-		binding.ProbeAdapterSHA256 != receipt.ProbeAdapterSHA256 || !haWaveInventoryHasMember(inventory, receipt.TargetNodeUIDSHA256) {
+		binding.ProbeAdapterSHA256 != receipt.ProbeAdapterSHA256 || !validHAWaveSHA256(memberSetSHA256) ||
+		inventory.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm || receipt.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
+		binding.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
+		binding.ControlPlaneMemberSetSHA256 != memberSetSHA256 || receipt.Baseline.ControlPlaneMemberSetSHA256 != memberSetSHA256 ||
+		!haWaveInventoryHasMember(inventory, receipt.TargetNodeUIDSHA256) {
 		return errors.New("one-server-loss receipt is not identity-bound to the inventory")
 	}
 	completedAt, err := parseHAWaveTime(receipt.CompletedAt)
@@ -615,8 +714,71 @@ func haWaveInventoryHasMember(inventory *HAWaveInventoryReceipt, uid string) boo
 	return false
 }
 
+func haWaveInventoryMemberUIDs(inventory *HAWaveInventoryReceipt) []string {
+	if inventory == nil {
+		return nil
+	}
+	uids := make([]string, 0, len(inventory.Members))
+	for _, member := range inventory.Members {
+		uids = append(uids, member.UIDSHA256)
+	}
+	return uids
+}
+
+func mapHAWaveMemberUIDs(memberUIDs map[string]struct{}) []string {
+	uids := make([]string, 0, len(memberUIDs))
+	for uid := range memberUIDs {
+		uids = append(uids, uid)
+	}
+	return uids
+}
+
+func canonicalHAWaveMemberUIDs(memberUIDSHA256 []string) ([]string, error) {
+	if len(memberUIDSHA256) < 1 || len(memberUIDSHA256) > 3 {
+		return nil, errors.New("HA-wave member identity set size is invalid")
+	}
+	canonical := slices.Clone(memberUIDSHA256)
+	slices.Sort(canonical)
+	for index, uid := range canonical {
+		if !validHAWaveSHA256(uid) || index > 0 && uid == canonical[index-1] {
+			return nil, errors.New("HA-wave member identity set is invalid")
+		}
+	}
+	return canonical, nil
+}
+
+func validateHAWaveMemberTransition(starting, final []string) (string, error) {
+	canonicalStart, err := canonicalHAWaveMemberUIDs(starting)
+	if err != nil || !slices.Equal(canonicalStart, starting) {
+		return "", errors.New("HA-wave starting member identity set is invalid")
+	}
+	canonicalFinal, err := canonicalHAWaveMemberUIDs(final)
+	if err != nil || !slices.Equal(canonicalFinal, final) || len(final) != len(starting)+1 {
+		return "", errors.New("HA-wave final member identity set is invalid")
+	}
+	startingSet := make(map[string]struct{}, len(starting))
+	for _, uid := range starting {
+		startingSet[uid] = struct{}{}
+	}
+	introduced := ""
+	for _, uid := range final {
+		if _, existed := startingSet[uid]; existed {
+			delete(startingSet, uid)
+			continue
+		}
+		if introduced != "" {
+			return "", errors.New("HA-wave final member identity set contains multiple additions")
+		}
+		introduced = uid
+	}
+	if len(startingSet) != 0 || introduced == "" {
+		return "", errors.New("HA-wave final member identity set replaced or deleted a starting member")
+	}
+	return introduced, nil
+}
+
 func hasExactHAWavePlanChecks(checks []HAWaveCheck, previous bool) bool {
-	ids := []string{"current_topology", "fresh_backup"}
+	ids := []string{"preflight_inventory", "current_topology", "fresh_backup"}
 	if previous {
 		ids = append(ids, "previous_wave")
 	}
@@ -624,7 +786,7 @@ func hasExactHAWavePlanChecks(checks []HAWaveCheck, previous bool) bool {
 }
 
 func hasExactHAWaveVerificationChecks(checks []HAWaveCheck, final bool) bool {
-	ids := []string{"plan", "fresh_backup", "inventory", "target_topology"}
+	ids := []string{"plan", "fresh_backup", "inventory", "member_identity_transition", "target_topology"}
 	if final {
 		ids = append(ids, "final_one_server_loss")
 	}
@@ -641,7 +803,7 @@ func hasOrderedHAWaveChecks(checks []HAWaveCheck, ids []string) bool {
 			return false
 		}
 		switch check.ID {
-		case "current_topology", "target_topology":
+		case "current_topology", "member_identity_transition", "target_topology":
 			if check.Artifact != "" || check.SHA256 != "" {
 				return false
 			}

@@ -85,14 +85,19 @@ etcd membership, contacts a provider, or modifies a cluster.
 
 The only accepted sequence is:
 
-1. build and review a `one-to-two` plan against a fresh off-cell backup and
-   restore barrier;
+1. capture a fresh `HAWaveInventoryReceipt`, then build and review a
+   `one-to-two` plan against that exact starting identity set and a fresh
+   off-cell backup and restore barrier;
 2. separately apply the approved deployment-owned change, then capture a ready
    two-member verification;
 3. take and validate a new off-cell backup whose generation time is later than
    completion of the first verification;
-4. build and review the `two-to-three` plan, separately apply it, and capture
-   three healthy control-plane, etcd, and API-server members;
+4. after that backup completes, capture a fresh two-member preflight inventory
+   whose `capturedAt` is strictly later than both the first verification's
+   `completedAt` and the inter-wave backup generation time, and whose exact
+   identity set equals the first verification's final set; then build and review the
+   `two-to-three` plan, separately apply it, and capture three healthy
+   control-plane, etcd, and API-server members;
 5. supply the final public `oneserverloss.Receipt`. The verifier recomputes its
    full offline digest chain, requires its protected baseline to match the
    recovered three-member topology exactly, and enforces evidence freshness.
@@ -102,26 +107,65 @@ mandatory in the second. A self-declared survive count, boolean, artifact hash,
 or loader success is not sufficient: the loader must return the receipt itself
 for independent validation. Verification also reopens the exact backup barrier
 recorded by the plan and requires the same generation time and SHA-256 while it
-is still fresh. Healthy counts are derived only from a fresh
-`HAWaveInventoryReceipt`: its self-digest binds the installation, upstream
-kubeadm version, sorted member UID hashes, Ready control-plane/etcd roles, and
-sorted API-server UID hashes. There is no manual-count input to `VerifyHAWave`.
+is still fresh. Both planning and verification derive healthy counts only from
+a fresh `HAWaveInventoryReceipt`: its self-digest binds the installation,
+upstream kubeadm version, sorted member UID hashes, Ready control-plane/etcd
+roles, the Node UID hash algorithm identifier, and sorted API-server UID
+hashes. Inventory schema v2 requires
+`nodeUidHashAlgorithm: cloudring.kubernetes.node-uid-sha256/v1`. Collectors and
+downstream HA inventory adapters must call the shared public
+`kubeidentity.NodeUIDSHA256` helper. Its exact algorithm is
+`SHA-256(UTF-8("cloudring.kubernetes.node-uid-sha256/v1") || 0x00 || exact
+UTF-8 Kubernetes Node metadata.uid bytes)`; the UID is not JSON-quoted,
+trimmed, Unicode-normalized, or case-folded. A ready plan persists that
+algorithm identifier and the exact sorted starting member UID hashes, the
+preflight receipt digest, and a domain-separated
+canonical digest of the starting set. It also persists the exact preflight
+`capturedAt`; future-dated preflight evidence is rejected. For `two-to-three`,
+the planner requires that timestamp to be strictly after both prior-wave
+completion and the validated inter-wave backup. A caller-supplied current
+count, when present for compatibility, must match the preflight-derived
+topology and cannot replace that receipt.
+
+The wave verification requires the final set to equal the starting set union
+exactly one new unique member identity. Equal target counts do not permit a
+replacement, deletion, duplicate, entirely different member set, or two
+additions combined with one deletion. The verification receipt persists the
+exact starting and final hash sets and their canonical digests, and records the
+single `introducedMemberUidSha256` as the only member eligible for rollback.
+The next wave must use the prior verification's exact final set as its new
+preflight starting set. Malformed, duplicate, unsorted, unaccounted, or
+tampered identity bindings fail closed. There is no manual-count input to
+`VerifyHAWave`.
+
 At three members, that inventory receipt must also bind the exact receipt hash,
 run nonce, target Node UID hash, kubectl executable hash, and probe-adapter hash
-from the final one-server-loss receipt.
+from the final one-server-loss receipt. The one-server-loss observer also
+records a canonical digest of the complete ready control-plane member UID-hash
+set in its marker, baseline, and samples. HA-wave v2 requires that receipt
+baseline digest and the inventory binding to equal the exact final inventory
+set digest and the same Node UID hash algorithm identifier. A valid receipt
+from another three-member topology or from an ambiguous legacy UID hashing
+scheme cannot be reused
+even when its counts and target member happen to match. Older receipts without
+this optional general receipt field remain valid for their original generic
+contract, but are intentionally insufficient for HA-wave v2.
 
 The installation-specific backup validator and protected inventory and receipt
 loaders remain downstream adapter boundaries because concrete backup systems,
 file ownership policy, and private paths do not belong in the public package.
 
 Plans and verifications use the versioned
-`cloudring.kubeadm.ha-wave/v1` schema. `ReadHAWavePlan` and
-`ReadHAWaveVerification` accept exactly one bounded JSON object, reject unknown
+`cloudring.kubeadm.ha-wave/v2` schema. Version 2 makes the starting and final
+identity-set bindings mandatory; count-only version 1 plans and verifications
+are not accepted. `ReadHAWavePlan` and `ReadHAWaveVerification` accept exactly
+one bounded JSON object, reject unknown
 or duplicate fields and trailing documents, and reject evidence that enables
 mutation or changes the canonical plan/non-claim text. Reports retain only
 source-safe installation identifiers, artifact basenames, timestamps, counts,
-booleans, and lowercase SHA-256 bindings. Private paths and receipt payloads are
-not copied into them.
+booleans, and lowercase SHA-256 bindings. The evidence contains no member
+hostnames or IP addresses. Private paths and receipt payloads are not copied
+into it.
 
 Provider adapters resolve the references declared by
 `ProviderSiteProfile`, supply concrete values at runtime, perform mutations,

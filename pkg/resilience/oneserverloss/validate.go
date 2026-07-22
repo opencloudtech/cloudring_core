@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/opencloudtech/CloudRING/pkg/kubeidentity"
 )
 
 const (
@@ -106,6 +108,11 @@ func ValidateReadyMarker(marker ReadyMarker) error {
 		canonicalTimestamp(marker.ReadyAt) == nil || !validSHA256(marker.MarkerSHA256) {
 		return errors.New("one-server-loss ready marker is invalid")
 	}
+	if marker.NodeUIDHashAlgorithm != "" && marker.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
+		(marker.NodeUIDHashAlgorithm == "") != (marker.ControlPlaneMemberSetSHA256 == "") ||
+		marker.ControlPlaneMemberSetSHA256 != "" && !validSHA256(marker.ControlPlaneMemberSetSHA256) {
+		return errors.New("one-server-loss ready marker member set is invalid")
+	}
 	copy := marker
 	copy.MarkerSHA256 = ""
 	if digestJSON(copy) != marker.MarkerSHA256 {
@@ -145,6 +152,9 @@ func ValidateReceipt(receipt *Receipt) error {
 		canonicalTimestamp(receipt.StartedAt) == nil || canonicalTimestamp(receipt.ReadyMarkerAt) == nil || canonicalTimestamp(receipt.CompletedAt) == nil || !validSHA256(receipt.ReceiptSHA256) {
 		return errors.New("one-server-loss receipt is invalid")
 	}
+	if receipt.NodeUIDHashAlgorithm != "" && receipt.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm {
+		return errors.New("one-server-loss receipt Node UID hash algorithm is invalid")
+	}
 	poll, err := canonicalDuration(receipt.PollInterval, minimumPollInterval, maximumPollInterval)
 	if err != nil {
 		return errors.New("one-server-loss receipt poll interval is invalid")
@@ -171,6 +181,9 @@ func ValidateReceipt(receipt *Receipt) error {
 	}
 	if err := validateBaseline(receipt.Baseline, receipt.MinimumControlPlane); err != nil {
 		return err
+	}
+	if (receipt.NodeUIDHashAlgorithm == "") != (receipt.Baseline.ControlPlaneMemberSetSHA256 == "") {
+		return errors.New("one-server-loss receipt member-set hash algorithm binding is invalid")
 	}
 	phases := []struct {
 		evidence PhaseEvidence
@@ -247,6 +260,9 @@ func validateBaseline(baseline Baseline, minimum int) error {
 		!validSHA256(baseline.DataSHA256) || baseline.ValidatedBytes < 1 || !validSHA256(baseline.BaselineSHA256) {
 		return errors.New("one-server-loss baseline is invalid")
 	}
+	if baseline.ControlPlaneMemberSetSHA256 != "" && !validSHA256(baseline.ControlPlaneMemberSetSHA256) {
+		return errors.New("one-server-loss baseline member set is invalid")
+	}
 	copy := baseline
 	copy.BaselineSHA256 = ""
 	if digestJSON(copy) != baseline.BaselineSHA256 {
@@ -263,6 +279,27 @@ func validatePhase(phase PhaseEvidence, expected string) error {
 		return errors.New("one-server-loss phase sample digest is invalid")
 	}
 	return nil
+}
+
+// ControlPlaneMemberSetSHA256 returns a deterministic, order-independent,
+// domain-separated digest for unique privacy-safe control-plane member UID
+// hashes. It returns an empty string for malformed, duplicate, or unbounded
+// input.
+func ControlPlaneMemberSetSHA256(memberUIDSHA256 []string) string {
+	if len(memberUIDSHA256) < 1 || len(memberUIDSHA256) > 10000 {
+		return ""
+	}
+	canonical := append([]string(nil), memberUIDSHA256...)
+	sort.Strings(canonical)
+	for index, uid := range canonical {
+		if !validSHA256(uid) || index > 0 && uid == canonical[index-1] {
+			return ""
+		}
+	}
+	return digestJSON(struct {
+		Domain          string   `json:"domain"`
+		MemberUIDSHA256 []string `json:"memberUidSha256"`
+	}{Domain: controlPlaneMemberSetDomain, MemberUIDSHA256: canonical})
 }
 
 func validateSampleSequence(samples []SampleEvidence, poll time.Duration, receipt *Receipt) error {
@@ -320,6 +357,9 @@ func validateSafeSample(sample SampleEvidence, receipt *Receipt) error {
 		probeStarted.Before(*started) || probeCompleted.After(*observed) {
 		return errors.New("one-server-loss sample contains invalid safe evidence")
 	}
+	if sample.ControlPlaneMemberSetSHA256 != "" && !validSHA256(sample.ControlPlaneMemberSetSHA256) {
+		return errors.New("one-server-loss sample member set is invalid")
+	}
 	previousID := ""
 	for _, workload := range sample.Workloads {
 		if !validSafeID(workload.ID) || workload.ID <= previousID || !validSHA256(workload.BindingSHA256) || workload.ReadyPods < 0 || workload.ReadyPods > 10000 ||
@@ -335,9 +375,10 @@ func validateSafeSample(sample SampleEvidence, receipt *Receipt) error {
 func validatePhaseHealth(samples []SampleEvidence, phase string, receipt *Receipt, vmUnavailable time.Duration) error {
 	vmRecoveredOffTarget := false
 	lossStarted := canonicalTimestamp(receipt.Loss.StartedAt)
+	memberSetBound := receipt.Baseline.ControlPlaneMemberSetSHA256 != ""
 	for _, sample := range samples {
 		if sample.Phase != phase || sample.VM.VMUIDSHA256 != receipt.Baseline.VMUIDSHA256 || sample.DataProbe.DataSHA256 != receipt.Baseline.DataSHA256 ||
-			sample.DataProbe.ValidatedBytes != receipt.Baseline.ValidatedBytes {
+			sample.DataProbe.ValidatedBytes != receipt.Baseline.ValidatedBytes || memberSetBound != (sample.ControlPlaneMemberSetSHA256 != "") {
 			return errors.New("one-server-loss identity or data continuity failed")
 		}
 		for _, workload := range sample.Workloads {
@@ -348,12 +389,14 @@ func validatePhaseHealth(samples []SampleEvidence, phase string, receipt *Receip
 		switch phase {
 		case PhasePreLoss:
 			if !sample.TargetNodePresent || !sample.TargetNodeReady || sample.TargetNodeUIDSHA256 != receipt.TargetNodeUIDSHA256 ||
+				memberSetBound && sample.ControlPlaneMemberSetSHA256 != receipt.Baseline.ControlPlaneMemberSetSHA256 ||
 				sample.ControlPlaneReadyNodes < receipt.Baseline.ControlPlaneNodes || sample.EtcdReadyMembers < receipt.Baseline.EtcdMembers || sample.APIServerReadyMembers < receipt.Baseline.APIServerMembers ||
 				!sample.TargetHostsEtcd || !sample.TargetHostsAPIServer || !sample.VM.VMReady || !sample.VM.VMIReady || !sample.VM.VMIOnTarget {
 				return errors.New("one-server-loss pre-loss health failed")
 			}
 		case PhaseLoss:
 			if sample.TargetNodeReady || sample.TargetNodePresent && sample.TargetNodeUIDSHA256 != receipt.TargetNodeUIDSHA256 ||
+				memberSetBound && sample.ControlPlaneMemberSetSHA256 == receipt.Baseline.ControlPlaneMemberSetSHA256 ||
 				sample.ControlPlaneReadyNodes != receipt.Baseline.ControlPlaneNodes-1 || sample.EtcdReadyMembers != receipt.Baseline.EtcdMembers-1 ||
 				sample.APIServerReadyMembers != receipt.Baseline.APIServerMembers-1 {
 				return errors.New("one-server-loss exact loss envelope failed")
@@ -367,6 +410,7 @@ func validatePhaseHealth(samples []SampleEvidence, phase string, receipt *Receip
 			}
 		case PhaseRecovered:
 			if !sample.TargetNodePresent || !sample.TargetNodeReady || sample.TargetNodeUIDSHA256 != receipt.TargetNodeUIDSHA256 ||
+				memberSetBound && sample.ControlPlaneMemberSetSHA256 != receipt.Baseline.ControlPlaneMemberSetSHA256 ||
 				sample.ControlPlaneReadyNodes < receipt.Baseline.ControlPlaneNodes || sample.EtcdReadyMembers < receipt.Baseline.EtcdMembers || sample.APIServerReadyMembers < receipt.Baseline.APIServerMembers ||
 				!sample.TargetHostsEtcd || !sample.TargetHostsAPIServer || !sample.VM.VMReady || !sample.VM.VMIReady {
 				return errors.New("one-server-loss recovery health failed")

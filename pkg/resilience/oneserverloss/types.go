@@ -26,6 +26,8 @@ const (
 	PhasePreLoss   = "pre-loss"
 	PhaseLoss      = "loss"
 	PhaseRecovered = "recovered"
+
+	controlPlaneMemberSetDomain = "cloudring.one-server-loss.control-plane-member-set/v1"
 )
 
 // Request is private installation input. Names, namespaces, label bindings,
@@ -70,18 +72,20 @@ type DataProbeTarget struct {
 // ReadyMarker is a private, atomic hand-off to the installation-owned fault
 // procedure. It contains hashes and counts, never private Kubernetes names.
 type ReadyMarker struct {
-	SchemaVersion             string `json:"schemaVersion"`
-	Status                    string `json:"status"`
-	RequestSHA256             string `json:"requestSha256"`
-	RunNonceSHA256            string `json:"runNonceSha256"`
-	TargetNodeUIDSHA256       string `json:"targetNodeUidSha256"`
-	KubectlExecutableSHA256   string `json:"kubectlExecutableSha256"`
-	ProbeAdapterSHA256        string `json:"probeAdapterSha256"`
-	BaselineControlPlaneNodes int    `json:"baselineControlPlaneNodes"`
-	BaselineEtcdMembers       int    `json:"baselineEtcdMembers"`
-	BaselineAPIServerMembers  int    `json:"baselineApiServerMembers"`
-	ReadyAt                   string `json:"readyAt"`
-	MarkerSHA256              string `json:"markerSha256"`
+	SchemaVersion               string `json:"schemaVersion"`
+	Status                      string `json:"status"`
+	RequestSHA256               string `json:"requestSha256"`
+	RunNonceSHA256              string `json:"runNonceSha256"`
+	TargetNodeUIDSHA256         string `json:"targetNodeUidSha256"`
+	NodeUIDHashAlgorithm        string `json:"nodeUidHashAlgorithm,omitempty"`
+	KubectlExecutableSHA256     string `json:"kubectlExecutableSha256"`
+	ProbeAdapterSHA256          string `json:"probeAdapterSha256"`
+	ControlPlaneMemberSetSHA256 string `json:"controlPlaneMemberSetSha256,omitempty"`
+	BaselineControlPlaneNodes   int    `json:"baselineControlPlaneNodes"`
+	BaselineEtcdMembers         int    `json:"baselineEtcdMembers"`
+	BaselineAPIServerMembers    int    `json:"baselineApiServerMembers"`
+	ReadyAt                     string `json:"readyAt"`
+	MarkerSHA256                string `json:"markerSha256"`
 }
 
 type Receipt struct {
@@ -90,6 +94,7 @@ type Receipt struct {
 	RequestSHA256           string        `json:"requestSha256"`
 	RunNonceSHA256          string        `json:"runNonceSha256"`
 	TargetNodeUIDSHA256     string        `json:"targetNodeUidSha256"`
+	NodeUIDHashAlgorithm    string        `json:"nodeUidHashAlgorithm,omitempty"`
 	KubectlExecutableSHA256 string        `json:"kubectlExecutableSha256"`
 	ProbeAdapterSHA256      string        `json:"probeAdapterSha256"`
 	StartedAt               string        `json:"startedAt"`
@@ -110,13 +115,14 @@ type Receipt struct {
 }
 
 type Baseline struct {
-	ControlPlaneNodes int    `json:"controlPlaneNodes"`
-	EtcdMembers       int    `json:"etcdMembers"`
-	APIServerMembers  int    `json:"apiServerMembers"`
-	VMUIDSHA256       string `json:"vmUidSha256"`
-	DataSHA256        string `json:"dataSha256"`
-	ValidatedBytes    int64  `json:"validatedBytes"`
-	BaselineSHA256    string `json:"baselineSha256"`
+	ControlPlaneNodes           int    `json:"controlPlaneNodes"`
+	EtcdMembers                 int    `json:"etcdMembers"`
+	APIServerMembers            int    `json:"apiServerMembers"`
+	VMUIDSHA256                 string `json:"vmUidSha256"`
+	DataSHA256                  string `json:"dataSha256"`
+	ValidatedBytes              int64  `json:"validatedBytes"`
+	ControlPlaneMemberSetSHA256 string `json:"controlPlaneMemberSetSha256,omitempty"`
+	BaselineSHA256              string `json:"baselineSha256"`
 }
 
 type PhaseEvidence struct {
@@ -128,23 +134,24 @@ type PhaseEvidence struct {
 }
 
 type SampleEvidence struct {
-	Sequence               int64              `json:"sequence"`
-	Phase                  string             `json:"phase"`
-	StartedAt              string             `json:"startedAt"`
-	ObservedAt             string             `json:"observedAt"`
-	TargetNodePresent      bool               `json:"targetNodePresent"`
-	TargetNodeReady        bool               `json:"targetNodeReady"`
-	TargetNodeUIDSHA256    string             `json:"targetNodeUidSha256,omitempty"`
-	ReadyZPassed           bool               `json:"readyzPassed"`
-	ControlPlaneReadyNodes int                `json:"controlPlaneReadyNodes"`
-	EtcdReadyMembers       int                `json:"etcdReadyMembers"`
-	APIServerReadyMembers  int                `json:"apiServerReadyMembers"`
-	TargetHostsEtcd        bool               `json:"targetHostsEtcd"`
-	TargetHostsAPIServer   bool               `json:"targetHostsApiServer"`
-	Workloads              []WorkloadEvidence `json:"workloads"`
-	VM                     VMEvidence         `json:"vm"`
-	DataProbe              DataProbeEvidence  `json:"dataProbe"`
-	SampleSHA256           string             `json:"sampleSha256"`
+	Sequence                    int64              `json:"sequence"`
+	Phase                       string             `json:"phase"`
+	StartedAt                   string             `json:"startedAt"`
+	ObservedAt                  string             `json:"observedAt"`
+	TargetNodePresent           bool               `json:"targetNodePresent"`
+	TargetNodeReady             bool               `json:"targetNodeReady"`
+	TargetNodeUIDSHA256         string             `json:"targetNodeUidSha256,omitempty"`
+	ReadyZPassed                bool               `json:"readyzPassed"`
+	ControlPlaneReadyNodes      int                `json:"controlPlaneReadyNodes"`
+	EtcdReadyMembers            int                `json:"etcdReadyMembers"`
+	APIServerReadyMembers       int                `json:"apiServerReadyMembers"`
+	ControlPlaneMemberSetSHA256 string             `json:"controlPlaneMemberSetSha256,omitempty"`
+	TargetHostsEtcd             bool               `json:"targetHostsEtcd"`
+	TargetHostsAPIServer        bool               `json:"targetHostsApiServer"`
+	Workloads                   []WorkloadEvidence `json:"workloads"`
+	VM                          VMEvidence         `json:"vm"`
+	DataProbe                   DataProbeEvidence  `json:"dataProbe"`
+	SampleSHA256                string             `json:"sampleSha256"`
 }
 
 type WorkloadEvidence struct {
