@@ -89,18 +89,22 @@ The only accepted sequence is:
    `one-to-two` plan against that exact starting identity set and a fresh
    off-cell backup and restore barrier;
 2. separately apply the approved deployment-owned change, then capture a ready
-   two-member verification;
+   two-member inventory strictly after both the plan generation time and its
+   bound backup generation time, and use it for verification;
 3. take and validate a new off-cell backup whose generation time is later than
    completion of the first verification;
 4. after that backup completes, capture a fresh two-member preflight inventory
    whose `capturedAt` is strictly later than both the first verification's
    `completedAt` and the inter-wave backup generation time, and whose exact
    identity set equals the first verification's final set; then build and review the
-   `two-to-three` plan, separately apply it, and capture three healthy
-   control-plane, etcd, and API-server members;
-5. supply the final public `oneserverloss.Receipt`. The verifier recomputes its
-   full offline digest chain, requires its protected baseline to match the
-   recovered three-member topology exactly, and enforces evidence freshness.
+   `two-to-three` plan and separately apply it;
+5. complete a new final public `oneserverloss.Receipt` strictly after both the
+   second plan generation time and its bound backup generation time, then
+   capture the three-member verification inventory strictly after that drill
+   completes. The inventory binds the exact completed receipt. The verifier
+   recomputes its full offline digest chain, requires its protected baseline to
+   match the recovered three-member topology exactly, and enforces the strict
+   chronology and evidence freshness.
 
 Final one-server-loss evidence is forbidden in the first verification and
 mandatory in the second. A self-declared survive count, boolean, artifact hash,
@@ -127,9 +131,20 @@ completion and the validated inter-wave backup. A caller-supplied current
 count, when present for compatibility, must match the preflight-derived
 topology and cannot replace that receipt.
 
-The wave verification requires the final set to equal the starting set union
-exactly one new unique member identity. Equal target counts do not permit a
-replacement, deletion, duplicate, entirely different member set, or two
+The wave verification accepts only an inventory whose `capturedAt` is strictly
+later than both the plan's `generatedAt` and its bound `backupGeneratedAt`.
+Equality at either boundary fails closed, so a still-fresh target-set receipt
+captured before the plan cannot verify a later apply. The final three-member
+drill must complete strictly after both of those plan boundaries and strictly
+before the inventory that embeds its exact receipt binding. An older valid
+receipt from the same member set cannot be reused for a new final HA-wave
+verification. The plan, backup, drill completion, and verification inventory
+must also be no later than the verifier clock; the generic receipt clock-skew
+allowance cannot turn future-dated evidence into a ready HA-wave result.
+
+The wave verification also requires the final set to equal the starting set
+union exactly one new unique member identity. Equal target counts do not permit
+a replacement, deletion, duplicate, entirely different member set, or two
 additions combined with one deletion. The verification receipt persists the
 exact starting and final hash sets and their canonical digests, and records the
 single `introducedMemberUidSha256` as the only member eligible for rollback.
