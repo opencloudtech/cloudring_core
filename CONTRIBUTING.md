@@ -1,71 +1,101 @@
 # Contributing To CloudRING
 
-CloudRING accepts contributions that improve the public platform runtime,
-services, adapters, contracts, tests, installers, operations tooling,
-documentation, SDKs, and module interoperability.
+CloudRING welcomes contributions to the public platform runtime, OCSv3,
+services, provider adapters, contracts, tests, installers, operations tooling,
+security, documentation, SDKs, and developer experience.
 
-## Platform ownership
+The project is early. The most valuable contributions are small, complete,
+provider-neutral slices with tests and explicit failure behavior—not broad
+scaffolds that imply capabilities the repository cannot yet deliver.
 
-Contributions may change CloudRING runtime and contracts for OCSv3, identity,
-IAM, audit, catalog, billing, portal, self-service, GitOps, installers,
-readiness evidence, module lifecycle, backup/restore, upgrades, rollback,
-provider adapters, and developer/operator tooling.
+## Where contributions fit
 
-## Service ownership
+### Platform core
 
-Complete service implementations may be contributed under Apache-2.0 and then
-become part of CloudRING. Independently developed services remain owned by
-their authors. Both must expose OCSv3 metadata and APIs and must not couple the
-platform to private implementation packages. Reusable provider adapters are
-welcome; concrete accounts, credentials, topology, and installation values are
-not.
+Platform contributions may improve identity, IAM, audit, catalog, orders,
+billing foundations, portal/API/CLI surfaces, durable operations, GitOps,
+installation, observability, backup/restore, upgrade/rollback, evidence, or
+release safety. Core code must depend on portable capabilities and versioned
+contracts rather than a private service implementation or provider account.
 
-## Enterprise and private boundary
+### OCSv3 and cloud products
 
-Do not contribute customer data, credentials, private endpoints, live
-installation values, company-only implementation details, enterprise-only
-modules, copied proprietary source text, or support records. Use synthetic
-examples and portable capability names.
+Service teams may contribute OCSv3 contracts, SDKs, conformance cases, reference
+products, or complete open source modules. A module should expose the same
+documented IAM, lifecycle, billing, support, durability, data-exit, and evidence
+surfaces expected from every first-class product.
 
-## Developer entry points
+Independently developed services remain owned and licensed by their authors
+unless intentionally contributed. Compatibility claims require conformance
+evidence; they do not require transferring a private implementation to this
+repository.
 
-Start with `docs/public-boundary.md`, then add or update the
-smallest complete public slice needed for the platform, service, or adapter.
-Include focused tests for behavior, failure modes, tenant boundaries, and
-portability; record only synthetic evidence for repository-level operational
-claims.
+### Provider adapters
+
+Reusable provider and site adapters are welcome when they use portable
+interfaces and synthetic fixtures. Concrete accounts, credentials, private
+inventory, endpoints, topology, commercial terms, and deployment values remain
+with the operator.
+
+### Product, UX, operations, and documentation
+
+CloudRING also needs clear user journeys, accessibility, support workflows,
+failure-mode tests, operability, security review, and precise documentation.
+A contribution that removes an unsupported claim or makes a blocked state
+visible is as valuable as new code.
+
+## Design expectations
+
+- Start with [VISION.md](VISION.md), the [public roadmap](roadmap/README.md), and the
+  [public boundary](docs/public-boundary.md).
+- Prefer the smallest vertical change that a user or operator can verify.
+- Keep APIs and OCSv3 wire contracts language-neutral; Go is the current
+  reference implementation, not an integration requirement.
+- Use upstream Kubernetes APIs for the target runtime and hide provider details
+  behind adapters.
+- Include denied, degraded, retry, rollback, cleanup, and data-durability paths
+  where they apply.
+- Do not mark a feature ready from schemas, fixtures, manifests, or unit tests
+  alone. State the exact scope of the evidence.
+- Preserve a user's ability to export data, delete resources, and understand
+  cost and support ownership.
+
+## Public and private boundary
+
+Do not contribute customer or tenant data, credentials, private endpoints,
+live installation values, company-only implementation details, private
+repository paths, copied proprietary text, support records, cookies,
+kubeconfigs, or deployment evidence. Use synthetic identifiers and portable
+capability names.
 
 ## Pull request path
 
 1. Clone the public repository and create a topic branch.
-2. Enable the tracked pre-push source-safety hook for this clone:
+2. Enable the tracked pre-push source-safety hook:
 
-```bash
-git config core.hooksPath .githooks
-```
+   ```bash
+   git config core.hooksPath .githooks
+   ```
 
-   The hook scans every commit introduced by each pushed ref and the raw
-   metadata of every introduced annotated tag in a bounded, validated tag
-   chain. Unsupported publication objects fail closed. It is an early local
-   check; protected-branch CI remains authoritative and cannot be replaced or
-   bypassed by changing local hook configuration.
+   The hook scans commits and annotated-tag metadata introduced by the push.
+   It is an early local check; protected-branch CI remains authoritative.
 3. Run:
 
-```bash
-go test ./... -count=1
-go run ./cmd/cloudring-sourcecheck scan --scope changed
-go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
-```
+   ```bash
+   go test ./... -count=1
+   go run ./cmd/cloudring-sourcecheck scan --scope changed
+   go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
+   go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
+   go run ./cmd/cloudring-manifestcheck --root .
+   ```
 
-4. Open a pull request with a concise summary, validation notes, and any
-   public-safe evidence paths created inside your working tree.
-5. Complete the CLA/DCO checks described in `CLA.md` and `DCO.md`.
-6. Obtain the project founder's owner review. The founder may review
-   founder-authored changes under the exact-head SafePush process documented in
-   `GOVERNANCE.md` and `docs/ci-checks.md`; this exception does not extend to
-   other contributors.
+4. Open a pull request with a concise problem statement, the chosen boundary,
+   validation results, remaining non-claims, and any source-safe evidence.
+5. Read [CLA.md](CLA.md); submitting a contribution makes the representations
+   stated there. Add the `Signed-off-by` line required by [DCO.md](DCO.md) to
+   every commit.
+6. Obtain the review required by [GOVERNANCE.md](GOVERNANCE.md). Maintainer or
+   administrator access is not permission to bypass required checks.
 
-Do not paste private repository paths, local user paths, live provider data,
-tenant records, secrets, cookies, kubeconfigs, or customer support material into
-code, docs, tests, examples, evidence, commit messages, or pull request text.
+Do not include private or live deployment material in commit messages, pull
+request text, review comments, logs, or generated evidence.

@@ -1,44 +1,69 @@
 # Ownership
 
-CloudRING separates the reusable public platform from downstream products,
-deployments, and independently owned modules.
+CloudRING separates the reusable public platform from independently owned
+services, provider businesses, and deployment-specific material.
 
-Copyright is stated in `NOTICE`. Project ownership and trademarks are held by
-Elena Trukhina ZZP.
+Copyright attribution is stated in [NOTICE](NOTICE). Repository stewardship and
+project trademark control are held by Elena Trukhina ZZP. Copyright in an
+independent contribution remains with its copyright holder unless it is
+transferred under a separate agreement. The Apache License 2.0 governs material
+distributed under this repository's license; third-party material retains its
+own terms.
 
-## Platform ownership
+## Public platform scope
 
-CloudRING owns:
+The public project is the intended home for reusable, provider-neutral material
+such as:
 
-- The provider-neutral control-plane runtime and public APIs.
-- OCSv3 contracts, SDKs, validators, and conformance tooling.
-- Identity, IAM, policy, admission, audit, catalog, billing, portal, and
-  self-service platform services.
-- GitOps, bootstrap, evidence, readiness, lifecycle, BOM, backup/restore,
-  upgrade, and rollback tooling.
-- Open source service modules and reusable provider adapters accepted under
-  Apache-2.0.
-- Developer and operator documentation.
+- the provider-neutral control-plane runtime and public APIs;
+- OCSv3 contracts, SDKs, validators, conformance tooling, and reference modules;
+- identity, IAM, policy, admission, audit, catalog, billing foundations, portal,
+  and self-service platform capabilities;
+- GitOps, installation, evidence, readiness, lifecycle, backup/restore,
+  upgrade, rollback, release, and operations tooling;
+- open source service modules and reusable provider adapters accepted under the
+  repository's contribution and licensing terms;
+- developer, operator, security, and user documentation.
 
-## Service ownership
+Project maintainers decide whether material distributed through this repository
+conforms to its published contracts. The project does not acquire ownership of
+an independent implementation merely because that implementation uses OCSv3.
 
-An independently developed service module owns its implementation and license
-unless its owner contributes it to CloudRING. CloudRING-distributed modules are
-part of the public project. Both use the same OCSv3 integration surfaces so a
-module can be developed and operated without coupling its internals to the
-platform.
+## Independent services
 
-## Enterprise and private boundary
+An independently developed service remains owned and licensed by its author
+unless it is intentionally contributed to CloudRING. Its owner controls its
+implementation, release cadence, commercial terms, and distribution subject to
+applicable law and agreements.
 
-Company overlays, enterprise-only modules, customer deployments, live values,
-credentials, customer data, and live support/evidence records remain outside
-the public core. A provider adapter belongs in public when it is reusable and
-source-safe; account-, topology-, or company-specific configuration remains
-downstream.
+To integrate as a first-class product, the service publishes the OCSv3 metadata
+and APIs required for lifecycle, IAM, portal, billing, support, observability,
+durability, backup/restore, upgrade/rollback, export/deletion, and failure
+states. The platform consumes those declared interfaces without importing the
+service's private internals.
 
-## Developer entry points
+## Providers and deployments
 
-Module developers publish OCSv3 metadata and APIs. Platform developers extend
-the public runtime and contracts. Adapter developers implement infrastructure
-integrations behind portable interfaces. Portal developers mount service
-experiences through shell extension contracts.
+Each provider owns and operates its business, customer relationships, capacity,
+local policies, admitted module catalog, commercial terms, and legal compliance.
+CloudRING compatibility does not imply endorsement, certification, shared
+ownership, or operational responsibility by the CloudRING project.
+
+Account-, topology-, customer-, and installation-specific configuration;
+credentials; customer data; private endpoints; live support records; and live
+evidence remain with the deployment owner. A reusable adapter belongs in public
+only when it is intentionally contributed and source-safe.
+
+## Federation and commercial relationships
+
+Future federation does not create a common owner of participating providers or
+modules. Product publication, licensing, marketplace admission, settlement,
+revenue sharing, support, and liability require explicit agreements and
+machine-readable policy where appropriate. No such relationship is implied by
+using CloudRING or OCSv3.
+
+## Trademarks
+
+Open source licensing does not grant trademark rights. See
+[TRADEMARKS.md](TRADEMARKS.md) before naming or marketing a compatible module,
+fork, hosted service, or downstream distribution.

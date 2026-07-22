@@ -4,6 +4,12 @@ CloudRING is a public multi-tenant cloud platform. Security work covers its
 runtime, services, supply chain, contracts, and deployment interfaces while
 keeping private deployment material out of the public repository.
 
+CloudRING is in early development. No release is approved for real deployments.
+The current `main` branch receives security fixes, but it must not be treated as
+a supported production distribution. A future support and disclosure policy
+will name supported releases, response targets, and deployment profiles before
+any pilot approval or real-deployment support claim.
+
 ## Reporting
 
 Report suspected vulnerabilities confidentially to `yuri@trukhin.com`.
@@ -41,3 +47,7 @@ Security reviewers should inspect runtime authorization paths, tenant
 boundaries, OCSv3 metadata, IAM and policy behavior, durability, source-safety
 evidence, supply-chain provenance, and readiness evidence before accepting a
 platform or module change.
+
+Security-relevant examples and repository checks are scoped evidence only. They
+do not prove the security of a live installation, provider adapter, independent
+module, or downstream configuration.
