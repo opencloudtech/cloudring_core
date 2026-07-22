@@ -97,6 +97,55 @@ func TestScanContent_allowsOnlyExactReviewedVendoredPrivateKeyDocumentation(t *t
 	}
 }
 
+func TestReviewedVendoredPrivateKeyDocumentation_requiresExactPathDigestAndGitlinkProvenance(t *testing.T) {
+	repositoryPath := filepath.Join("..", "..", filepath.FromSlash(reviewedVendoredPrivateKeyDocumentationPath))
+	// #nosec G304 -- this test reads one fixed repository fixture path assembled for platform portability.
+	data, err := os.ReadFile(repositoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	tests := []struct {
+		name    string
+		path    string
+		variant string
+		kind    string
+		content string
+		want    bool
+	}{
+		{name: "root index", path: reviewedVendoredPrivateKeyDocumentationPath, variant: "index", content: content, want: true},
+		{name: "root worktree", path: reviewedVendoredPrivateKeyDocumentationPath, variant: "worktree", content: content, want: true},
+		{name: "one gitlink index prefix", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content, want: true},
+		{name: "one gitlink worktree prefix", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/worktree", content: content, want: true},
+		{name: "prefixed without recursive provenance", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "index", content: content},
+		{name: "root path with recursive provenance", path: reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "nested path prefix", path: "provider/cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "nested recursive provenance", path: "provider/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/gitlink/index", content: content},
+		{name: "extra child prefix", path: "cloudring_core/extra/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "near directory", path: "cloudring_core/deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn-copy/values.yaml", variant: "gitlink/index", content: content},
+		{name: "near filename", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath + ".bak", variant: "gitlink/index", content: content},
+		{name: "dot traversal", path: "cloudring_core/../" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "parent traversal", path: "../cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "empty segment", path: "cloudring_core//" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "backslash path", path: `cloudring_core\` + strings.ReplaceAll(reviewedVendoredPrivateKeyDocumentationPath, "/", `\`), variant: "gitlink/index", content: content},
+		{name: "absolute path", path: "/cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content},
+		{name: "nul path", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath + "\x00", variant: "gitlink/index", content: content},
+		{name: "wrong whole file digest", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/index", content: content + "\n"},
+		{name: "symlink input kind", path: "cloudring_core/" + reviewedVendoredPrivateKeyDocumentationPath, variant: "gitlink/worktree", kind: "symlink", content: content},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			kind := test.kind
+			if kind == "" {
+				kind = "text"
+			}
+			if got := reviewedVendoredPrivateKeyDocumentation(test.path, test.variant, kind, test.content); got != test.want {
+				t.Fatalf("reviewedVendoredPrivateKeyDocumentation() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestReadinessOverclaim_non_claim_does_not_mask_later_claim(t *testing.T) {
 	text := "This does not claim production readiness. The module is production " + "ready."
 	findings := scanContent("README.md", text)
