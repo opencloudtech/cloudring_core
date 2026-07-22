@@ -154,6 +154,30 @@ func TestCLIVerifierRequiresIdentityBoundOneServerLossReceipt(t *testing.T) {
 	}
 }
 
+func TestCLIVerifierIgnoresCallerDeclaredSurviveCount(t *testing.T) {
+	payload := strings.Replace(
+		readExample(t, "kubeadm-stand-inventory.json"),
+		`"oneServerLossReceipt":`,
+		`"surviveUnavailableServers": 1, "oneServerLossReceipt":`,
+		1,
+	)
+	var stdout, stderr bytes.Buffer
+	if code := run(
+		[]string{"verify-kubeadm", "--inventory", "-"},
+		strings.NewReader(payload),
+		&stdout,
+		&stderr,
+	); code != exitBlocked {
+		t.Fatalf("caller-declared survive count returned code %d, want %d", code, exitBlocked)
+	}
+	var report kubeadm.StandReport
+	if err := strictjson.DecodeExact(stdout.Bytes(), &report); err != nil ||
+		report.VerifiedSurviveUnavailableServers != 0 || report.Observed.SurviveUnavailableServers != 0 ||
+		!hasBlocker(report.Blockers, "missing_one_server_loss_evidence") {
+		t.Fatalf("caller declaration influenced verified evidence: err=%v report=%#v stderr=%q", err, report, stderr.String())
+	}
+}
+
 func TestCLIKubeadmInputsFailClosedWithoutEcho(t *testing.T) {
 	canary := "must-not-be-echoed"
 	tests := []struct {

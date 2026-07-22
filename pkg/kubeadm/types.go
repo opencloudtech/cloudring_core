@@ -109,18 +109,21 @@ type CoreDNSExpectation struct {
 // StandInventory is sanitized observed state consumed by the independent
 // verifier.
 type StandInventory struct {
-	Distribution                           string                      `json:"distribution"`
-	Bootstrap                              string                      `json:"bootstrap"`
-	ServerVersion                          string                      `json:"serverVersion"`
-	ControlPlaneEndpoint                   string                      `json:"controlPlaneEndpoint"`
-	StableAPIIPv4                          string                      `json:"stableAPIIPv4"`
-	StableAPIIPv6                          string                      `json:"stableAPIIPv6"`
-	APIServingCertificateSANs              []string                    `json:"apiServingCertificateSANs"`
-	ControlPlaneReplicas                   int                         `json:"controlPlaneReplicas"`
-	EtcdTopology                           string                      `json:"etcdTopology"`
-	PodCIDRs                               []string                    `json:"podCIDRs"`
-	ServiceCIDRs                           []string                    `json:"serviceCIDRs"`
-	SurviveUnavailableServers              int                         `json:"surviveUnavailableServers"`
+	Distribution              string   `json:"distribution"`
+	Bootstrap                 string   `json:"bootstrap"`
+	ServerVersion             string   `json:"serverVersion"`
+	ControlPlaneEndpoint      string   `json:"controlPlaneEndpoint"`
+	StableAPIIPv4             string   `json:"stableAPIIPv4"`
+	StableAPIIPv6             string   `json:"stableAPIIPv6"`
+	APIServingCertificateSANs []string `json:"apiServingCertificateSANs"`
+	ControlPlaneReplicas      int      `json:"controlPlaneReplicas"`
+	EtcdTopology              string   `json:"etcdTopology"`
+	PodCIDRs                  []string `json:"podCIDRs"`
+	ServiceCIDRs              []string `json:"serviceCIDRs"`
+	// SurviveUnavailableServers is a deprecated input-only compatibility field.
+	// VerifyUpstreamStand ignores it and strips it from Observed; only
+	// VerifiedSurviveUnavailableServers carries verified evidence.
+	SurviveUnavailableServers              int                         `json:"surviveUnavailableServers,omitempty"`
 	OneServerLossReceipt                   OneServerLossReceiptBinding `json:"oneServerLossReceipt"`
 	CiliumDualStackReady                   bool                        `json:"ciliumDualStackReady"`
 	CiliumAPIEndpoint                      string                      `json:"ciliumAPIEndpoint"`
@@ -169,12 +172,13 @@ type EvidenceInventory struct {
 
 // StandReport is the fail-closed verification result.
 type StandReport struct {
-	Status               string            `json:"status"`
-	Blockers             []Blocker         `json:"blockers,omitempty"`
-	WorkflowContinuity   EvidenceInventory `json:"workflowContinuity"`
-	DataDurability       EvidenceInventory `json:"dataDurability"`
-	SinglePointOfFailure EvidenceInventory `json:"singlePointOfFailure"`
-	Observed             StandInventory    `json:"observed"`
+	Status                            string            `json:"status"`
+	VerifiedSurviveUnavailableServers int               `json:"verifiedSurviveUnavailableServers"`
+	Blockers                          []Blocker         `json:"blockers,omitempty"`
+	WorkflowContinuity                EvidenceInventory `json:"workflowContinuity"`
+	DataDurability                    EvidenceInventory `json:"dataDurability"`
+	SinglePointOfFailure              EvidenceInventory `json:"singlePointOfFailure"`
+	Observed                          StandInventory    `json:"observed"`
 }
 
 // Blocker identifies one failed acceptance condition.

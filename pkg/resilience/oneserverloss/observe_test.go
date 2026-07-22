@@ -257,6 +257,39 @@ func TestObserveDoesNotMisclassifySuccessfulSampleDurationAsGap(t *testing.T) {
 	}
 }
 
+func TestValidateReceiptRejectsTwoUnavailableServersDespiteQuorum(t *testing.T) {
+	receipt, _ := runHappyObserver(t, &fakeReader{})
+	receipt.Baseline.ControlPlaneNodes = 5
+	receipt.Baseline.EtcdMembers = 5
+	receipt.Baseline.APIServerMembers = 5
+	receipt.Baseline.BaselineSHA256 = baselineDigest(receipt.Baseline)
+	for phaseIndex, phase := range []*PhaseEvidence{&receipt.PreLoss, &receipt.Loss, &receipt.Recovered} {
+		members := 5
+		if phaseIndex == 1 {
+			// Three of five is still quorum, but it proves two unavailable
+			// servers and must not satisfy the one-server-loss contract.
+			members = 3
+		}
+		for index := range phase.Samples {
+			phase.Samples[index].ControlPlaneReadyNodes = members
+			phase.Samples[index].EtcdReadyMembers = members
+			phase.Samples[index].APIServerReadyMembers = members
+			phase.Samples[index].SampleSHA256 = sampleDigest(phase.Samples[index])
+		}
+		phase.SamplesSHA256 = digestJSON(phase.Samples)
+	}
+	receipt.ReceiptSHA256 = receiptDigest(receipt)
+	if err := sampleHealth(
+		receipt.Loss.Samples[0], PhaseLoss, receipt.MinimumControlPlane, receipt.Baseline,
+		receipt.TargetNodeUIDSHA256, 2*time.Second, mustTimestamp(receipt.Loss.StartedAt),
+	); err == nil {
+		t.Fatal("online observer accepted two unavailable servers with quorum")
+	}
+	if err := ValidateReceipt(&receipt); err == nil || !strings.Contains(err.Error(), "exact loss envelope") {
+		t.Fatalf("two unavailable servers with quorum were accepted: %v", err)
+	}
+}
+
 func TestTerminatingObjectsRemainDecodableAndCountAsNotReady(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -326,6 +359,42 @@ func TestListDecoderRejectsMalformedDeletionTimestamp(t *testing.T) {
 	payload := listFixture(podResource, []any{item})
 	if _, err := listAll(context.Background(), fuzzListReader{payload: payload}, podResource, "service-system", ""); err == nil {
 		t.Fatal("malformed deletionTimestamp passed strict list decoding")
+	}
+}
+
+func TestListDecoderAcceptsDeletingPodForNotReadyAccounting(t *testing.T) {
+	item := podFixture("service-system", "service-0", "service-pod-uid", "node-2", true,
+		map[string]string{"app.kubernetes.io/name": "service"})
+	markDeleting(item)
+	payload := listFixture(podResource, []any{item})
+	items, err := listAll(context.Background(), fuzzListReader{payload: payload}, podResource, "service-system", "")
+	if err != nil || len(items) != 1 {
+		t.Fatalf("valid deleting Pod aborted list decoding: items=%d err=%v", len(items), err)
+	}
+	defer zeroPayloads(items)
+	pod, err := decodePod(items[0], "service-system")
+	if err != nil || !objectTerminating(pod.Metadata) {
+		t.Fatalf("deleting Pod was not preserved for not-ready accounting: %#v, %v", pod, err)
+	}
+}
+
+func TestDecodeVMIAcceptsValidDeletionTimestampAsTerminating(t *testing.T) {
+	item := map[string]any{
+		"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachineInstance",
+		"metadata": metadataFixture("virtualization-system", "continuity-vm", "vmi-uid"),
+		"status": map[string]any{
+			"phase": "Running", "nodeName": "node-1",
+			"conditions": []any{map[string]any{"type": "Ready", "status": "True"}},
+		},
+	}
+	markDeleting(item)
+	vmi, err := decodeVMI(objectFixture(item), "virtualization-system", "continuity-vm")
+	if err != nil || !objectTerminating(vmi.Metadata) {
+		t.Fatalf("valid deleting VMI failed decoding: %#v, %v", vmi, err)
+	}
+	item["metadata"].(map[string]any)["deletionTimestamp"] = "not-a-timestamp"
+	if _, err := decodeVMI(objectFixture(item), "virtualization-system", "continuity-vm"); err == nil {
+		t.Fatal("malformed VMI deletionTimestamp passed strict decoding")
 	}
 }
 

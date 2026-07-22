@@ -13,12 +13,14 @@ import (
 // VerifyUpstreamStand independently evaluates sanitized observed state against
 // the upstream Kubernetes HA contract.
 func VerifyUpstreamStand(inventory StandInventory, receipts ...*oneserverloss.Receipt) (StandReport, error) {
+	observed := inventory
+	observed.SurviveUnavailableServers = 0
 	report := StandReport{
 		Status:               "ready",
 		WorkflowContinuity:   inventory.WorkflowContinuity,
 		DataDurability:       inventory.DataDurability,
 		SinglePointOfFailure: inventory.SinglePointOfFailure,
-		Observed:             inventory,
+		Observed:             observed,
 	}
 	add := func(id, category, message string) {
 		report.Blockers = append(report.Blockers, Blocker{ID: id, Category: category, Message: message})
@@ -76,9 +78,6 @@ func VerifyUpstreamStand(inventory StandInventory, receipts ...*oneserverloss.Re
 	}
 	if !HasIPv4AndIPv6CIDRs(inventory.ServiceCIDRs) {
 		add("missing_dual_stack_service_cidrs", "dual_stack", "service CIDR inventory must include IPv4 and IPv6 ranges")
-	}
-	if inventory.SurviveUnavailableServers != 1 {
-		add("unsupported_one_server_loss_envelope", "ha_topology", "this readiness contract requires evidence for exactly one unavailable server")
 	}
 	if !inventory.CiliumDualStackReady {
 		add("cilium_dual_stack_unready", "networking", "Cilium dual-stack readiness evidence is required")
@@ -182,8 +181,9 @@ func VerifyUpstreamStand(inventory StandInventory, receipts ...*oneserverloss.Re
 			add("node_bound_stable_api_address", "ha_topology", "stable API addresses must not be any node address")
 		}
 	}
-	if inventory.SurviveUnavailableServers >= 1 &&
-		!validOneServerLossReceiptBinding(inventory, receipts, nodeUIDsSeen, controlPlaneNodes, etcdMembers) {
+	if validOneServerLossReceiptBinding(inventory, receipts, nodeUIDsSeen, controlPlaneNodes, etcdMembers) {
+		report.VerifiedSurviveUnavailableServers = 1
+	} else {
 		add("missing_one_server_loss_evidence", "ha_topology", "readiness requires a valid identity-bound one-server-loss receipt")
 	}
 	requireEvidence := func(id, category string, evidence EvidenceInventory) {
@@ -208,7 +208,7 @@ func validOneServerLossReceiptBinding(
 	nodeUIDs map[string]struct{},
 	controlPlaneNodes, etcdMembers int,
 ) bool {
-	if len(receipts) != 1 || receipts[0] == nil || inventory.SurviveUnavailableServers != 1 {
+	if len(receipts) != 1 || receipts[0] == nil {
 		return false
 	}
 	receipt := receipts[0]

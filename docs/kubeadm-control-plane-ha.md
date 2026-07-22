@@ -64,11 +64,16 @@ checks remain mandatory.
 The verifier also requires the exact one-server-loss receipt as a separate
 owner-protected input. It validates every receipt digest and timeline and binds
 the receipt hash, run nonce, target Node UID hash, kubectl executable hash, and
-data-probe adapter hash to the captured stand inventory. The declared
-`surviveUnavailableServers` value alone is never evidence. The stacked-etcd
-control-plane count must be odd, this contract requires the declared
-unavailable-server envelope to equal one, and the node inventory count must
-match it exactly.
+data-probe adapter hash to the captured stand inventory. The bootstrap contract
+still declares an intended `surviveUnavailableServers: 1` envelope, but the
+captured stand inventory has no authoritative caller-declared survive count.
+The deprecated field is accepted only for compatibility, ignored, and omitted
+from the verifier's observed output. A ready stand report derives
+`verifiedSurviveUnavailableServers: 1` only from a receipt whose
+loss samples prove exactly one fewer ready control-plane Node, etcd member, and
+API-server member than the protected baseline. Quorum after two simultaneous
+losses is insufficient. The stacked-etcd control-plane count must be odd and
+the node inventory count must match it exactly.
 
 Provider adapters resolve the references declared by
 `ProviderSiteProfile`, supply concrete values at runtime, perform mutations,

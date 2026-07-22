@@ -333,9 +333,6 @@ func validateSafeSample(sample SampleEvidence, receipt *Receipt) error {
 }
 
 func validatePhaseHealth(samples []SampleEvidence, phase string, receipt *Receipt, vmUnavailable time.Duration) error {
-	majorityNodes := receipt.Baseline.ControlPlaneNodes/2 + 1
-	majorityEtcd := receipt.Baseline.EtcdMembers/2 + 1
-	majorityAPI := receipt.Baseline.APIServerMembers/2 + 1
 	vmRecoveredOffTarget := false
 	lossStarted := canonicalTimestamp(receipt.Loss.StartedAt)
 	for _, sample := range samples {
@@ -357,8 +354,9 @@ func validatePhaseHealth(samples []SampleEvidence, phase string, receipt *Receip
 			}
 		case PhaseLoss:
 			if sample.TargetNodeReady || sample.TargetNodePresent && sample.TargetNodeUIDSHA256 != receipt.TargetNodeUIDSHA256 ||
-				sample.ControlPlaneReadyNodes < majorityNodes || sample.EtcdReadyMembers < majorityEtcd || sample.APIServerReadyMembers < majorityAPI {
-				return errors.New("one-server-loss quorum continuity failed")
+				sample.ControlPlaneReadyNodes != receipt.Baseline.ControlPlaneNodes-1 || sample.EtcdReadyMembers != receipt.Baseline.EtcdMembers-1 ||
+				sample.APIServerReadyMembers != receipt.Baseline.APIServerMembers-1 {
+				return errors.New("one-server-loss exact loss envelope failed")
 			}
 			if sample.VM.VMReady && sample.VM.VMIReady && !sample.VM.VMIOnTarget {
 				vmRecoveredOffTarget = true
