@@ -32,14 +32,24 @@ func VerifyLonghornThreeNode(root string) (Report, error) {
 		return report, errors.New("open confined repository root")
 	}
 	defer repository.Close()
+	artifact, err := requireRuntimeChartArtifact(repository, "longhorn")
+	if err != nil {
+		return report, errors.New("Longhorn reviewed vendored artifact contract is invalid")
+	}
+	vendorFiles, err := verifyVendoredLonghornChart(repository, artifact)
+	if err != nil {
+		return report, err
+	}
 
 	objects, files, err := readLonghornThreeNodeStage(repository)
 	if err != nil {
 		return report, err
 	}
-	report.Files = files
+	// The shared supply-chain manifest is a verifier input and is counted once,
+	// independently of the profile and vendored-artifact files.
+	report.Files = files + vendorFiles + 1
 	report.Documents = len(objects)
-	if report.Files != 2 || report.Documents != 6 {
+	if report.Files != 47 || report.Documents != 6 {
 		return report, errors.New("Longhorn three-node source inventory is incomplete")
 	}
 	if err := validateLonghornThreeNodeObjects(objects); err != nil {
@@ -48,7 +58,9 @@ func VerifyLonghornThreeNode(root string) (Report, error) {
 	report.Status = "ready"
 	report.Checks = []string{
 		"source_release_suspended",
-		"longhorn_version_pinned",
+		"official_longhorn_chart_vendored_with_archive_and_tree_digests",
+		"official_git_chart_source_exact_commit_pinned",
+		"complete_runtime_image_inventory_multiarch_digest_pinned",
 		"three_replica_anti_affinity_ready",
 		"v1_engine_and_host_path_explicit",
 		"degraded_creation_and_telemetry_disabled",
@@ -105,8 +117,8 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 		}
 	}
 	expected := []string{
+		"GitRepository/longhorn-system/longhorn-charts",
 		"HelmRelease/longhorn-system/longhorn",
-		"HelmRepository/longhorn-system/longhorn",
 		"Namespace//longhorn-system",
 		"StorageClass//longhorn-migratable",
 		"StorageClass//longhorn-replicated",
@@ -133,13 +145,9 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 	}) {
 		return errors.New("Longhorn namespace boundary is invalid")
 	}
-	repository := require("HelmRepository", "longhorn-system", "longhorn")
-	if !exactMappingKeys(nested(repository.Data, "spec"), "interval", "url") ||
-		nestedString(repository.Data, "spec", "interval") != "1h" ||
-		nestedString(repository.Data, "spec", "url") != "https://charts.longhorn.io" {
-		return errors.New("Longhorn chart repository is invalid")
+	if !validateLonghornGitRepository(require("GitRepository", "longhorn-system", "longhorn-charts").Data) {
+		return errors.New("Longhorn Git chart source is not pinned to the exact reviewed commit")
 	}
-
 	release := require("HelmRelease", "longhorn-system", "longhorn")
 	if !exactMappingKeys(nested(release.Data, "spec"), "suspend", "interval", "timeout", "releaseName", "chart", "install", "upgrade", "values") ||
 		!exactBool(release.Data, true, "spec", "suspend") ||
@@ -169,15 +177,30 @@ func validateLonghornThreeNodeObjects(objects []object) error {
 	return nil
 }
 
+func validateLonghornGitRepository(repository map[string]any) bool {
+	spec, specOK := nested(repository, "spec").(map[string]any)
+	ref, refOK := nested(repository, "spec", "ref").(map[string]any)
+	return specOK && refOK &&
+		nestedString(repository, "apiVersion") == "source.toolkit.fluxcd.io/v1" &&
+		exactStringMap(nested(repository, "metadata", "labels"), map[string]string{"app.kubernetes.io/part-of": "cloudring-storage"}) &&
+		exactMappingKeys(spec, "interval", "url", "ref") &&
+		nestedString(repository, "spec", "interval") == "1h" &&
+		nestedString(repository, "spec", "url") == "https://github.com/longhorn/charts.git" &&
+		exactMappingKeys(ref, "commit") &&
+		nestedString(repository, "spec", "ref", "commit") == "f8def0504bf3f5f26c342941c9e4532b44830ebe"
+}
+
 func exactLonghornHelmChart(release map[string]any) bool {
 	chart, ok := nested(release, "spec", "chart", "spec").(map[string]any)
-	return ok && exactMappingKeys(chart, "chart", "version", "sourceRef", "interval") &&
-		nestedString(release, "spec", "chart", "spec", "chart") == "longhorn" &&
-		nestedString(release, "spec", "chart", "spec", "version") == "1.12.0" &&
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "kind") == "HelmRepository" &&
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "name") == "longhorn" &&
+	sourceRef, sourceOK := nested(release, "spec", "chart", "spec", "sourceRef").(map[string]any)
+	return ok && exactMappingKeys(chart, "chart", "sourceRef", "interval", "reconcileStrategy") &&
+		sourceOK && exactMappingKeys(sourceRef, "kind", "name", "namespace") &&
+		nestedString(release, "spec", "chart", "spec", "chart") == "./charts/longhorn" &&
+		nestedString(release, "spec", "chart", "spec", "sourceRef", "kind") == "GitRepository" &&
+		nestedString(release, "spec", "chart", "spec", "sourceRef", "name") == "longhorn-charts" &&
 		nestedString(release, "spec", "chart", "spec", "sourceRef", "namespace") == "longhorn-system" &&
-		nestedString(release, "spec", "chart", "spec", "interval") == "1h"
+		nestedString(release, "spec", "chart", "spec", "interval") == "1h" &&
+		nestedString(release, "spec", "chart", "spec", "reconcileStrategy") == "Revision"
 }
 
 func validateLonghornRemediation(release map[string]any) bool {
@@ -191,7 +214,8 @@ func validateLonghornRemediation(release map[string]any) bool {
 
 func validateLonghornValues(release map[string]any) bool {
 	values, ok := nested(release, "spec", "values").(map[string]any)
-	if !ok || !exactMappingKeys(values, "global", "persistence", "preUpgradeChecker", "defaultSettings", "longhornUI", "ingress", "metrics") {
+	if !ok || !exactMappingKeys(values, "global", "image", "persistence", "preUpgradeChecker", "defaultSettings", "longhornUI", "ingress", "metrics") ||
+		!validateLonghornImageValues(values) {
 		return false
 	}
 	tolerations, ok := nested(values, "global", "tolerations").([]any)
@@ -219,6 +243,33 @@ func validateLonghornValues(release map[string]any) bool {
 		exactBool(values, false, "defaultSettings", "allowVolumeCreationWithDegradedAvailability") &&
 		exactBool(values, false, "defaultSettings", "allowCollectingLonghornUsageMetrics") && exactBool(values, true, "defaultSettings", "v1DataEngine") && exactBool(values, false, "defaultSettings", "v2DataEngine") &&
 		nestedNumber(values, "longhornUI", "replicas") == 2 && exactBool(values, false, "ingress", "enabled") && exactBool(values, false, "metrics", "serviceMonitor", "enabled")
+}
+
+func validateLonghornImageValues(values map[string]any) bool {
+	imageValues, ok := nested(values, "image").(map[string]any)
+	if !ok || !exactMappingKeys(imageValues, "longhorn", "csi") {
+		return false
+	}
+	expectedGroups := map[string][]string{}
+	for _, image := range reviewedLonghornRuntimeImages {
+		parts := strings.Split(image.Key, ".")
+		if len(parts) != 2 {
+			return false
+		}
+		expectedGroups[parts[0]] = append(expectedGroups[parts[0]], parts[1])
+		entry, entryOK := nested(values, "image", parts[0], parts[1]).(map[string]any)
+		if !entryOK || !exactMappingKeys(entry, "repository", "tag") ||
+			nestedString(values, "image", parts[0], parts[1], "repository") != image.Repository ||
+			nestedString(values, "image", parts[0], parts[1], "tag") != image.Tag+"@"+image.Digest {
+			return false
+		}
+	}
+	for group, keys := range expectedGroups {
+		if !exactMappingKeys(nested(values, "image", group), keys...) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateLonghornStorageClass(class map[string]any, migratable bool) bool {

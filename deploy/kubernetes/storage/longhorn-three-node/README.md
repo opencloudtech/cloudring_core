@@ -18,6 +18,32 @@ cluster-wide VolumeSnapshot CRDs and HA snapshot controller. The Longhorn
 HelmRelease remains suspended by default and the Longhorn UI is not exposed by
 an Ingress.
 
+Every effective Longhorn runtime image is pinned by its multi-platform registry
+index digest in the HelmRelease values: manager, engine, UI, instance manager,
+share manager, backing-image manager, support-bundle kit, and all six CSI
+sidecars. The shared supply-chain receipt records the exact tag-to-digest
+mapping. The verifier compares that complete inventory with every image
+repository/tag reference in the reviewed chart templates; mutable tags,
+missing entries, extra runtime image references, or digest drift fail closed.
+
+Longhorn does not publish an official OCI chart for this release. The exact
+official `longhorn-1.12.0.tgz` release chart is therefore vendored under
+[`vendor/longhorn`](vendor/longhorn). Its archive SHA-256 is
+`869bb20701b154473606f1e8967b27f34f2448a2dfe6eb8970f1cae6957384f5`;
+the upstream commit, Apache-2.0 license receipt, exact file count, and canonical
+vendored-tree digest are recorded in [`vendor/UPSTREAM.json`](vendor/UPSTREAM.json)
+and [`../../runtime-chart-supply-chain.json`](../../runtime-chart-supply-chain.json).
+The verifier rejects any file, receipt, license, or tree-digest drift.
+
+Flux renders the reviewed chart from the official Longhorn charts repository
+through the namespaced `longhorn-system/longhorn-charts` `GitRepository`. The
+source is pinned with `spec.ref.commit` to the exact upstream release commit
+`f8def0504bf3f5f26c342941c9e4532b44830ebe`; the HelmRelease reads
+`./charts/longhorn` from that immutable artifact. The verifier rejects a
+branch, tag, missing commit, mismatched commit, source URL change, or mutable
+HTTP HelmRepository. The vendored release archive remains the independent
+review copy used to check the upstream chart identity and license.
+
 The snapshot class fixes `parameters.type: snap`, so Velero's CSI data mover
 starts from a local Longhorn snapshot and copies the volume data to the
 configured off-cell backup store. Do not change this class to Longhorn's native

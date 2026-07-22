@@ -12,6 +12,16 @@ HelmRelease is suspended. A downstream Flux root must activate it only after
 the CRDs, cert-manager, target Kubernetes version, and two-node controller
 placement have been checked.
 
+The chart is reconciled from the official
+`oci://ghcr.io/cloudnative-pg/charts/cloudnative-pg` OCI artifact at manifest
+digest
+`sha256:209c588b902982bf283a0073db83edd422d9710a2c8a670fe57c0329abe789a4`.
+The reviewed chart content and provenance layer digests are recorded in
+[`../runtime-chart-supply-chain.json`](../runtime-chart-supply-chain.json).
+The operator remains image-pinned to CloudNativePG `1.30.0`. A mutable Helm
+repository, tag-only chart selection, or documentary checksum annotation is
+not an accepted source contract.
+
 The `runtime` stage is an explicit compact-cell reference. It consumes the
 public `longhorn-replicated` StorageClass and `longhorn-retain`
 VolumeSnapshotClass. Sites using another CSI implementation must patch both

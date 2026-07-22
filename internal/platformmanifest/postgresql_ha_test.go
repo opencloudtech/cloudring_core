@@ -14,7 +14,7 @@ func TestPostgreSQLHAProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify PostgreSQL HA profile: %v", err)
 	}
-	if report.Status != "ready" || report.Files != 4 || report.Documents != 8 || len(report.Checks) != 10 {
+	if report.Status != "ready" || report.Files != 5 || report.Documents != 8 || len(report.Checks) != 10 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -27,6 +27,10 @@ func TestPostgreSQLHAProfileRejectsUnsafeChanges(t *testing.T) {
 		replacement string
 	}{
 		{"active source controller", "controllers", "  suspend: true\n", "  suspend: false\n"},
+		{"wrong OCI manifest digest", "controllers", cloudNativePGOCIManifestDigest, "sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+		{"untrusted OCI repository", "controllers", "  url: oci://ghcr.io/cloudnative-pg/charts/cloudnative-pg\n", "  url: oci://registry.invalid/cloudnative-pg\n"},
+		{"mutable source kind", "controllers", "kind: OCIRepository\n", "kind: HelmRepository\n"},
+		{"wrong chart reference", "controllers", "  chartRef:\n    kind: OCIRepository\n    name: cnpg\n", "  chartRef:\n    kind: OCIRepository\n    name: unreviewed\n"},
 		{"mutable operator image", "controllers", "      tag: 1.30.0@sha256:a2701eb97cdd2a34b1fdb2cb51987f544b706e40bec72ae7146cd8580efefebb\n", "      tag: latest\n"},
 		{"one controller", "controllers", "    replicaCount: 2\n", "    replicaCount: 1\n"},
 		{"permissive webhook", "controllers", "        failurePolicy: Fail\n", "        failurePolicy: Ignore\n"},
@@ -98,6 +102,16 @@ func copyPostgreSQLHAProfile(t *testing.T) string {
 				t.Fatal(err)
 			}
 		}
+	}
+	data, err := source.ReadFile(runtimeChartSupplyChainPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := destination.MkdirAll(filepath.Dir(runtimeChartSupplyChainPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := destination.WriteFile(runtimeChartSupplyChainPath, data, 0o600); err != nil {
+		t.Fatal(err)
 	}
 	return root
 }

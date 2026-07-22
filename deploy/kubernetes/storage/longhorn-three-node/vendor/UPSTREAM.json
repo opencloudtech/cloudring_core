@@ -1,0 +1,14 @@
+{
+  "name": "longhorn",
+  "version": "1.12.0",
+  "upstreamRepository": "https://github.com/longhorn/charts",
+  "upstreamCommit": "f8def0504bf3f5f26c342941c9e4532b44830ebe",
+  "releaseArchive": "https://github.com/longhorn/charts/releases/download/longhorn-1.12.0/longhorn-1.12.0.tgz",
+  "releaseArchiveSha256": "869bb20701b154473606f1e8967b27f34f2448a2dfe6eb8970f1cae6957384f5",
+  "officialIndex": "https://charts.longhorn.io/index.yaml",
+  "license": "Apache-2.0",
+  "licenseSha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "vendoredChartPath": "longhorn",
+  "vendoredChartFileCount": 42,
+  "vendoredChartTreeSha256": "261f3fd1471c816de9153de46ef10a8b68df2a72faa605a7684630a3a40e583a"
+}

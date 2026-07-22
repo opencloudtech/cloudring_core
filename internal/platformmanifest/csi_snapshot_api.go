@@ -150,6 +150,12 @@ func validateCanonicalCSISnapshotOwnership(root *os.Root, directory string) erro
 			return errors.New("CSI snapshot ownership scope contains a symbolic link")
 		}
 		if entry.IsDir() {
+			// Vendored Helm templates are immutable chart inputs, not a second
+			// applied manifest owner. The Longhorn verifier independently checks
+			// their exact upstream archive and complete tree digests.
+			if filepath.Clean(path) == filepath.Clean(longhornVendoredRoot) {
+				continue
+			}
 			if err := validateCanonicalCSISnapshotOwnership(root, path); err != nil {
 				return err
 			}
