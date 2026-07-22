@@ -43,6 +43,8 @@ func TestPostgreSQLHAProfileRejectsUnsafeChanges(t *testing.T) {
 		{"non-TLS minimum", "runtime", "      ssl_min_protocol_version: TLSv1.3\n", "      ssl_min_protocol_version: TLSv1.0\n"},
 		{"non-replicated storage", "runtime", "    storageClass: longhorn-replicated\n", "    storageClass: local-path\n"},
 		{"delete snapshots", "runtime", "      snapshotOwnerReference: none\n", "      snapshotOwnerReference: cluster\n"},
+		{"cross-namespace client namespace selector removed", "runtime", "              cloudring.org/postgresql-client-namespace: \"true\"\n", "              cloudring.org/unrelated: \"true\"\n"},
+		{"cross-namespace client pod selector removed", "runtime", "              cloudring.org/postgresql-client-namespace: \"true\"\n          podSelector:\n            matchLabels:\n              cloudring.org/postgresql-client: \"true\"\n", "              cloudring.org/postgresql-client-namespace: \"true\"\n          podSelector:\n            matchLabels:\n              cloudring.org/unrelated-client: \"true\"\n"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

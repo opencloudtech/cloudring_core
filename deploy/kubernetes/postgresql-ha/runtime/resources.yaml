@@ -147,6 +147,16 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
+              cloudring.org/postgresql-client-namespace: "true"
+          podSelector:
+            matchLabels:
+              cloudring.org/postgresql-client: "true"
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
               kubernetes.io/metadata.name: cnpg-system
       ports:
         - protocol: TCP
