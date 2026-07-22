@@ -128,6 +128,20 @@ func TestCollectAndVerifyCLIWithCleanupBarrier(t *testing.T) {
 	}
 }
 
+func TestSimulateDownstreamCleanupRejectsMalformedMarker(t *testing.T) {
+	directory := t.TempDir()
+	readyPath := filepath.Join(directory, "cleanup-ready.json")
+	cleanupPath := filepath.Join(directory, "simulated-cleanup")
+	if err := os.WriteFile(readyPath, []byte(`{"schemaVersion":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := simulateDownstreamCleanup(t.Context(), readyPath, cleanupPath, strings.Repeat("b", 64))
+	if err == nil || err.Error() != "cleanup-ready marker is malformed" {
+		t.Fatalf("simulateDownstreamCleanup() error = %v", err)
+	}
+}
+
 type cliHelperState struct {
 	Objects map[string]json.RawMessage `json:"objects"`
 	Lists   map[string]json.RawMessage `json:"lists"`
@@ -136,19 +150,19 @@ type cliHelperState struct {
 func simulateDownstreamCleanup(ctx context.Context, readyPath, cleanupPath, nonceSHA256 string) error {
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
-	deadline := time.NewTimer(5 * time.Second)
-	defer deadline.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-deadline.C:
-			return errors.New("cleanup-ready marker was not published")
-		case <-ticker.C:
-			var notice velero118.CleanupReady
-			if err := readStrictJSON(readyPath, &notice); err != nil {
-				continue
+		default:
+		}
+
+		var notice velero118.CleanupReady
+		if err := readStrictJSON(readyPath, &notice); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				return errors.New("cleanup-ready marker is malformed")
 			}
+		} else {
 			if notice.SchemaVersion != velero118.CleanupReadySchemaVersion || notice.Status != velero118.CleanupReadyStatus || notice.CleanupRunNonceSHA256 != nonceSHA256 {
 				return errors.New("cleanup-ready marker is not bound to this run")
 			}
@@ -159,6 +173,12 @@ func simulateDownstreamCleanup(ctx context.Context, readyPath, cleanupPath, nonc
 				return errors.New("simulate downstream cleanup")
 			}
 			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
 		}
 	}
 }

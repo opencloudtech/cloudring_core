@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -229,29 +228,76 @@ func encodeJSONSegment(t *testing.T, value any) string {
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
+func TestCaptureStdoutHandlesLargeOutput(t *testing.T) {
+	const outputSize = 1 << 20
+	want := strings.Repeat("x", outputSize)
+
+	got := captureStdout(t, func() {
+		written, err := os.Stdout.WriteString(want)
+		if err != nil {
+			t.Fatalf("write large stdout payload: %v", err)
+		}
+		if written != len(want) {
+			t.Fatalf("write large stdout payload: wrote %d bytes, want %d", written, len(want))
+		}
+	})
+
+	if got != want {
+		t.Fatalf("captured stdout mismatch: got %d bytes, want %d", len(got), len(want))
+	}
+}
+
+func TestCaptureStdoutRestoresStdoutAfterPanic(t *testing.T) {
+	original := os.Stdout
+	var recovered any
+
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		captureStdout(t, func() {
+			panic("capture panic")
+		})
+	}()
+
+	if recovered != "capture panic" {
+		t.Fatalf("unexpected recovered panic: %v", recovered)
+	}
+	if os.Stdout != original {
+		t.Fatal("captureStdout did not restore os.Stdout after panic")
+	}
+}
+
 func captureStdout(t *testing.T, action func()) string {
 	t.Helper()
 	original := os.Stdout
-	reader, writer, err := os.Pipe()
+	output, err := os.CreateTemp(t.TempDir(), "cloudring-id-stdout-*")
 	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
+		t.Fatalf("create stdout capture file: %v", err)
 	}
-	os.Stdout = writer
+	os.Stdout = output
 	defer func() {
 		os.Stdout = original
+		if output != nil {
+			if err := output.Close(); err != nil {
+				t.Errorf("close stdout capture file: %v", err)
+			}
+		}
 	}()
 
 	action()
+	os.Stdout = original
 
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close stdout writer: %v", err)
+	if _, err := output.Seek(0, io.SeekStart); err != nil {
+		t.Fatalf("rewind stdout capture file: %v", err)
 	}
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, reader); err != nil {
-		t.Fatalf("read stdout: %v", err)
+	data, err := io.ReadAll(output)
+	if err != nil {
+		t.Fatalf("read stdout capture file: %v", err)
 	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("close stdout reader: %v", err)
+	if err := output.Close(); err != nil {
+		t.Fatalf("close stdout capture file: %v", err)
 	}
-	return buf.String()
+	output = nil
+	return string(data)
 }
