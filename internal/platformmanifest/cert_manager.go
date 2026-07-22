@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	certManagerProfilePath = "deploy/kubernetes/cert-manager"
-	certManagerVersion     = "v1.21.0"
-	certManagerChartSHA256 = "9c2c6fabf3cf8fe14dacb016f37c819b66bc2c79e8b7acde4573d45ec141fb97"
+	certManagerProfilePath       = "deploy/kubernetes/cert-manager"
+	certManagerVersion           = "v1.21.0"
+	certManagerOCIManifestDigest = "sha256:cd55fea42658e54abc25e85a0bc1de229925a5006445f916bfd2c6dc80ac3613"
 )
 
 var certManagerImages = map[string]struct {
@@ -82,6 +82,10 @@ func VerifyCertManager(root string) (Report, error) {
 	if err != nil {
 		return report, err
 	}
+	artifact, err := requireRuntimeChartArtifact(repository, "cert-manager")
+	if err != nil || artifact.ManifestDigest != certManagerOCIManifestDigest {
+		return report, errors.New("cert-manager reviewed OCI artifact contract is invalid")
+	}
 	for _, required := range [][]byte{
 		[]byte("intentionally suspended"),
 		[]byte("does not prove"),
@@ -94,7 +98,8 @@ func VerifyCertManager(root string) (Report, error) {
 		}
 	}
 
-	report.Files = 3
+	// kustomization, manifest, README, and the shared supply-chain manifest.
+	report.Files = 4
 	report.Documents = len(objects)
 	if report.Documents != 3 {
 		return report, errors.New("cert-manager source inventory is incomplete")
@@ -106,7 +111,7 @@ func VerifyCertManager(root string) (Report, error) {
 	if err := validateCertManagerNamespace(index["Namespace//cert-manager"].Data); err != nil {
 		return report, err
 	}
-	if err := validateCertManagerRepository(index["HelmRepository/cert-manager/cert-manager"].Data); err != nil {
+	if err := validateCertManagerOCIRepository(index["OCIRepository/cert-manager/cert-manager"].Data); err != nil {
 		return report, err
 	}
 	if err := validateCertManagerRelease(index["HelmRelease/cert-manager/cert-manager"].Data); err != nil {
@@ -116,7 +121,7 @@ func VerifyCertManager(root string) (Report, error) {
 	report.Status = "ready"
 	report.Checks = []string{
 		"source_release_suspended",
-		"chart_version_pinned_and_reviewed_checksum_recorded",
+		"chart_oci_manifest_and_content_digest_pinned",
 		"all_runtime_images_digest_pinned",
 		"crd_create_replace_and_retention_ready",
 		"controller_webhook_and_cainjector_three_replicas",
@@ -139,8 +144,8 @@ func exactCertManagerInventory(objects []object) (map[string]object, error) {
 	}
 	expected := []string{
 		"HelmRelease/cert-manager/cert-manager",
-		"HelmRepository/cert-manager/cert-manager",
 		"Namespace//cert-manager",
+		"OCIRepository/cert-manager/cert-manager",
 	}
 	actual := make([]string, 0, len(index))
 	for key := range index {
@@ -166,12 +171,17 @@ func validateCertManagerNamespace(namespace map[string]any) error {
 	return nil
 }
 
-func validateCertManagerRepository(repository map[string]any) error {
+func validateCertManagerOCIRepository(repository map[string]any) error {
 	if nestedString(repository, "apiVersion") != "source.toolkit.fluxcd.io/v1" ||
-		!exactMappingKeys(nested(repository, "spec"), "interval", "url") ||
+		!exactMappingKeys(nested(repository, "spec"), "interval", "url", "ref", "layerSelector") ||
 		nestedString(repository, "spec", "interval") != "1h" ||
-		nestedString(repository, "spec", "url") != "https://charts.jetstack.io" {
-		return errors.New("cert-manager chart repository is invalid")
+		nestedString(repository, "spec", "url") != "oci://quay.io/jetstack/charts/cert-manager" ||
+		!exactMappingKeys(nested(repository, "spec", "ref"), "digest") ||
+		nestedString(repository, "spec", "ref", "digest") != certManagerOCIManifestDigest ||
+		!exactMappingKeys(nested(repository, "spec", "layerSelector"), "mediaType", "operation") ||
+		nestedString(repository, "spec", "layerSelector", "mediaType") != "application/vnd.cncf.helm.chart.content.v1.tar+gzip" ||
+		nestedString(repository, "spec", "layerSelector", "operation") != "copy" {
+		return errors.New("cert-manager OCI chart source is invalid")
 	}
 	return nil
 }
@@ -179,20 +189,17 @@ func validateCertManagerRepository(repository map[string]any) error {
 func validateCertManagerRelease(release map[string]any) error {
 	if nestedString(release, "apiVersion") != "helm.toolkit.fluxcd.io/v2" ||
 		nestedString(release, "metadata", "annotations", "cloudring.org/non-claim") != "downstream-live-issuance-renewal-webhook-and-one-node-loss-evidence-required" ||
-		nestedString(release, "metadata", "annotations", "cloudring.org/upstream-chart-sha256") != certManagerChartSHA256 ||
-		!exactMappingKeys(nested(release, "spec"), "suspend", "interval", "timeout", "releaseName", "chart", "install", "upgrade", "rollback", "driftDetection", "values") ||
+		!exactMappingKeys(nested(release, "metadata", "annotations"), "cloudring.org/non-claim") ||
+		!exactMappingKeys(nested(release, "spec"), "suspend", "interval", "timeout", "releaseName", "chartRef", "install", "upgrade", "rollback", "driftDetection", "values") ||
 		!exactBool(release, true, "spec", "suspend") || nestedString(release, "spec", "interval") != "15m" ||
 		nestedString(release, "spec", "timeout") != "10m" || nestedString(release, "spec", "releaseName") != "cert-manager" {
 		return errors.New("cert-manager Flux release boundary is invalid")
 	}
-	chart := nested(release, "spec", "chart", "spec")
-	if !exactMappingKeys(chart, "chart", "version", "sourceRef", "interval") ||
-		nestedString(release, "spec", "chart", "spec", "chart") != "cert-manager" ||
-		nestedString(release, "spec", "chart", "spec", "version") != certManagerVersion ||
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "kind") != "HelmRepository" ||
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "name") != "cert-manager" ||
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "namespace") != "cert-manager" ||
-		nestedString(release, "spec", "chart", "spec", "interval") != "1h" {
+	chartRef := nested(release, "spec", "chartRef")
+	if !exactMappingKeys(chartRef, "kind", "name", "namespace") ||
+		nestedString(release, "spec", "chartRef", "kind") != "OCIRepository" ||
+		nestedString(release, "spec", "chartRef", "name") != "cert-manager" ||
+		nestedString(release, "spec", "chartRef", "namespace") != "cert-manager" {
 		return errors.New("cert-manager chart pin is invalid")
 	}
 	if !exactMappingKeys(nested(release, "spec", "install"), "crds", "remediation") ||

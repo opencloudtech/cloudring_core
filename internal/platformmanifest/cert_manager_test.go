@@ -14,7 +14,7 @@ func TestCertManagerProfileIsStructurallyReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verify cert-manager profile: %v", err)
 	}
-	if report.Status != "ready" || report.Files != 3 || report.Documents != 3 || len(report.Checks) != 9 {
+	if report.Status != "ready" || report.Files != 4 || report.Documents != 3 || len(report.Checks) != 9 {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 }
@@ -27,10 +27,10 @@ func TestCertManagerProfileRejectsUnsafeChanges(t *testing.T) {
 		replacement string
 	}{
 		{"active reusable release", "controllers/resources.yaml", "  suspend: true\n", "  suspend: false\n"},
-		{"mutable chart", "controllers/resources.yaml", "      version: v1.21.0\n", "      version: latest\n"},
-		{"unreviewed chart", "controllers/resources.yaml", "      version: v1.21.0\n", "      version: v1.21.1\n"},
-		{"wrong chart checksum", "controllers/resources.yaml", "cloudring.org/upstream-chart-sha256: 9c2c6fabf3cf8fe14dacb016f37c819b66bc2c79e8b7acde4573d45ec141fb97", "cloudring.org/upstream-chart-sha256: 0000000000000000000000000000000000000000000000000000000000000000"},
-		{"untrusted repository", "controllers/resources.yaml", "  url: https://charts.jetstack.io\n", "  url: https://charts.invalid\n"},
+		{"wrong OCI manifest digest", "controllers/resources.yaml", certManagerOCIManifestDigest, "sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+		{"untrusted OCI repository", "controllers/resources.yaml", "  url: oci://quay.io/jetstack/charts/cert-manager\n", "  url: oci://registry.invalid/cert-manager\n"},
+		{"mutable source kind", "controllers/resources.yaml", "kind: OCIRepository\n", "kind: HelmRepository\n"},
+		{"wrong chart reference", "controllers/resources.yaml", "  chartRef:\n    kind: OCIRepository\n    name: cert-manager\n", "  chartRef:\n    kind: OCIRepository\n    name: unreviewed\n"},
 		{"aggregate roles enabled", "controllers/resources.yaml", "        aggregateClusterRoles: false\n", "        aggregateClusterRoles: true\n"},
 		{"CRDs disabled", "controllers/resources.yaml", "    crds:\n      enabled: true\n      keep: true\n", "    crds:\n      enabled: false\n      keep: true\n"},
 		{"CRDs not retained", "controllers/resources.yaml", "    crds:\n      enabled: true\n      keep: true\n", "    crds:\n      enabled: true\n      keep: false\n"},
@@ -96,8 +96,12 @@ func copyCertManagerProfile(t *testing.T) string {
 		t.Fatal(err)
 	}
 	defer destination.Close()
-	for _, relative := range []string{"README.md", "controllers/kustomization.yaml", "controllers/resources.yaml"} {
-		path := filepath.Join(certManagerProfilePath, relative)
+	for _, path := range []string{
+		filepath.Join(certManagerProfilePath, "README.md"),
+		filepath.Join(certManagerProfilePath, "controllers/kustomization.yaml"),
+		filepath.Join(certManagerProfilePath, "controllers/resources.yaml"),
+		runtimeChartSupplyChainPath,
+	} {
 		data, err := source.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

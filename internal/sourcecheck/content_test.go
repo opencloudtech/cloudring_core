@@ -4,6 +4,8 @@
 package sourcecheck
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -51,10 +53,47 @@ func TestScanContent_allows_references_and_explicit_non_claims(t *testing.T) {
 		"tokenEnv" + ": CLOUDRING_SYNTHETIC_TOKEN_ENV",
 		"endpoint: https://service.example",
 		"test endpoints: 192.0.2.10 198.51.100.20 203.0.113.30",
+		"secret" + "Name: {{ .Values.ingress.tlsSecret }}",
 		"This does not claim live production readiness.",
 	}, "\n")
 	if findings := scanContent("README.md", content); len(findings) != 0 {
 		t.Fatalf("safe public references were rejected: %+v", findings)
+	}
+}
+
+func TestScanContent_stillDetectsCommentedPrivateKeyMaterial(t *testing.T) {
+	content := strings.Join([]string{
+		"# -----B" + "EGIN RSA PRIVATE KEY-----",
+		"# c3ludGhldGljLWxlYWtlZC1rZXktbWF0ZXJpYWw=",
+		"# -----END RSA PRIVATE KEY-----",
+	}, "\n")
+	if findings := scanContent("values.yaml", content); !containsRule(findings, "private_key_block") {
+		t.Fatalf("commented private key material was accepted: %+v", findings)
+	}
+}
+
+func TestScanContent_allowsOnlyExactReviewedVendoredPrivateKeyDocumentation(t *testing.T) {
+	repositoryPath := filepath.Join("..", "..", "deploy", "kubernetes", "storage", "longhorn-three-node", "vendor", "longhorn", "values.yaml")
+	// #nosec G304 -- this test reads one fixed repository fixture path assembled for platform portability.
+	data, err := os.ReadFile(repositoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	path := "deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn/values.yaml"
+	if findings := scanContent(path, content); len(findings) != 0 {
+		t.Fatalf("exact reviewed vendored documentation was rejected: %+v", findings)
+	}
+	if findings := scanContent("other/values.yaml", content); !containsRule(findings, "private_key_block") {
+		t.Fatalf("same documentation bytes outside the reviewed path were accepted: %+v", findings)
+	}
+	leaked := content + strings.Join([]string{
+		"\n# -----B" + "EGIN RSA PRIVATE KEY-----",
+		"# c3ludGhldGljLWxlYWtlZC1rZXktbWF0ZXJpYWw=",
+		"# -----END RSA PRIVATE KEY-----\n",
+	}, "\n")
+	if findings := scanContent(path, leaked); !containsRule(findings, "private_key_block") {
+		t.Fatalf("fully commented leaked PEM in the reviewed vendored path was accepted: %+v", findings)
 	}
 }
 
@@ -98,6 +137,7 @@ func TestCredentialAssignment_uses_exact_keys_and_structural_references(t *testi
 		"secret" + "Ref: secretref.synthetic.access",
 		"token" + "Env: CLOUDRING_SYNTHETIC_TOKEN_ENV",
 		"pass" + "word: <redacted>",
+		"secret" + "Name: {{ .Values.ingress.tlsSecret }}",
 	} {
 		if credentialAssignment(line) {
 			t.Fatalf("legitimate exact reference was rejected: %q", line)

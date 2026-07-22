@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "cloudring.runtime-chart-supply-chain/v1",
+  "verifiedAt": "2026-07-22T15:30:00Z",
+  "artifacts": [
+    {
+      "id": "cert-manager",
+      "version": "v1.21.0",
+      "sourceKind": "oci-helm-chart",
+      "source": "oci://quay.io/jetstack/charts/cert-manager",
+      "manifestDigest": "sha256:cd55fea42658e54abc25e85a0bc1de229925a5006445f916bfd2c6dc80ac3613",
+      "contentDigest": "sha256:9c2c6fabf3cf8fe14dacb016f37c819b66bc2c79e8b7acde4573d45ec141fb97",
+      "provenanceDigest": "sha256:83dcfe267afdbc92613bd7879c6854199a6bc0cca9c62edb19d5a932be102307",
+      "license": "Apache-2.0",
+      "officialSource": "https://cert-manager.io/docs/installation/helm/"
+    },
+    {
+      "id": "cloudnative-pg",
+      "version": "0.29.0",
+      "appVersion": "1.30.0",
+      "sourceKind": "oci-helm-chart",
+      "source": "oci://ghcr.io/cloudnative-pg/charts/cloudnative-pg",
+      "manifestDigest": "sha256:209c588b902982bf283a0073db83edd422d9710a2c8a670fe57c0329abe789a4",
+      "contentDigest": "sha256:668e065ff53508d58238788fd35b355a925060843629a951df0e6a9362e6d32f",
+      "provenanceDigest": "sha256:9426303423d3b3a303219764468ca15952846928429b2dd6578e60d242fc1a8e",
+      "license": "Apache-2.0",
+      "officialSource": "https://cloudnative-pg.io/charts/"
+    },
+    {
+      "id": "longhorn",
+      "version": "1.12.0",
+      "appVersion": "v1.12.0",
+      "sourceKind": "vendored-helm-chart",
+      "source": "https://github.com/longhorn/charts/releases/download/longhorn-1.12.0/longhorn-1.12.0.tgz",
+      "archiveDigest": "sha256:869bb20701b154473606f1e8967b27f34f2448a2dfe6eb8970f1cae6957384f5",
+      "vendoredPath": "deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn",
+      "vendoredTreeDigest": "sha256:261f3fd1471c816de9153de46ef10a8b68df2a72faa605a7684630a3a40e583a",
+      "vendoredFileCount": 42,
+      "upstreamCommit": "f8def0504bf3f5f26c342941c9e4532b44830ebe",
+      "license": "Apache-2.0",
+      "licenseDigest": "sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "officialSource": "https://longhorn.io/docs/1.12.0/deploy/upgrade/longhorn-manager/",
+      "images": [
+        {"key": "longhorn.engine", "repository": "longhornio/longhorn-engine", "tag": "v1.12.0", "digest": "sha256:bc4a49e8f2b6b4bcdde0f6e465c0b0ac94acf6198840f9db039bedbbae67e905"},
+        {"key": "longhorn.manager", "repository": "longhornio/longhorn-manager", "tag": "v1.12.0", "digest": "sha256:fd245bae2e8254ed475073410f8462e95fab8783dd12d1c084777b5ab53bfb86"},
+        {"key": "longhorn.ui", "repository": "longhornio/longhorn-ui", "tag": "v1.12.0", "digest": "sha256:3870d52a2b0aa44e7f8a30d744cfe38a1a0bd130226d3f5d08795e76361ff0b7"},
+        {"key": "longhorn.instanceManager", "repository": "longhornio/longhorn-instance-manager", "tag": "v1.12.0", "digest": "sha256:7dc270841c8a8855b9c7b192b53db05b6268318648108cea4b00c2e88eb85cbb"},
+        {"key": "longhorn.shareManager", "repository": "longhornio/longhorn-share-manager", "tag": "v1.12.0", "digest": "sha256:cb9d6863e4c694d82ab35f91184d9555c536ed292dad0c7dec94cb655e05787e"},
+        {"key": "longhorn.backingImageManager", "repository": "longhornio/backing-image-manager", "tag": "v1.12.0", "digest": "sha256:c480c397045e6a02bb1470cef759e2c3e2ff7fff4400bc3730dfd64446507d7e"},
+        {"key": "longhorn.supportBundleKit", "repository": "longhornio/support-bundle-kit", "tag": "v0.0.86", "digest": "sha256:1342641f02ee00203998bb7afc00066e821197a7cf22fc43b7e02b6ab148f86d"},
+        {"key": "csi.attacher", "repository": "longhornio/csi-attacher", "tag": "v4.12.0", "digest": "sha256:a814aa4784197116983ea13e376fc691e000a390de9d0b9fca2bc4a2fb7c4a1f"},
+        {"key": "csi.provisioner", "repository": "longhornio/csi-provisioner", "tag": "v5.3.0-20260514", "digest": "sha256:05c4017e4df7f8f690d6578f975f1eba94624d1b6a675d88c5f508ab6a27152b"},
+        {"key": "csi.nodeDriverRegistrar", "repository": "longhornio/csi-node-driver-registrar", "tag": "v2.17.0", "digest": "sha256:29f7cfd519008fe8f8dff5e79db43f70d65c43a89c08f1bafbb199ca90df79f0"},
+        {"key": "csi.resizer", "repository": "longhornio/csi-resizer", "tag": "v2.1.0-20260514", "digest": "sha256:7f203c1f195445e8ca8be258cd6179c284885a6c1b5287e6c0e33870e9083f8a"},
+        {"key": "csi.snapshotter", "repository": "longhornio/csi-snapshotter", "tag": "v8.5.0-20260514", "digest": "sha256:df4ba2075c00c5193821d43caf11c6f6556310247723365e9916e409799ce029"},
+        {"key": "csi.livenessProbe", "repository": "longhornio/livenessprobe", "tag": "v2.19.0", "digest": "sha256:d0cb76b565ba9d36da0dc2b38e2b6a49a0ae4fe067b03086110682f32c600318"}
+      ]
+    }
+  ],
+  "nonClaims": [
+    "Registry and release-archive digest verification does not prove a live reconciliation or workload health.",
+    "The Longhorn release remains suspended; its exact upstream Git commit does not prove remote Git availability or offline installation."
+  ]
+}

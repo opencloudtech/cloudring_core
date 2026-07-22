@@ -12,13 +12,17 @@ metadata:
     pod-security.kubernetes.io/warn: baseline
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
+kind: GitRepository
 metadata:
-  name: longhorn
+  name: longhorn-charts
   namespace: longhorn-system
+  labels:
+    app.kubernetes.io/part-of: cloudring-storage
 spec:
   interval: 1h
-  url: https://charts.longhorn.io
+  url: https://github.com/longhorn/charts.git
+  ref:
+    commit: f8def0504bf3f5f26c342941c9e4532b44830ebe
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -37,13 +41,13 @@ spec:
   releaseName: longhorn
   chart:
     spec:
-      chart: longhorn
-      version: 1.12.0
+      chart: ./charts/longhorn
       sourceRef:
-        kind: HelmRepository
-        name: longhorn
+        kind: GitRepository
+        name: longhorn-charts
         namespace: longhorn-system
       interval: 1h
+      reconcileStrategy: Revision
   install:
     crds: CreateReplace
     remediation:
@@ -59,6 +63,48 @@ spec:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+    image:
+      longhorn:
+        engine:
+          repository: longhornio/longhorn-engine
+          tag: v1.12.0@sha256:bc4a49e8f2b6b4bcdde0f6e465c0b0ac94acf6198840f9db039bedbbae67e905
+        manager:
+          repository: longhornio/longhorn-manager
+          tag: v1.12.0@sha256:fd245bae2e8254ed475073410f8462e95fab8783dd12d1c084777b5ab53bfb86
+        ui:
+          repository: longhornio/longhorn-ui
+          tag: v1.12.0@sha256:3870d52a2b0aa44e7f8a30d744cfe38a1a0bd130226d3f5d08795e76361ff0b7
+        instanceManager:
+          repository: longhornio/longhorn-instance-manager
+          tag: v1.12.0@sha256:7dc270841c8a8855b9c7b192b53db05b6268318648108cea4b00c2e88eb85cbb
+        shareManager:
+          repository: longhornio/longhorn-share-manager
+          tag: v1.12.0@sha256:cb9d6863e4c694d82ab35f91184d9555c536ed292dad0c7dec94cb655e05787e
+        backingImageManager:
+          repository: longhornio/backing-image-manager
+          tag: v1.12.0@sha256:c480c397045e6a02bb1470cef759e2c3e2ff7fff4400bc3730dfd64446507d7e
+        supportBundleKit:
+          repository: longhornio/support-bundle-kit
+          tag: v0.0.86@sha256:1342641f02ee00203998bb7afc00066e821197a7cf22fc43b7e02b6ab148f86d
+      csi:
+        attacher:
+          repository: longhornio/csi-attacher
+          tag: v4.12.0@sha256:a814aa4784197116983ea13e376fc691e000a390de9d0b9fca2bc4a2fb7c4a1f
+        provisioner:
+          repository: longhornio/csi-provisioner
+          tag: v5.3.0-20260514@sha256:05c4017e4df7f8f690d6578f975f1eba94624d1b6a675d88c5f508ab6a27152b
+        nodeDriverRegistrar:
+          repository: longhornio/csi-node-driver-registrar
+          tag: v2.17.0@sha256:29f7cfd519008fe8f8dff5e79db43f70d65c43a89c08f1bafbb199ca90df79f0
+        resizer:
+          repository: longhornio/csi-resizer
+          tag: v2.1.0-20260514@sha256:7f203c1f195445e8ca8be258cd6179c284885a6c1b5287e6c0e33870e9083f8a
+        snapshotter:
+          repository: longhornio/csi-snapshotter
+          tag: v8.5.0-20260514@sha256:df4ba2075c00c5193821d43caf11c6f6556310247723365e9916e409799ce029
+        livenessProbe:
+          repository: longhornio/livenessprobe
+          tag: v2.19.0@sha256:d0cb76b565ba9d36da0dc2b38e2b6a49a0ae4fe067b03086110682f32c600318
     persistence:
       createStorageClass: false
       defaultClass: false

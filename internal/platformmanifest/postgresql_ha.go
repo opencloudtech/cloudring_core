@@ -13,7 +13,10 @@ import (
 	"strings"
 )
 
-const postgresqlHAProfilePath = "deploy/kubernetes/postgresql-ha"
+const (
+	postgresqlHAProfilePath        = "deploy/kubernetes/postgresql-ha"
+	cloudNativePGOCIManifestDigest = "sha256:209c588b902982bf283a0073db83edd422d9710a2c8a670fe57c0329abe789a4"
+)
 
 // VerifyPostgreSQLHA validates the reusable HA database source contract. It
 // deliberately does not turn structural checks into a live durability claim.
@@ -28,6 +31,10 @@ func VerifyPostgreSQLHA(root string) (Report, error) {
 		return report, errors.New("open confined repository root")
 	}
 	defer repository.Close()
+	artifact, err := requireRuntimeChartArtifact(repository, "cloudnative-pg")
+	if err != nil || artifact.ManifestDigest != cloudNativePGOCIManifestDigest || artifact.AppVersion != "1.30.0" {
+		return report, errors.New("CloudNativePG reviewed OCI artifact contract is invalid")
+	}
 
 	var objects []object
 	for _, stage := range []string{"controllers", "runtime"} {
@@ -38,8 +45,10 @@ func VerifyPostgreSQLHA(root string) (Report, error) {
 		report.Files += files
 		objects = append(objects, stageObjects...)
 	}
+	// Count the shared supply-chain manifest consumed above as a verifier input.
+	report.Files++
 	report.Documents = len(objects)
-	if report.Files != 4 || report.Documents != 8 {
+	if report.Files != 5 || report.Documents != 8 {
 		return report, errors.New("PostgreSQL HA source inventory is incomplete")
 	}
 	index, err := exactPostgreSQLHAInventory(objects)
@@ -55,7 +64,7 @@ func VerifyPostgreSQLHA(root string) (Report, error) {
 	report.Status = "ready"
 	report.Checks = []string{
 		"source_controller_suspended",
-		"controller_chart_and_image_pinned",
+		"controller_oci_chart_and_image_digest_pinned",
 		"admission_webhooks_fail_closed",
 		"controller_replicas_and_disruption_budget_ready",
 		"three_postgresql_instances_hard_host_separated",
@@ -113,10 +122,10 @@ func exactPostgreSQLHAInventory(objects []object) (map[string]object, error) {
 	expected := []string{
 		"Cluster/cloudring-database/cloudring-postgres",
 		"HelmRelease/cnpg-system/cnpg",
-		"HelmRepository/cnpg-system/cnpg",
 		"Namespace//cloudring-database",
 		"Namespace//cnpg-system",
 		"NetworkPolicy/cloudring-database/cloudring-postgres-ingress",
+		"OCIRepository/cnpg-system/cnpg",
 		"PodDisruptionBudget/cnpg-system/cnpg-controller-manager",
 		"ScheduledBackup/cloudring-database/cloudring-postgres-volume-snapshot",
 	}
@@ -132,18 +141,28 @@ func exactPostgreSQLHAInventory(objects []object) (map[string]object, error) {
 }
 
 func validatePostgreSQLHAControllers(index map[string]object) error {
-	repository := index["HelmRepository/cnpg-system/cnpg"].Data
-	if nestedString(repository, "spec", "url") != "https://cloudnative-pg.github.io/charts" ||
-		nestedString(repository, "spec", "interval") != "1h" {
-		return errors.New("CloudNativePG chart repository is invalid")
+	repository := index["OCIRepository/cnpg-system/cnpg"].Data
+	if nestedString(repository, "apiVersion") != "source.toolkit.fluxcd.io/v1" ||
+		!exactMappingKeys(nested(repository, "spec"), "interval", "url", "ref", "layerSelector") ||
+		nestedString(repository, "spec", "url") != "oci://ghcr.io/cloudnative-pg/charts/cloudnative-pg" ||
+		nestedString(repository, "spec", "interval") != "1h" ||
+		!exactMappingKeys(nested(repository, "spec", "ref"), "digest") ||
+		nestedString(repository, "spec", "ref", "digest") != cloudNativePGOCIManifestDigest ||
+		!exactMappingKeys(nested(repository, "spec", "layerSelector"), "mediaType", "operation") ||
+		nestedString(repository, "spec", "layerSelector", "mediaType") != "application/vnd.cncf.helm.chart.content.v1.tar+gzip" ||
+		nestedString(repository, "spec", "layerSelector", "operation") != "copy" {
+		return errors.New("CloudNativePG OCI chart source is invalid")
 	}
 	release := index["HelmRelease/cnpg-system/cnpg"].Data
-	if !exactBool(release, true, "spec", "suspend") ||
+	if !exactMappingKeys(nested(release, "spec"), "suspend", "interval", "timeout", "releaseName", "chartRef", "install", "upgrade", "values") ||
+		!exactBool(release, true, "spec", "suspend") ||
+		nestedString(release, "spec", "interval") != "15m" ||
+		nestedString(release, "spec", "timeout") != "10m" ||
 		nestedString(release, "spec", "releaseName") != "cnpg" ||
-		nestedString(release, "spec", "chart", "spec", "chart") != "cloudnative-pg" ||
-		nestedString(release, "spec", "chart", "spec", "version") != "0.29.0" ||
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "name") != "cnpg" ||
-		nestedString(release, "spec", "chart", "spec", "sourceRef", "namespace") != "cnpg-system" ||
+		!exactMappingKeys(nested(release, "spec", "chartRef"), "kind", "name", "namespace") ||
+		nestedString(release, "spec", "chartRef", "kind") != "OCIRepository" ||
+		nestedString(release, "spec", "chartRef", "name") != "cnpg" ||
+		nestedString(release, "spec", "chartRef", "namespace") != "cnpg-system" ||
 		nestedString(release, "metadata", "annotations", "cloudring.org/non-claim") == "" {
 		return errors.New("CloudNativePG release boundary is invalid")
 	}

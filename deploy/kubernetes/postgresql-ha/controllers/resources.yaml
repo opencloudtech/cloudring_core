@@ -12,13 +12,18 @@ metadata:
     pod-security.kubernetes.io/warn: restricted
 ---
 apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
+kind: OCIRepository
 metadata:
   name: cnpg
   namespace: cnpg-system
 spec:
   interval: 1h
-  url: https://cloudnative-pg.github.io/charts
+  url: oci://ghcr.io/cloudnative-pg/charts/cloudnative-pg
+  ref:
+    digest: sha256:209c588b902982bf283a0073db83edd422d9710a2c8a670fe57c0329abe789a4
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -32,15 +37,10 @@ spec:
   interval: 15m
   timeout: 10m
   releaseName: cnpg
-  chart:
-    spec:
-      chart: cloudnative-pg
-      version: 0.29.0
-      sourceRef:
-        kind: HelmRepository
-        name: cnpg
-        namespace: cnpg-system
-      interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: cnpg
+    namespace: cnpg-system
   install:
     remediation:
       retries: 3

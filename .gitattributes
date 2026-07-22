@@ -4,3 +4,8 @@
 # These two files form one byte-for-byte renderer contract on every checkout.
 contracts/openbao-kubernetes-auth/fixtures/synthetic-kubernetes-auth-executor.json text eol=lf
 deploy/kubernetes/secret-manager/consumer-example/bootstrap-executor.yaml text eol=lf
+
+# Preserve the exact reviewed Longhorn upstream bytes; this template contains
+# two intentional trailing-space lines in release 1.12.0.
+deploy/kubernetes/storage/longhorn-three-node/vendor/** text eol=lf
+deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn/templates/storageclass.yaml whitespace=-blank-at-eol
