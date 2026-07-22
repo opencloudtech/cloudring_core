@@ -14,9 +14,17 @@
     "status": { "const": "ready-for-fault" },
     "requestSha256": { "$ref": "#/$defs/digest" },
     "runNonceSha256": { "$ref": "#/$defs/digest" },
-    "targetNodeUidSha256": { "$ref": "#/$defs/digest" },
+    "targetNodeUidSha256": {
+      "$ref": "#/$defs/digest",
+      "description": "SHA-256(UTF-8(nodeUidHashAlgorithm) || 0x00 || exact UTF-8 Kubernetes Node metadata.uid bytes); no JSON quoting, trimming, normalization, or case folding."
+    },
+    "nodeUidHashAlgorithm": { "const": "cloudring.kubernetes.node-uid-sha256/v1" },
     "kubectlExecutableSha256": { "$ref": "#/$defs/digest" },
     "probeAdapterSha256": { "$ref": "#/$defs/digest" },
+    "controlPlaneMemberSetSha256": {
+      "$ref": "#/$defs/digest",
+      "description": "Domain-separated canonical digest over the sorted unique targetNodeUidSha256-format member hashes."
+    },
     "baselineControlPlaneNodes": { "type": "integer", "minimum": 3 },
     "baselineEtcdMembers": { "type": "integer", "minimum": 3 },
     "baselineApiServerMembers": { "type": "integer", "minimum": 3 },

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/opencloudtech/CloudRING/pkg/kubeidentity"
 )
 
 type fakeClock struct {
@@ -180,6 +182,28 @@ func TestObserveBuildsContinuousOfflineVerifiableReceipt(t *testing.T) {
 	}
 	if err := ValidateReceipt(&receipt); err != nil {
 		t.Fatalf("ValidateReceipt: %v", err)
+	}
+	if receipt.Baseline.ControlPlaneMemberSetSHA256 == "" || marker.ControlPlaneMemberSetSHA256 != receipt.Baseline.ControlPlaneMemberSetSHA256 {
+		t.Fatalf("runtime evidence did not bind the exact baseline member set: marker=%q baseline=%q", marker.ControlPlaneMemberSetSHA256, receipt.Baseline.ControlPlaneMemberSetSHA256)
+	}
+	if receipt.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm || marker.NodeUIDHashAlgorithm != kubeidentity.NodeUIDHashAlgorithm ||
+		receipt.TargetNodeUIDSHA256 != kubeidentity.NodeUIDSHA256("node-uid-1") {
+		t.Fatalf("observer did not use the canonical Node UID hash contract: receipt=%q marker=%q target=%q", receipt.NodeUIDHashAlgorithm, marker.NodeUIDHashAlgorithm, receipt.TargetNodeUIDSHA256)
+	}
+	wantMemberSet := ControlPlaneMemberSetSHA256([]string{
+		kubeidentity.NodeUIDSHA256("node-uid-1"),
+		kubeidentity.NodeUIDSHA256("node-uid-2"),
+		kubeidentity.NodeUIDSHA256("node-uid-3"),
+	})
+	if receipt.Baseline.ControlPlaneMemberSetSHA256 != wantMemberSet {
+		t.Fatalf("observer member-set digest = %q, want %q", receipt.Baseline.ControlPlaneMemberSetSHA256, wantMemberSet)
+	}
+	for _, phase := range []PhaseEvidence{receipt.PreLoss, receipt.Recovered} {
+		for _, sample := range phase.Samples {
+			if sample.ControlPlaneMemberSetSHA256 != receipt.Baseline.ControlPlaneMemberSetSHA256 {
+				t.Fatalf("%s sample did not bind the recovered baseline member set", phase.Phase)
+			}
+		}
 	}
 	schema, err := jsonschema.NewCompiler().Compile("../../../contracts/one-server-loss/receipt.schema.json")
 	if err != nil {
@@ -421,6 +445,33 @@ func TestValidateReceiptRejectsRehashedIdentityReplacement(t *testing.T) {
 	receipt.ReceiptSHA256 = receiptDigest(receipt)
 	if err := ValidateReceipt(&receipt); err == nil {
 		t.Fatal("ValidateReceipt accepted a rehashed target-node replacement")
+	}
+}
+
+func TestValidateReceiptRejectsRehashedRecoveredMemberSetReplacement(t *testing.T) {
+	receipt, _ := runHappyObserver(t, &fakeReader{})
+	replacementSet := ControlPlaneMemberSetSHA256([]string{
+		kubeidentity.NodeUIDSHA256("node-uid-1"),
+		kubeidentity.NodeUIDSHA256("node-uid-2"),
+		kubeidentity.NodeUIDSHA256("replacement-node-uid"),
+	})
+	for index := range receipt.Recovered.Samples {
+		receipt.Recovered.Samples[index].ControlPlaneMemberSetSHA256 = replacementSet
+		receipt.Recovered.Samples[index].SampleSHA256 = sampleDigest(receipt.Recovered.Samples[index])
+	}
+	receipt.Recovered.SamplesSHA256 = digestJSON(receipt.Recovered.Samples)
+	receipt.ReceiptSHA256 = receiptDigest(receipt)
+	if err := ValidateReceipt(&receipt); err == nil {
+		t.Fatal("ValidateReceipt accepted a rehashed recovered control-plane member-set replacement")
+	}
+}
+
+func TestValidateReceiptRejectsUnknownNodeUIDHashAlgorithm(t *testing.T) {
+	receipt, _ := runHappyObserver(t, &fakeReader{})
+	receipt.NodeUIDHashAlgorithm = "sha256-json-string-v0"
+	receipt.ReceiptSHA256 = receiptDigest(receipt)
+	if err := ValidateReceipt(&receipt); err == nil {
+		t.Fatal("ValidateReceipt accepted an unknown Node UID hash algorithm")
 	}
 }
 

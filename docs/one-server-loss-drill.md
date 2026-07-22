@@ -96,7 +96,16 @@ The process samples continuously. It first requires the selected server's
 stable UID, healthy `/readyz?verbose` result including `[+]etcd ok`, full
 baseline quorum, workload minima, the VM on the selected server, and a real
 data-probe result. It then atomically creates the non-overwriting `0600`
-`ready-for-fault` marker.
+`ready-for-fault` marker. Each sample hashes the sorted set of ready
+control-plane Node UID hashes with a domain-separated canonical digest; no raw
+Node UID, hostname, or address is copied into public evidence. The marker and
+baseline bind the full pre-loss set. Every Node UID hash is produced by the
+shared public `kubeidentity.NodeUIDSHA256` helper using
+`SHA-256(UTF-8("cloudring.kubernetes.node-uid-sha256/v1") || 0x00 || exact
+UTF-8 Kubernetes Node metadata.uid bytes)`. There is no JSON quoting, trimming,
+Unicode normalization, or case folding. New markers and receipts record the
+same string in `nodeUidHashAlgorithm`; the optional identifier distinguishes
+them from older v1 receipts whose UID hash construction was not explicit.
 
 The downstream fault procedure must call
 `oneserverloss.ValidateReadyMarkerFreshness` with its supplied current time,
@@ -128,7 +137,9 @@ During loss, the observer requires:
 
 Recovery must restore the same node name and UID, full baseline quorum,
 control-plane pods, workloads, VM readiness, and data result for the complete
-stability window. A replacement node with the same name fails closed. Missing
+stability window. Every recovered sample must restore the exact baseline member
+set digest, while loss samples must differ from it. A replacement node with the
+same name fails closed. Missing
 samples or an idle gap greater than two poll intervals between the completion
 of one sample and the start of the next also fail closed. The recorded duration
 of a successful sample is not itself misclassified as an observation gap.
@@ -151,7 +162,13 @@ evidence workflow before supporting a release decision.
 The kubeadm stand readiness gate accepts the receipt only as a separate
 owner-protected input. Its stand inventory must bind the exact receipt digest,
 run nonce, target Node UID hash, kubectl executable hash, and probe-adapter hash
-and must include unique current Node UID hashes. A legacy caller-declared
+and must include unique current Node UID hashes. When the receipt carries the
+full control-plane member-set digest, the stand binding must match the current
+inventory. The stricter kubeadm HA-wave v2 gate always requires this digest and
+rejects an otherwise-valid older receipt that omits it or belongs to another
+same-sized topology. The generic receipt verifier continues accepting older
+v1 receipts without the optional digest, preserving their narrower original
+claim. A legacy caller-declared
 survive count is accepted only for compatibility, ignored, and stripped from
 the observed report. The verifier publishes
 `verifiedSurviveUnavailableServers: 1` only after the validated receipt proves

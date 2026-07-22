@@ -231,6 +231,12 @@ func validOneServerLossReceiptBinding(
 	if _, targetPresent := nodeUIDs[receipt.TargetNodeUIDSHA256]; !targetPresent {
 		return false
 	}
+	if receipt.Baseline.ControlPlaneMemberSetSHA256 != "" &&
+		(binding.NodeUIDHashAlgorithm != receipt.NodeUIDHashAlgorithm ||
+			binding.ControlPlaneMemberSetSHA256 != receipt.Baseline.ControlPlaneMemberSetSHA256 ||
+			oneserverloss.ControlPlaneMemberSetSHA256(mapHAWaveMemberUIDs(nodeUIDs)) != receipt.Baseline.ControlPlaneMemberSetSHA256) {
+		return false
+	}
 	return receipt.Baseline.ControlPlaneNodes == controlPlaneNodes &&
 		receipt.Baseline.ControlPlaneNodes == inventory.ControlPlaneReplicas &&
 		receipt.Baseline.EtcdMembers == etcdMembers &&
