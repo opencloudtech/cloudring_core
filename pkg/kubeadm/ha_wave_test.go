@@ -55,6 +55,7 @@ func TestHAWaveSequencesOneToTwoThenFreshBackupThenTwoToThree(t *testing.T) {
 	}
 	secondPlanPath := writeHAWaveJSON(t, "second-plan.json", second)
 	receipt := testOneServerLossReceipt()
+	shiftTestOneServerLossReceipt(t, &receipt, base.Add(3*time.Minute+30*time.Second))
 	finalOptions := haWaveVerifyOptions(t, secondPlanPath, "backup-wave-2.json", base.Add(4*time.Minute), 3, &receipt)
 	finalOptions.FinalOneServerLossPath = filepath.Join("protected", "one-server-loss.json")
 	finalOptions.LoadOneServerLossReceipt = func(string, time.Time) (*oneserverloss.Receipt, string, error) {
@@ -167,7 +168,7 @@ func TestHAWaveFinalOneServerLossEvidenceIsForbiddenBeforeThreeAndRequiredAfter(
 		Now: fixedHAWaveClock(base), ValidateBackup: passingHAWaveBackup(base.Add(-time.Minute), "backup-1"),
 	}, base, 1))
 	firstPath := writeHAWaveJSON(t, "first-plan.json", firstPlan)
-	earlyOptions := haWaveVerifyOptions(t, firstPath, "backup-1.json", base, 2, nil)
+	earlyOptions := haWaveVerifyOptions(t, firstPath, "backup-1.json", base.Add(time.Minute), 2, nil)
 	earlyOptions.FinalOneServerLossPath = "too-early.json"
 	early := VerifyHAWave(earlyOptions)
 	assertHAWaveBlocker(t, early.Blockers, "ha_wave_final_one_server_loss_too_early")
@@ -250,6 +251,134 @@ func TestHAWaveVerificationReopensExactBackupAndRequiresInventoryReceipt(t *test
 	}
 	report = VerifyHAWave(fabricatedInventory)
 	assertHAWaveBlocker(t, report.Blockers, "ha_wave_inventory_receipt_invalid")
+}
+
+func TestHAWaveVerificationRequiresInventoryCapturedStrictlyAfterPlanAndBackup(t *testing.T) {
+	base := time.Date(2026, 7, 19, 12, 1, 0, 0, time.UTC)
+	plan := readyHAWavePlanForTest(base, HAWavePhaseOneToTwo)
+	finalUIDs := append(slices.Clone(plan.StartingMemberUIDSHA256), testSHA256("chronology-introduced-member"))
+	slices.Sort(finalUIDs)
+
+	t.Run("post-plan inventory passes", func(t *testing.T) {
+		planPath := writeHAWaveJSON(t, "plan.json", plan)
+		opts := haWaveVerifyOptions(t, planPath, "backup.json", base, 2, nil)
+		opts.LoadInventory = inventoryLoaderForUIDs(base, plan.InstallationID, finalUIDs, nil)
+		report := VerifyHAWave(opts)
+		if report.Status != "ready" {
+			t.Fatalf("strictly ordered verification inventory was rejected: %+v", report)
+		}
+	})
+
+	planGeneratedAt, err := parseHAWaveTime(plan.GeneratedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name       string
+		capturedAt time.Time
+	}{
+		{name: "inventory equal to plan generation", capturedAt: planGeneratedAt},
+		{name: "fresh target inventory from before the plan", capturedAt: planGeneratedAt.Add(-time.Second)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			planPath := writeHAWaveJSON(t, "plan.json", plan)
+			opts := haWaveVerifyOptions(t, planPath, "backup.json", base, 2, nil)
+			opts.LoadInventory = inventoryLoaderForUIDs(test.capturedAt, plan.InstallationID, finalUIDs, nil)
+			report := VerifyHAWave(opts)
+			assertHAWaveBlocker(t, report.Blockers, "ha_wave_inventory_receipt_invalid")
+		})
+	}
+
+	t.Run("inventory equal to newer bound backup", func(t *testing.T) {
+		backupBoundaryPlan := plan
+		backupBoundaryPlan.GeneratedAt = base.Add(-2 * time.Minute).Format(time.RFC3339Nano)
+		backupBoundaryPlan.PreflightCapturedAt = backupBoundaryPlan.GeneratedAt
+		backupBoundaryPlan.BackupGeneratedAt = base.Add(-time.Minute).Format(time.RFC3339Nano)
+		planPath := writeHAWaveJSON(t, "backup-boundary-plan.json", backupBoundaryPlan)
+		opts := haWaveVerifyOptions(t, planPath, "backup.json", base, 2, nil)
+		opts.LoadInventory = inventoryLoaderForUIDs(base.Add(-time.Minute), plan.InstallationID, finalUIDs, nil)
+		report := VerifyHAWave(opts)
+		assertHAWaveBlocker(t, report.Blockers, "ha_wave_inventory_receipt_invalid")
+	})
+}
+
+func TestHAWaveFinalReceiptChronologyRejectsEqualityAndOlderSameSetReuse(t *testing.T) {
+	base := time.Date(2026, 7, 19, 12, 1, 0, 0, time.UTC)
+	plan := readyHAWavePlanForTest(base, HAWavePhaseTwoToThree)
+	planGeneratedAt, err := parseHAWaveTime(plan.GeneratedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupGeneratedAt, err := parseHAWaveTime(plan.BackupGeneratedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verify := func(t *testing.T, testPlan HAWavePlan, completedAt, inventoryCapturedAt time.Time) HAWaveVerification {
+		t.Helper()
+		planPath := writeHAWaveJSON(t, "plan.json", testPlan)
+		receipt := testOneServerLossReceipt()
+		shiftTestOneServerLossReceipt(t, &receipt, completedAt)
+		opts := haWaveVerifyOptions(t, planPath, "backup.json", inventoryCapturedAt, 3, &receipt)
+		opts.FinalOneServerLossPath = "receipt.json"
+		opts.LoadOneServerLossReceipt = func(string, time.Time) (*oneserverloss.Receipt, string, error) {
+			return &receipt, testSHA256("receipt-artifact"), nil
+		}
+		return VerifyHAWave(opts)
+	}
+
+	t.Run("strict chronology passes", func(t *testing.T) {
+		report := verify(t, plan, planGeneratedAt.Add(30*time.Second), base)
+		if report.Status != "ready" || !report.FinalOneServerLossVerified {
+			t.Fatalf("strict final evidence chronology was rejected: %+v", report)
+		}
+	})
+
+	for _, test := range []struct {
+		name                string
+		testPlan            HAWavePlan
+		completedAt         time.Time
+		inventoryCapturedAt time.Time
+	}{
+		{
+			name:                "completion equal to plan generation",
+			testPlan:            plan,
+			completedAt:         planGeneratedAt,
+			inventoryCapturedAt: base,
+		},
+		{
+			name:                "binding inventory equal to drill completion",
+			testPlan:            plan,
+			completedAt:         base,
+			inventoryCapturedAt: base,
+		},
+		{
+			name:                "fresh older receipt from the same final member set",
+			testPlan:            plan,
+			completedAt:         planGeneratedAt.Add(-time.Second),
+			inventoryCapturedAt: base,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			report := verify(t, test.testPlan, test.completedAt, test.inventoryCapturedAt)
+			if test.name == "fresh older receipt from the same final member set" {
+				transition, found := findHAWaveCheck(report.Checks, "member_identity_transition")
+				if !found || transition.Status != "pass" || report.Observed != haWaveCounts(3) {
+					t.Fatalf("receipt-reuse fixture did not preserve the exact final member set: %+v", report)
+				}
+			}
+			assertHAWaveBlocker(t, report.Blockers, "ha_wave_final_one_server_loss_invalid")
+		})
+	}
+
+	t.Run("completion equal to newer bound backup", func(t *testing.T) {
+		report := verify(t, plan, backupGeneratedAt, base)
+		assertHAWaveBlocker(t, report.Blockers, "ha_wave_final_one_server_loss_invalid")
+	})
+
+	if !backupGeneratedAt.Before(planGeneratedAt) {
+		t.Fatalf("test plan does not place its backup before plan generation: backup=%s plan=%s", backupGeneratedAt, planGeneratedAt)
+	}
 }
 
 func TestHAWaveFinalReceiptMustMatchInventoryDigestAndIdentityBinding(t *testing.T) {
@@ -803,6 +932,8 @@ func TestHAWaveReportsDoNotCopyPrivatePaths(t *testing.T) {
 }
 
 func readyHAWavePlanForTest(now time.Time, phase string) HAWavePlan {
+	generatedAt := now.Add(-time.Minute)
+	backupGeneratedAt := now.Add(-2 * time.Minute)
 	from := 1
 	startingUIDs := testHAWaveMemberUIDs(from)
 	checks := []HAWaveCheck{
@@ -817,13 +948,13 @@ func readyHAWavePlanForTest(now time.Time, phase string) HAWavePlan {
 		checks = append(checks, HAWaveCheck{ID: "previous_wave", Status: "pass", Artifact: "previous.json", SHA256: testSHA256("previous"), Detail: "one-to-two verification is ready and the inter-wave backup is newer"})
 	}
 	return HAWavePlan{
-		SchemaVersion: HAWaveSchemaVersion, GeneratedAt: now.Format(time.RFC3339Nano), Status: "ready", Phase: phase,
+		SchemaVersion: HAWaveSchemaVersion, GeneratedAt: generatedAt.Format(time.RFC3339Nano), Status: "ready", Phase: phase,
 		InstallationID: "synthetic-cell-001", From: haWaveCounts(from), Target: haWaveCounts(from + 1),
-		PreflightInventoryReceiptSHA256: testSHA256("preflight-inventory-receipt"), PreflightCapturedAt: now.Format(time.RFC3339Nano),
+		PreflightInventoryReceiptSHA256: testSHA256("preflight-inventory-receipt"), PreflightCapturedAt: generatedAt.Format(time.RFC3339Nano),
 		NodeUIDHashAlgorithm:    kubeidentity.NodeUIDHashAlgorithm,
 		StartingMemberUIDSHA256: startingUIDs,
 		StartingMemberSetSHA256: HAWaveMemberSetSHA256(startingUIDs),
-		BackupGeneratedAt:       now.Add(-time.Minute).Format(time.RFC3339Nano), Checks: checks, Blockers: []string{},
+		BackupGeneratedAt:       backupGeneratedAt.Format(time.RFC3339Nano), Checks: checks, Blockers: []string{},
 		Steps: append([]string(nil), haWaveSteps...), Rollback: append([]string(nil), haWaveRollback...),
 		MutationAllowed: false, NonClaim: haWavePlanNonClaim,
 	}
@@ -936,6 +1067,36 @@ func bindTestOneServerLossReceiptToMembers(receipt *oneserverloss.Receipt, membe
 		}
 		for index := range phase.Samples {
 			phase.Samples[index].ControlPlaneMemberSetSHA256 = setSHA256
+		}
+	}
+	rehashTestReceipt(receipt)
+}
+
+func shiftTestOneServerLossReceipt(t *testing.T, receipt *oneserverloss.Receipt, completedAt time.Time) {
+	t.Helper()
+	currentCompletedAt, err := time.Parse(time.RFC3339Nano, receipt.CompletedAt)
+	if err != nil {
+		t.Fatalf("parse test one-server-loss completion: %v", err)
+	}
+	delta := completedAt.UTC().Sub(currentCompletedAt.UTC())
+	shift := func(value string) string {
+		parsed, parseErr := time.Parse(time.RFC3339Nano, value)
+		if parseErr != nil {
+			t.Fatalf("parse test one-server-loss timestamp %q: %v", value, parseErr)
+		}
+		return parsed.UTC().Add(delta).Format(time.RFC3339Nano)
+	}
+	receipt.StartedAt = shift(receipt.StartedAt)
+	receipt.ReadyMarkerAt = shift(receipt.ReadyMarkerAt)
+	receipt.CompletedAt = shift(receipt.CompletedAt)
+	for _, phase := range []*oneserverloss.PhaseEvidence{&receipt.PreLoss, &receipt.Loss, &receipt.Recovered} {
+		phase.StartedAt = shift(phase.StartedAt)
+		phase.CompletedAt = shift(phase.CompletedAt)
+		for index := range phase.Samples {
+			phase.Samples[index].StartedAt = shift(phase.Samples[index].StartedAt)
+			phase.Samples[index].ObservedAt = shift(phase.Samples[index].ObservedAt)
+			phase.Samples[index].DataProbe.StartedAt = shift(phase.Samples[index].DataProbe.StartedAt)
+			phase.Samples[index].DataProbe.CompletedAt = shift(phase.Samples[index].DataProbe.CompletedAt)
 		}
 	}
 	rehashTestReceipt(receipt)
