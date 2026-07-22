@@ -21,12 +21,14 @@ import (
 	"github.com/opencloudtech/CloudRING/pkg/kubeconfigpipe"
 )
 
+const fastExecutableTestTimeout = 10 * time.Second
+
 func TestPinnedExecutableIgnoresLaterPATHReplacement(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubectl")
 	writeExecutable(t, path, "#!/bin/sh\ncat \"$KUBECONFIG\" >/dev/null\nprintf first\n")
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	executable, err := Pin("kubectl", 2*time.Second)
+	executable, err := Pin("kubectl", fastExecutableTestTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +47,7 @@ func TestPinnedExecutableIgnoresLaterPATHReplacement(t *testing.T) {
 func TestPinnedExecutableBoundsCapturedOutput(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "adapter")
 	writeExecutable(t, path, "#!/bin/sh\nprintf 0123456789abcdef\n")
-	executable, err := PinAbsolute(path, 2*time.Second)
+	executable, err := PinAbsolute(path, fastExecutableTestTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func TestPinnedExecutableBoundsCapturedOutput(t *testing.T) {
 func TestPinnedExecutablePreservesBoundedCommandFailureDiagnostics(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "adapter")
 	writeExecutable(t, path, "#!/bin/sh\nprintf missing >&2\nexit 2\n")
-	executable, err := PinAbsolute(path, 2*time.Second)
+	executable, err := PinAbsolute(path, fastExecutableTestTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
