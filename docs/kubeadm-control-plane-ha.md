@@ -75,6 +75,54 @@ API-server member than the protected baseline. Quorum after two simultaneous
 losses is insufficient. The stacked-etcd control-plane count must be odd and
 the node inventory count must match it exactly.
 
+## Sequential HA expansion waves
+
+`BuildHAWavePlan` and `VerifyHAWave` provide a separate, provider-neutral
+contract for correcting a one-member kubeadm control plane without skipping
+directly to three members. They only plan and verify; both evidence documents
+set their mutation field to `false`, and neither function runs kubeadm, changes
+etcd membership, contacts a provider, or modifies a cluster.
+
+The only accepted sequence is:
+
+1. build and review a `one-to-two` plan against a fresh off-cell backup and
+   restore barrier;
+2. separately apply the approved deployment-owned change, then capture a ready
+   two-member verification;
+3. take and validate a new off-cell backup whose generation time is later than
+   completion of the first verification;
+4. build and review the `two-to-three` plan, separately apply it, and capture
+   three healthy control-plane, etcd, and API-server members;
+5. supply the final public `oneserverloss.Receipt`. The verifier recomputes its
+   full offline digest chain, requires its protected baseline to match the
+   recovered three-member topology exactly, and enforces evidence freshness.
+
+Final one-server-loss evidence is forbidden in the first verification and
+mandatory in the second. A self-declared survive count, boolean, artifact hash,
+or loader success is not sufficient: the loader must return the receipt itself
+for independent validation. Verification also reopens the exact backup barrier
+recorded by the plan and requires the same generation time and SHA-256 while it
+is still fresh. Healthy counts are derived only from a fresh
+`HAWaveInventoryReceipt`: its self-digest binds the installation, upstream
+kubeadm version, sorted member UID hashes, Ready control-plane/etcd roles, and
+sorted API-server UID hashes. There is no manual-count input to `VerifyHAWave`.
+At three members, that inventory receipt must also bind the exact receipt hash,
+run nonce, target Node UID hash, kubectl executable hash, and probe-adapter hash
+from the final one-server-loss receipt.
+
+The installation-specific backup validator and protected inventory and receipt
+loaders remain downstream adapter boundaries because concrete backup systems,
+file ownership policy, and private paths do not belong in the public package.
+
+Plans and verifications use the versioned
+`cloudring.kubeadm.ha-wave/v1` schema. `ReadHAWavePlan` and
+`ReadHAWaveVerification` accept exactly one bounded JSON object, reject unknown
+or duplicate fields and trailing documents, and reject evidence that enables
+mutation or changes the canonical plan/non-claim text. Reports retain only
+source-safe installation identifiers, artifact basenames, timestamps, counts,
+booleans, and lowercase SHA-256 bindings. Private paths and receipt payloads are
+not copied into them.
+
 Provider adapters resolve the references declared by
 `ProviderSiteProfile`, supply concrete values at runtime, perform mutations,
 and collect sanitized evidence. A provider implementation must:
