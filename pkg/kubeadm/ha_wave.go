@@ -337,7 +337,7 @@ func VerifyHAWave(opts HAWaveVerifyOptions) HAWaveVerification {
 	report.pass("plan", "ready HA-wave plan is bound by SHA-256", planArtifact, planSHA)
 	planGeneratedAt, planGeneratedTimeErr := parseHAWaveTime(plan.GeneratedAt)
 	planBackupAt, planBackupTimeErr := parseHAWaveTime(plan.BackupGeneratedAt)
-	if planGeneratedTimeErr != nil || planBackupTimeErr != nil {
+	if planGeneratedTimeErr != nil || planBackupTimeErr != nil || planGeneratedAt.After(now) || planBackupAt.After(now) {
 		report.block("ha_wave_plan_invalid", "plan", "a ready versioned read-only HA-wave plan is required", planArtifact, "")
 		return report
 	}
@@ -372,7 +372,7 @@ func VerifyHAWave(opts HAWaveVerifyOptions) HAWaveVerification {
 		}
 		if inventoryErr != nil || inventory == nil || validateErr != nil || !validHAWaveSHA256(inventorySHA) || inventory.InstallationID != plan.InstallationID ||
 			inventory.NodeUIDHashAlgorithm != plan.NodeUIDHashAlgorithm || !inventoryCapturedAt.After(planGeneratedAt) ||
-			!inventoryCapturedAt.After(planBackupAt) {
+			!inventoryCapturedAt.After(planBackupAt) || inventoryCapturedAt.After(now) {
 			report.block("ha_wave_inventory_receipt_invalid", "inventory", "a fresh identity-bound kubeadm inventory receipt is required; manual counts are not accepted", inventoryArtifact, "")
 			inventory = nil
 		} else {
@@ -591,6 +591,7 @@ func validateHAWaveOneServerLossReceipt(
 	completedAt, completedTimeErr := parseHAWaveTime(receipt.CompletedAt)
 	inventoryCapturedAt, inventoryTimeErr := parseHAWaveTime(inventory.CapturedAt)
 	if completedTimeErr != nil || inventoryTimeErr != nil || !freshHAWaveTime(completedAt, now) ||
+		completedAt.After(now) || inventoryCapturedAt.After(now) ||
 		!completedAt.After(planGeneratedAt) || !completedAt.After(backupGeneratedAt) ||
 		!inventoryCapturedAt.After(completedAt) {
 		return errors.New("one-server-loss receipt is stale or future-dated")

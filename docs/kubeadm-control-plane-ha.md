@@ -138,7 +138,9 @@ captured before the plan cannot verify a later apply. The final three-member
 drill must complete strictly after both of those plan boundaries and strictly
 before the inventory that embeds its exact receipt binding. An older valid
 receipt from the same member set cannot be reused for a new final HA-wave
-verification.
+verification. The plan, backup, drill completion, and verification inventory
+must also be no later than the verifier clock; the generic receipt clock-skew
+allowance cannot turn future-dated evidence into a ready HA-wave result.
 
 The wave verification also requires the final set to equal the starting set
 union exactly one new unique member identity. Equal target counts do not permit

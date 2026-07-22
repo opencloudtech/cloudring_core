@@ -279,6 +279,8 @@ func TestHAWaveVerificationRequiresInventoryCapturedStrictlyAfterPlanAndBackup(t
 	}{
 		{name: "inventory equal to plan generation", capturedAt: planGeneratedAt},
 		{name: "fresh target inventory from before the plan", capturedAt: planGeneratedAt.Add(-time.Second)},
+		{name: "inventory one nanosecond after verifier time", capturedAt: base.Add(time.Nanosecond)},
+		{name: "inventory at maximum generic future skew", capturedAt: base.Add(maximumHAWaveFutureSkew)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			planPath := writeHAWaveJSON(t, "plan.json", plan)
@@ -300,6 +302,31 @@ func TestHAWaveVerificationRequiresInventoryCapturedStrictlyAfterPlanAndBackup(t
 		report := VerifyHAWave(opts)
 		assertHAWaveBlocker(t, report.Blockers, "ha_wave_inventory_receipt_invalid")
 	})
+
+	for _, test := range []struct {
+		name   string
+		offset time.Duration
+		field  string
+	}{
+		{name: "plan one nanosecond after verifier time", offset: time.Nanosecond, field: "plan"},
+		{name: "plan at maximum generic future skew", offset: maximumHAWaveFutureSkew, field: "plan"},
+		{name: "backup one nanosecond after verifier time", offset: time.Nanosecond, field: "backup"},
+		{name: "backup at maximum generic future skew", offset: maximumHAWaveFutureSkew, field: "backup"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			futurePlan := plan
+			if test.field == "plan" {
+				futurePlan.GeneratedAt = base.Add(test.offset).Format(time.RFC3339Nano)
+				futurePlan.PreflightCapturedAt = futurePlan.GeneratedAt
+			} else {
+				futurePlan.BackupGeneratedAt = base.Add(test.offset).Format(time.RFC3339Nano)
+			}
+			planPath := writeHAWaveJSON(t, "future-plan.json", futurePlan)
+			opts := haWaveVerifyOptions(t, planPath, "backup.json", base, 2, nil)
+			report := VerifyHAWave(opts)
+			assertHAWaveBlocker(t, report.Blockers, "ha_wave_plan_invalid")
+		})
+	}
 }
 
 func TestHAWaveFinalReceiptChronologyRejectsEqualityAndOlderSameSetReuse(t *testing.T) {
@@ -378,6 +405,43 @@ func TestHAWaveFinalReceiptChronologyRejectsEqualityAndOlderSameSetReuse(t *test
 
 	if !backupGeneratedAt.Before(planGeneratedAt) {
 		t.Fatalf("test plan does not place its backup before plan generation: backup=%s plan=%s", backupGeneratedAt, planGeneratedAt)
+	}
+}
+
+func TestHAWaveFinalReceiptValidationRejectsFutureCompletionAndInventory(t *testing.T) {
+	base := time.Date(2026, 7, 19, 12, 1, 0, 0, time.UTC)
+	plan := readyHAWavePlanForTest(base, HAWavePhaseTwoToThree)
+	planGeneratedAt, err := parseHAWaveTime(plan.GeneratedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupGeneratedAt, err := parseHAWaveTime(plan.BackupGeneratedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, offset := range []time.Duration{time.Nanosecond, maximumHAWaveFutureSkew} {
+		t.Run(offset.String(), func(t *testing.T) {
+			receipt := testOneServerLossReceipt()
+			completedAt := base.Add(offset)
+			shiftTestOneServerLossReceipt(t, &receipt, completedAt)
+			planPath := writeHAWaveJSON(t, "future-receipt-plan.json", plan)
+			opts := haWaveVerifyOptions(t, planPath, "backup.json", completedAt.Add(time.Nanosecond), 3, &receipt)
+			inventory, _, loadErr := opts.LoadInventory(opts.InventoryPath, base)
+			if loadErr != nil {
+				t.Fatal(loadErr)
+			}
+			if validateErr := validateHAWaveOneServerLossReceipt(
+				&receipt,
+				inventory,
+				plan.Target,
+				base,
+				planGeneratedAt,
+				backupGeneratedAt,
+			); validateErr == nil {
+				t.Fatal("future-dated final drill and binding inventory unexpectedly passed")
+			}
+		})
 	}
 }
 
