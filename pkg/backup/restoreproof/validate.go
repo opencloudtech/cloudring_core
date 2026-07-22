@@ -17,6 +17,7 @@ const (
 	providerAbsenceMinimumInterval = 10 * time.Second
 	sourceBaselineMaximumAge       = 15 * time.Minute
 	serverStatusFreshness          = time.Minute
+	serverStatusAllowedFutureSkew  = 30 * time.Second
 )
 
 var (
@@ -68,7 +69,7 @@ func validateVeleroRuntime(receipt *VolumeReceipt) error {
 	restoreCompleted, _ := time.Parse(time.RFC3339Nano, receipt.Context.CompletedAt)
 	cleanupStarted, _ := time.Parse(time.RFC3339Nano, receipt.Context.Cleanup.CleanupStartedAt)
 	collected, _ := time.Parse(time.RFC3339Nano, receipt.CollectedAt)
-	if !processed.After(restoreCompleted) || observed.Before(processed) || observed.Sub(processed) > serverStatusFreshness ||
+	if !processed.After(restoreCompleted) || observed.Before(processed.Add(-serverStatusAllowedFutureSkew)) || observed.After(processed.Add(serverStatusFreshness)) ||
 		observed.After(cleanupStarted) || observed.After(collected) {
 		return errors.New("Velero runtime attestation timeline is invalid")
 	}
@@ -163,14 +164,14 @@ func validateContext(context *VolumeRestoreContext) error {
 		identity := objectIdentity(resource.Resource, resource.Namespace, resource.Name)
 		if expectedSources[resource.Resource] == 0 || previousSourceIdentity != "" && identity <= previousSourceIdentity || !validName(resource.Name) || resource.Resource == "persistentvolumeclaims" && !validName(resource.Namespace) ||
 			resource.Resource == "persistentvolumes" && resource.Namespace != "" || seenSource[identity] ||
-			!validDigest(resource.UIDSHA256) || !validDigest(resource.ResourceVersionBeforeSHA256) || resource.ResourceVersionBeforeSHA256 != resource.ResourceVersionAfterSHA256 ||
+			!validDigest(resource.UIDSHA256) || !validDigest(resource.ResourceVersionBeforeSHA256) || !validDigest(resource.ResourceVersionAfterSHA256) ||
 			!validDigest(resource.StateBeforeSHA256) || resource.StateBeforeSHA256 != resource.StateAfterSHA256 {
 			return errors.New("restore proof source inventory is invalid")
 		}
 		expectedSources[resource.Resource]--
 		seenSource[identity] = true
 		previousSourceIdentity = identity
-		if resource.Resource == "persistentvolumeclaims" && resource == baseline.Source {
+		if resource.Resource == "persistentvolumeclaims" && sourceMatchesBaseline(resource, baseline.Source) {
 			baselineFound = true
 		}
 	}
@@ -202,6 +203,12 @@ func validateContext(context *VolumeRestoreContext) error {
 		return errors.New("restore proof Velero auto-cleaned inventory is invalid")
 	}
 	return nil
+}
+
+func sourceMatchesBaseline(resource, baseline SourceResource) bool {
+	return resource.Resource == baseline.Resource && resource.Namespace == baseline.Namespace && resource.Name == baseline.Name &&
+		resource.UIDSHA256 == baseline.UIDSHA256 && resource.ResourceVersionBeforeSHA256 == baseline.ResourceVersionBeforeSHA256 &&
+		resource.StateBeforeSHA256 == baseline.StateBeforeSHA256 && resource.StateAfterSHA256 == baseline.StateAfterSHA256
 }
 
 func validateProbes(context VolumeRestoreContext, probes []DataProbe) (map[string]DataProbe, int64, error) {
@@ -259,10 +266,21 @@ func validateProbe(context VolumeRestoreContext, probe DataProbe) error {
 	restoreCompleted, restoreErr := time.Parse(time.RFC3339Nano, context.CompletedAt)
 	validationCompleted, validationErr := time.Parse(time.RFC3339Nano, context.Cleanup.ValidationCompletedAt)
 	if startErr != nil || completeErr != nil || restoreErr != nil || validationErr != nil || started.Before(restoreCompleted) || !started.Before(completed) || completed.After(validationCompleted) ||
-		completed.Sub(started)%time.Millisecond != 0 || probe.ObservedDurationMilliseconds != completed.Sub(started).Milliseconds() {
+		probe.ObservedDurationMilliseconds != durationMillisecondsCeiling(completed.Sub(started)) {
 		return errors.New("typed restore data probe timeline is invalid")
 	}
 	return nil
+}
+
+func durationMillisecondsCeiling(duration time.Duration) int64 {
+	if duration <= 0 {
+		return 0
+	}
+	milliseconds := duration / time.Millisecond
+	if duration%time.Millisecond != 0 {
+		milliseconds++
+	}
+	return int64(milliseconds)
 }
 
 func validateHelpers(context VolumeRestoreContext, probes map[string]DataProbe, helpers []AsyncHelper) error {

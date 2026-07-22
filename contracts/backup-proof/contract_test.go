@@ -200,3 +200,45 @@ func TestRequestEvidencePrefixBoundaryMatchesSchema(t *testing.T) {
 		}
 	}
 }
+
+func TestAdapterDigestConformanceVectorsMatchRuntime(t *testing.T) {
+	t.Parallel()
+	payload, err := os.ReadFile("adapter-digest-conformance-vectors.json") // #nosec G304 -- repository-owned fixture.
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		SchemaVersion    string `json:"schemaVersion"`
+		Canonicalization string `json:"canonicalization"`
+		Vectors          []struct {
+			Name      string          `json:"name"`
+			Kind      string          `json:"kind"`
+			Request   json.RawMessage `json:"request"`
+			Canonical string          `json:"canonical"`
+			SHA256    string          `json:"sha256"`
+		} `json:"vectors"`
+	}
+	if err := strictjson.DecodeExact(payload, &fixture); err != nil || fixture.SchemaVersion != "cloudring.restore-proof.adapter-digest-vectors/v1" ||
+		fixture.Canonicalization != velero118.AdapterRequestCanonicalization || len(fixture.Vectors) != 2 {
+		t.Fatalf("invalid adapter digest vectors: %v", err)
+	}
+	for _, vector := range fixture.Vectors {
+		var request any
+		switch vector.Kind {
+		case "probe":
+			request = &velero118.ProbeRequest{}
+		case "backend":
+			request = &velero118.BackendRequest{}
+		default:
+			t.Fatalf("%s: unknown request kind %q", vector.Name, vector.Kind)
+		}
+		if err := strictjson.DecodeExact(vector.Request, request); err != nil {
+			t.Fatalf("%s: %v", vector.Name, err)
+		}
+		canonical, err := velero118.CanonicalAdapterRequestJSON(request)
+		if err != nil || string(canonical) != vector.Canonical || velero118.AdapterRequestSHA256(request) != vector.SHA256 ||
+			restoreproof.SHA256(vector.Canonical) != vector.SHA256 {
+			t.Fatalf("%s: canonical=%q digest=%s err=%v", vector.Name, canonical, velero118.AdapterRequestSHA256(request), err)
+		}
+	}
+}

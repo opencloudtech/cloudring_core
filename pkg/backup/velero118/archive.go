@@ -24,8 +24,10 @@ const (
 )
 
 // ReadArchivedDataUpload extracts the exact normal and preferred-version copies
-// of one DataUpload from a Velero BackupContents tar.gz. It rejects links,
-// traversal, duplicates, unexpected DataUploads, concatenated gzip streams and
+// of one explicitly selected DataUpload from a Velero BackupContents tar.gz.
+// Other DataUploads in a multi-volume backup are ignored; the selected normal
+// and preferred-version copies must still both exist and match exactly. It
+// rejects links, traversal, duplicate paths, concatenated gzip streams and
 // trailing tar data.
 func ReadArchivedDataUpload(compressed io.Reader, namespace, name string) ([]byte, error) {
 	if compressed == nil || !safeName(namespace) || !safeName(name) {
@@ -68,10 +70,6 @@ func ReadArchivedDataUpload(compressed io.Reader, namespace, name string) ([]byt
 			return nil, errors.New("Velero BackupContents entry type or size is invalid")
 		}
 		relevant := expected[header.Name]
-		if strings.HasPrefix(header.Name, dataUploadResourcePrefix) && !relevant {
-			zeroBytes(selected)
-			return nil, errors.New("Velero BackupContents contains an unexpected DataUpload")
-		}
 		if !relevant {
 			copied, copyErr := io.CopyN(io.Discard, tarReader, header.Size)
 			if copyErr != nil || copied != header.Size {
@@ -90,7 +88,8 @@ func ReadArchivedDataUpload(compressed io.Reader, namespace, name string) ([]byt
 			zeroBytes(selected)
 			return nil, errors.New("read exact archived Velero DataUpload")
 		}
-		if _, decodeErr := DecodeDataUpload(payload); decodeErr != nil {
+		decoded, decodeErr := DecodeDataUpload(payload)
+		if decodeErr != nil || decoded.Identity.Metadata.Namespace != namespace || decoded.Identity.Metadata.Name != name {
 			zeroBytes(payload)
 			zeroBytes(selected)
 			return nil, errors.New("decode exact archived Velero DataUpload")

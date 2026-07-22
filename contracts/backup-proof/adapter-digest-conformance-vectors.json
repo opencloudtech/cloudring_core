@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "cloudring.restore-proof.adapter-digest-vectors/v1",
+  "canonicalization": "cloudring.restore-proof.adapter-canonical-json/v1",
+  "vectors": [
+    {
+      "name": "backend-unicode-and-html-characters",
+      "kind": "backend",
+      "request": {
+        "schemaVersion": "cloudring.restore-proof.adapter-request/v2",
+        "requestDigestCanonicalization": "cloudring.restore-proof.adapter-canonical-json/v1",
+        "challenge": "2dd00bd77e0222ced882665481a9c1d9f907309d16e05ed007a1ea63928477a9",
+        "adapterExecutableSha256": "ae1eae1d76e5b7c865c4122ce366a08025842566d2d96c75cc13e6353a73db0d",
+        "operation": "observe",
+        "sourceKind": "persistent-volume",
+        "artifactHandle": "volumé<&",
+        "artifactHandleSha256": "c2a116aa910d147bd5bdacc2f1cc4430148955f450654ed756e9c93de1b1e1d2"
+      },
+      "canonical": "{\"adapterExecutableSha256\":\"ae1eae1d76e5b7c865c4122ce366a08025842566d2d96c75cc13e6353a73db0d\",\"artifactHandle\":\"volumé<&\",\"artifactHandleSha256\":\"c2a116aa910d147bd5bdacc2f1cc4430148955f450654ed756e9c93de1b1e1d2\",\"challenge\":\"2dd00bd77e0222ced882665481a9c1d9f907309d16e05ed007a1ea63928477a9\",\"operation\":\"observe\",\"requestDigestCanonicalization\":\"cloudring.restore-proof.adapter-canonical-json/v1\",\"schemaVersion\":\"cloudring.restore-proof.adapter-request/v2\",\"sourceKind\":\"persistent-volume\"}",
+      "sha256": "eed8bb839b96503852a37a20bf9714f0fc9ac668640bb44cd51ca32f418b1811"
+    },
+    {
+      "name": "probe-nested-object-key-order",
+      "kind": "probe",
+      "request": {
+        "schemaVersion": "cloudring.restore-proof.adapter-request/v2",
+        "requestDigestCanonicalization": "cloudring.restore-proof.adapter-canonical-json/v1",
+        "challenge": "2dd00bd77e0222ced882665481a9c1d9f907309d16e05ed007a1ea63928477a9",
+        "adapterExecutableSha256": "ae1eae1d76e5b7c865c4122ce366a08025842566d2d96c75cc13e6353a73db0d",
+        "source": {
+          "gvr": {"group": "", "version": "v1", "resource": "persistentvolumeclaims"},
+          "namespace": "source",
+          "name": "volume",
+          "uidSha256": "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d"
+        },
+        "target": {
+          "gvr": {"group": "", "version": "v1", "resource": "persistentvolumeclaims"},
+          "namespace": "target",
+          "name": "volume",
+          "uidSha256": "34a04005bcaf206eec990bd9637d9fdb6725e0a0c0d4aebf003f17f4c956eb5c"
+        }
+      },
+      "canonical": "{\"adapterExecutableSha256\":\"ae1eae1d76e5b7c865c4122ce366a08025842566d2d96c75cc13e6353a73db0d\",\"challenge\":\"2dd00bd77e0222ced882665481a9c1d9f907309d16e05ed007a1ea63928477a9\",\"requestDigestCanonicalization\":\"cloudring.restore-proof.adapter-canonical-json/v1\",\"schemaVersion\":\"cloudring.restore-proof.adapter-request/v2\",\"source\":{\"gvr\":{\"group\":\"\",\"resource\":\"persistentvolumeclaims\",\"version\":\"v1\"},\"name\":\"volume\",\"namespace\":\"source\",\"uidSha256\":\"41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d\"},\"target\":{\"gvr\":{\"group\":\"\",\"resource\":\"persistentvolumeclaims\",\"version\":\"v1\"},\"name\":\"volume\",\"namespace\":\"target\",\"uidSha256\":\"34a04005bcaf206eec990bd9637d9fdb6725e0a0c0d4aebf003f17f4c956eb5c\"}}",
+      "sha256": "600f5db265baeb5a3afe3d888dc9b5e430d5d722f7fca75b299530a7e365c91e"
+    }
+  ]
+}

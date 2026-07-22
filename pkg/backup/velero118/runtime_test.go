@@ -113,7 +113,7 @@ func TestExecBackendObserverKeepsRawHandleOnStdin(t *testing.T) {
 	defer observer.Close()
 	handle := "synthetic-provider-handle"
 	request := BackendRequest{
-		SchemaVersion: AdapterRequestSchemaVersion, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(),
+		SchemaVersion: AdapterRequestSchemaVersion, RequestDigestCanonicalization: AdapterRequestCanonicalization, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(),
 		Operation: "observe", SourceKind: "persistent-volume", ArtifactHandle: handle, ArtifactHandleSHA256: restoreproof.SHA256(handle),
 	}
 	present := false
@@ -152,7 +152,7 @@ func TestExecBackendObserverRejectsUnknownMissingReplayAndInvalidVersion(t *test
 	}
 	defer observer.Close()
 	request := BackendRequest{
-		SchemaVersion: AdapterRequestSchemaVersion, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(),
+		SchemaVersion: AdapterRequestSchemaVersion, RequestDigestCanonicalization: AdapterRequestCanonicalization, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(),
 		Operation: "observe", SourceKind: "persistent-volume", ArtifactHandle: "synthetic-handle", ArtifactHandleSHA256: digest("synthetic-handle"),
 	}
 	present := false
@@ -199,7 +199,7 @@ func TestExecBackendObserverDoesNotInheritAmbientCredentials(t *testing.T) {
 	}
 	defer observer.Close()
 	request := BackendRequest{
-		SchemaVersion: AdapterRequestSchemaVersion, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(),
+		SchemaVersion: AdapterRequestSchemaVersion, RequestDigestCanonicalization: AdapterRequestCanonicalization, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(),
 		Operation: "observe", SourceKind: "persistent-volume", ArtifactHandle: "synthetic-handle", ArtifactHandleSHA256: digest("synthetic-handle"),
 	}
 	if _, err := observer.Observe(t.Context(), request); err == nil {
@@ -368,7 +368,7 @@ func TestAdapterErrorsDoNotReflectChildOutput(t *testing.T) {
 	}
 	defer observer.Close()
 	_, err = observer.Observe(t.Context(), BackendRequest{
-		SchemaVersion: AdapterRequestSchemaVersion, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(), Operation: "observe", SourceKind: "persistent-volume",
+		SchemaVersion: AdapterRequestSchemaVersion, RequestDigestCanonicalization: AdapterRequestCanonicalization, Challenge: digest("challenge"), AdapterExecutableSHA256: observer.IdentitySHA256(), Operation: "observe", SourceKind: "persistent-volume",
 		ArtifactHandle: "synthetic-handle", ArtifactHandleSHA256: restoreproof.SHA256("synthetic-handle"),
 	})
 	if err == nil || strings.Contains(err.Error(), "private-child-value") {

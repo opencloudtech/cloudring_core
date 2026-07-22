@@ -18,6 +18,8 @@ unsigned proof for one Velero 1.18.2 CSI data-mover volume restore.
   ConfigMap before publishing terminal Restore status.
 - `adapter-protocol.schema.json` defines the stdin/stdout protocol for an
   independent data probe and a read-only provider artifact observer.
+- `adapter-digest-conformance-vectors.json` publishes language-neutral
+  canonical request bytes and SHA-256 vectors for both adapter request kinds.
 - `cleanup-ready.schema.json` defines the source-safe, run-bound barrier that
   permits the downstream workflow to start isolated-restore cleanup.
 - `restore-proof.schema.json` describes the source-safe receipt emitted only
@@ -53,6 +55,18 @@ stdout or stderr. Its response contains only an implementation/version pair,
 presence status, timestamp, the unique request digest, pinned executable
 digest, and hashes of separately protected runtime evidence. The data probe
 follows the same rule for workload content.
+
+Adapter protocol v2 is self-describing: every request carries
+`requestDigestCanonicalization`. `requestSha256` is the SHA-256 of
+`cloudring.restore-proof.adapter-canonical-json/v1`. Implementations must sort
+object keys lexicographically at every depth, emit UTF-8 JSON without
+insignificant whitespace, escape quotation mark and reverse solidus, use the
+standard short escapes for backspace/tab/newline/form-feed/carriage-return,
+encode other U+0000 through U+001F values as lowercase `\u00xx`, and emit all
+other valid Unicode scalar values directly as UTF-8. This protocol version has
+no numeric request fields. The repository-owned conformance vectors are
+normative and deliberately include Unicode plus characters that Go's default
+JSON encoder HTML-escapes.
 
 These contracts do not claim production readiness. They also do not define
 credentials, object-store configuration, or a deployment topology. Live

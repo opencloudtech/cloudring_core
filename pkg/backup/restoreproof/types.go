@@ -44,7 +44,9 @@ type TargetResource struct {
 	ValidatedStateSHA256  string `json:"validatedStateSha256"`
 }
 
-// SourceResource proves that a source object did not change across a restore.
+// SourceResource proves that a source object's identity and proof-relevant
+// state did not change across a restore. Resource versions may differ when an
+// unrelated metadata or controller bookkeeping write occurred.
 type SourceResource struct {
 	Resource                    string `json:"resource"`
 	Namespace                   string `json:"namespace"`

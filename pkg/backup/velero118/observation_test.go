@@ -39,7 +39,7 @@ func TestObserveDataUploadResultEstablishesWatchBeforeRestore(t *testing.T) {
 		t.Fatalf("ObserveDataUploadResult() error = %v", err)
 	}
 	if barrier.calls != 1 || reader.watchCalls != 1 || observation.EventType != "ADDED" || observation.ObservedAt != "2026-07-14T12:00:02Z" ||
-		observation.RequestSHA256 != adapterRequestSHA256(request) || observation.ObjectSHA256 != canonicalJSONSHA256(resultConfigMap) ||
+		observation.RequestSHA256 != requestJSONSHA256(request) || observation.ObjectSHA256 != canonicalJSONSHA256(resultConfigMap) ||
 		observation.EvidenceSHA256 != dataUploadResultObservationEvidenceSHA256(observation) {
 		t.Fatalf("observation binding is incomplete: barrier=%d watch=%d observation=%#v", barrier.calls, reader.watchCalls, observation)
 	}
