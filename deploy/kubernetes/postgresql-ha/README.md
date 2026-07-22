@@ -33,10 +33,11 @@ Never put either Secret, a DSN, or rendered secret material in Git, command
 arguments, logs, or evidence. After the migration gate, remove the migration
 workload and its owner-Secret projection; do not expose owner credentials to
 application replicas. Applications must use the generated read-write service
-with `sslmode=verify-full` and the operator-generated CA bundle. Grant database
-ingress only by adding the label `cloudring.org/postgresql-client: "true"` to
-the intended client pods in the same namespace or by a downstream, equally
-narrow NetworkPolicy.
+with `sslmode=verify-full` and the operator-generated CA bundle. Same-namespace
+clients require the pod label `cloudring.org/postgresql-client: "true"`.
+Cross-namespace clients require both that pod label and the namespace label
+`cloudring.org/postgresql-client-namespace: "true"`; neither label alone grants
+access. A downstream may replace this with an equally narrow NetworkPolicy.
 
 The included six-hour online VolumeSnapshot schedule is a local recovery
 layer, not an off-cell disaster-recovery claim. Production promotion still

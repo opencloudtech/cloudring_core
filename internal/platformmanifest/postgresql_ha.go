@@ -258,10 +258,28 @@ func validatePostgreSQLHARuntime(index map[string]object) error {
 	policy := index["NetworkPolicy/cloudring-database/cloudring-postgres-ingress"].Data
 	if nestedString(policy, "spec", "podSelector", "matchLabels", "cnpg.io/cluster") != "cloudring-postgres" ||
 		!exactStringSequence(nested(policy, "spec", "policyTypes"), "Ingress") ||
-		lenSequence(nested(policy, "spec", "ingress")) != 3 || nested(policy, "spec", "egress") != nil {
+		lenSequence(nested(policy, "spec", "ingress")) != 4 || nested(policy, "spec", "egress") != nil ||
+		!postgresqlCrossNamespaceClientPolicy(policy) {
 		return errors.New("PostgreSQL network boundary is invalid")
 	}
 	return nil
+}
+
+func postgresqlCrossNamespaceClientPolicy(policy map[string]any) bool {
+	ingress, _ := nested(policy, "spec", "ingress").([]any)
+	for _, rawRule := range ingress {
+		rule, _ := rawRule.(map[string]any)
+		from, _ := rule["from"].([]any)
+		if len(from) != 1 {
+			continue
+		}
+		peer, _ := from[0].(map[string]any)
+		if nestedString(peer, "namespaceSelector", "matchLabels", "cloudring.org/postgresql-client-namespace") == "true" &&
+			nestedString(peer, "podSelector", "matchLabels", "cloudring.org/postgresql-client") == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 func lenSequence(value any) int {

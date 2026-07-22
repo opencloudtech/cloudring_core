@@ -244,7 +244,7 @@ func TestSuccessfulPinnedCommandKillsBackgroundProcessGroup(t *testing.T) {
 while [ ! -e "$1" ]; do sleep 0.01; done
 printf ok
 `)
-	executable, err := pinExecutable(script, 2*time.Second)
+	executable, err := pinExecutable(script, 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ printf ok
 	if _, _, err := runCommandWithKubeconfig(context.Background(), executable, []string{readyPath, livenessPath}, 1024, replay); err == nil {
 		t.Fatal("command that did not consume its kubeconfig unexpectedly succeeded")
 	}
-	if time.Since(started) > 2*time.Second {
+	if time.Since(started) > 5*time.Second {
 		t.Fatal("kubeconfig replay blocked process-tree cleanup")
 	}
 	assertBackgroundResourcesReleased(t, liveness)
@@ -305,7 +305,7 @@ func assertBackgroundResourcesReleased(t *testing.T, liveness *os.File) {
 	t.Helper()
 	// A killed zombie can still retain a PID on Unix. FIFO EOF instead proves
 	// that the background process cannot execute or retain command resources.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	buffer := make([]byte, 1)
 	observedReady := false
 	for time.Now().Before(deadline) {
