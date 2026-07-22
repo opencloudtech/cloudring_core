@@ -1002,10 +1002,22 @@ func writeRepositoryFile(t *testing.T, root string, path string, content string)
 
 func writeRepositoryBytes(t *testing.T, root string, path string, content []byte) {
 	t.Helper()
-	absolute := filepath.Join(root, filepath.FromSlash(path))
+	rootAbsolute, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatalf("resolve fixture root: %v", err)
+	}
+	absolute, err := filepath.Abs(filepath.Join(rootAbsolute, filepath.FromSlash(path)))
+	if err != nil {
+		t.Fatalf("resolve fixture path: %v", err)
+	}
+	relative, err := filepath.Rel(rootAbsolute, absolute)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		t.Fatalf("fixture path escapes repository root: %q", path)
+	}
 	if err := os.MkdirAll(filepath.Dir(absolute), 0o700); err != nil {
 		t.Fatalf("create fixture directory: %v", err)
 	}
+	// #nosec G703 -- the test-only destination is proven to remain beneath the t.TempDir repository root above.
 	if err := os.WriteFile(absolute, content, 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
