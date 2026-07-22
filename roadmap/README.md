@@ -16,23 +16,23 @@ deployment repository.
 
 | Goal | Outcome |
 | --- | --- |
-| 01 | Hub survivability: one-cell critical path survives any one server loss, restores off-cell, reconciles through GitOps, and keeps acknowledged portal state. |
-| 02 | One-command, API-only installer for one-to-three-node providers. |
+| 01 | Reference-cell critical-path survivability: the declared one-region critical path survives any one server loss, restores off-cell, reconciles through GitOps, and keeps acknowledged portal state. |
+| 02 | Provider-neutral, one-command API installer for one-to-three-node private-datacenter or infrastructure-provider cells. |
 | 03 | Unified observability, SLO, notification, and tamper-evident audit core. |
-| 04 | Progressive zero-loss upgrade train and self-healing. |
-| 05 | Durable provider control plane and the versioned OCS product seam. |
+| 04 | Progressive blue-green, zero-loss upgrade train, rollback, and self-healing. |
+| 05 | OCS release candidate: durable control plane, universal lifecycle baseline, common local/remote connector runtime, provider moderation, conformance SDKs, optional product APIs, and optional signed sandboxed microfrontends. |
 | 06 | Provider-grade ID, IAM, workload identity, recovery, and audited break-glass. |
-| 07 | Complete billable compute product as the first reference connector. |
-| 08 | Durable metering, rating, financial ledger, invoicing, budgets, and interoperable cost export. |
-| 09 | IPv6-first tenant networking product. |
-| 10 | Hosted-control-plane tenant Kubernetes product. |
-| 11 | Remote OCS runtime, SDK, conformance, microfrontends, and generated client surfaces. |
+| 07 | Durable product lifecycle, orders, subscriptions, offers, plans, entitlements, quotas, catalog targeting, and initial one-region placement. |
+| 08 | Durable metering, rating, financial ledger, invoicing, budgets, service-on-service charging, and interoperable cost export. |
+| 09 | Foundational IPv6-first network, volume, and image/artifact products required by higher-level services. |
+| 10 | Complete billable compute product as the first composite reference connector. |
+| 11 | Hosted-control-plane tenant Kubernetes product. |
 | 12 | Object storage and managed PostgreSQL dogfood the generic product lifecycle. |
-| 13 | Agent-native operation and development surfaces with the same policy path as humans. |
-| 14 | Moderated marketplace, entitlements, offers, and independent developer economics. |
+| 13 | Verified local/remote connector dogfood plus product and workload portability across a private datacenter and an independent infrastructure provider. |
+| 14 | Moderated marketplace with seller onboarding, offers, settlement, and auditable provider/platform/developer revenue share. |
 | 15 | Multi-cell scale and disaster recovery with locally stable data planes. |
-| 16 | Peer provider federation, remote services, cross-cloud networking, and signed settlement. |
-| 17 | Provider 1.0 release gate: final security review and fixes, LTS, conformance, benchmarks, documentation, and governance. |
+| 16 | Decentralized sovereign peer federation, remote services, cross-cloud networking, and signed settlement without a central coordinator or kill switch, preserving local autonomy. |
+| 17 | OCS and provider 1.0 release gate: final security review and fixes, LTS, conformance, benchmarks, documentation, and governance. |
 
 ## Execution rules
 
@@ -46,7 +46,9 @@ deployment repository.
 6. Blocked and unverified are valid outcomes but never readiness claims.
 7. Replaced production paths are removed after cutover; dual implementations do not
    become permanent compatibility layers.
-8. Broad security review is Goal 17. Every earlier goal still fixes correctness and
+8. Human and agent operations share the same API, IAM, policy, plan/apply, audit, and
+   evidence path in every goal; agent parity is cross-cutting, not a late control plane.
+9. Broad security review is Goal 17. Every earlier goal still fixes correctness and
    safety defects needed for its own function and acceptance.
 
 The active contract is

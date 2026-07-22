@@ -2,21 +2,25 @@
 
 CloudRING is a provider-neutral cloud platform and the reference implementation
 of the project-defined Open Cloud Standard (OCS). These invariants keep the
-single-cell platform, future products, and future provider federation compatible
-without making later capabilities part of the current release.
+reference cell, future products, and future provider federation compatible without
+making later capabilities part of the current release or claiming OCS 1.0 before
+product dogfood and the final release gate.
 
 ## Platform and product boundary
 
 The platform owns identity, authorization, policy, product admission, the
 resource and operation model, catalog composition, usage transport, billing
 integration, the provider shell, and evidence. A cloud product owns its service
-implementation, product-specific API, lifecycle controller, user experience,
-support diagnostics, and durability behavior.
+implementation, lifecycle controller, support diagnostics, durability behavior,
+and any product-specific API or user experience it chooses to expose.
 
-Products integrate only through versioned OCS contracts. They may run in the
-platform cell, in another cell, or in an independently operated installation.
-The core must not import product implementation details or require a product to
-use Kubernetes, Go, or the platform's storage internally.
+Products integrate only through versioned OCS contracts. A local product may run
+inside the provider cell behind a local adapter; a remote product may run in another
+cell or independently operated installation behind the remote connector protocol.
+Both modes expose the same resource, lifecycle, identity, policy, operation, usage,
+and evidence semantics. Location is a deployment choice, not a second product model.
+The core must not import product implementation details or require a product to use
+Kubernetes, Go, or the platform's storage internally.
 
 Management-plane dependencies such as Kubernetes, networking, certificates,
 secret management, databases, and backup are substrate components. A
@@ -24,6 +28,12 @@ tenant-visible compute, network, storage, database, license, external-account,
 or other offering is an OCS product even when maintained by the platform team.
 
 ## Stable identity namespace
+
+The built-in identity service is a complete provider account system rather than
+only a proxy to an external identity provider. It can issue and manage provider
+identities itself or federate with external identity providers. Hierarchical IAM
+applies the same organization, tenant, project, resource, workload, and
+administrator policy model to every human, service, CLI, portal, and agent path.
 
 Every resource and event can carry provider, cell, region, organization, tenant,
 project, service, and resource identity without assuming a single provider or
@@ -53,25 +63,29 @@ plan, policy, apply, audit, and evidence semantics.
 An installable product package declares, with digests and compatibility ranges:
 
 - service identity, ownership, versions, capabilities, dependencies, and regions;
-- API schema and transport, workload identity, health, readiness, and discovery;
-- lifecycle actions for validate, plan, provision, hold, resize, suspend, resume,
-  deprovision, export, retry, cancel, and status where applicable;
+- OCS transport, workload identity, health, readiness, and discovery, plus any
+  optional product-specific API schema;
+- the universal lifecycle baseline `provision`, `hold`, `resize`, and
+  `deprovision`; additional actions such as suspend, resume, export, retry, cancel,
+  and product-specific operations are declared only where applicable;
 - asynchronous operation, idempotency, rollback, cleanup, and failure semantics;
 - IAM permissions, tenant and project scoping, quota dimensions, placement, and
   availability objectives;
 - catalog plans, limits, billing meters, usage delivery, corrections, and evidence;
 - support, diagnostics, durability, backup, restore, deletion, and data exit;
-- signed, sandboxed microfrontend modules that use only the provider-shell SDK;
-- moderation state and the provider decision that permits publication.
+- any optional signed, sandboxed microfrontend modules, which use only the
+  provider-shell SDK;
+- provider moderation state and the explicit provider decision that admits,
+  targets, suspends, or withdraws the product.
 
 Unknown required fields, unsupported major versions, digest mismatches, and
 incompatible lifecycle changes fail closed. Minor-version evolution must be
 backward compatible for the declared support window. A connector cannot silently
 downgrade security, billing, durability, or tenant-isolation semantics.
 
-The full remote connector protocol, generated multi-language SDKs, moderation
-runtime, and dynamic microfrontend host are later deliverables. Current packages
-must nevertheless preserve this boundary.
+The full local and remote connector runtime, generated multi-language SDKs,
+moderation runtime, and dynamic microfrontend host are later deliverables. Current
+packages must nevertheless preserve this boundary.
 
 ## Durable control and billing events
 
@@ -90,6 +104,11 @@ idempotency key, correction target, and signature/evidence policy. This supports
 service-on-service infrastructure charging and later cross-provider settlement
 without changing product APIs.
 
+Marketplace settlement can additionally identify the offer, seller, provider,
+platform share, seller share, currency, correction, and signed source usage. Revenue
+share is derived from the same durable ledger as customer charging; it is not a
+separate best-effort counter.
+
 ## Provider experience and product experience
 
 The provider shell supplies consistent navigation, identity context, project and
@@ -101,6 +120,15 @@ only products, plans, regions, and actions allowed for the current identity.
 Provider administrators can approve, suspend, target, limit, price, and withdraw a
 product through versioned policy. Availability may be global, provider-wide,
 region-specific, tenant-specific, invite-only, or disabled, and is always explicit.
+
+The first placement release binds each resource to one provider-declared region.
+Cross-region placement, evacuation, and failover are later capabilities and must not
+be inferred from region-shaped identifiers.
+
+Installation and product contracts describe capabilities and failure domains rather
+than a hosting brand. The same public core must remain deployable in a private
+datacenter or through an independent infrastructure provider; provider-specific
+credentials, topology, pricing, and policy stay in downstream adapters and profiles.
 
 ## Availability and change safety
 
@@ -117,15 +145,24 @@ tested restore path are required before a production mutation can be promoted.
 
 ## Federation boundary
 
-Federation is a peer protocol, not a mandatory central service. Independent
-providers retain their identities, policy, data, catalogs, customers, and business
-relationships. Peers exchange versioned and signed trust, catalog, entitlement,
-usage, settlement, and portability artifacts through pull-based reconciliation.
+Federation is a decentralized sovereign peer protocol, not a mandatory central
+service. It has no global coordinator, mandatory marketplace, or kill switch.
+Independent providers retain their identities, policy, data, catalogs, customers,
+and business relationships. Peers exchange versioned and signed trust, catalog,
+entitlement, usage, settlement, and portability artifacts through pull-based
+reconciliation.
 
-A peer outage or federation partition cannot take down local service. Providers
-choose which products and regions to publish or consume. Cross-provider access is
-short-lived, scoped, auditable on both sides, and revocable. No CloudRING vendor,
-jurisdiction, database, message bus, or marketplace is a permanent root of control.
+A peer outage or federation partition cannot take down local service or remove a
+provider's local administrative autonomy. Providers choose which products and
+regions to publish or consume. Cross-provider access is short-lived, scoped,
+auditable on both sides, and revocable. No CloudRING vendor, jurisdiction, database,
+message bus, or marketplace is a permanent root of control.
+
+Admitted remote products may appear in the same provider shell only through the
+local provider's catalog and policy decision and always retain their provider and
+jurisdiction identity. Later capacity exchange may let a private cloud place
+explicitly authorized peak workloads with a peer, but never silently overrides
+residency, cost, tenant policy, or user intent.
 
 The federation runtime and economy are later goals. Single-cell work is accepted
 only when it does not introduce an incompatible identifier, event, operation, or
@@ -137,11 +174,16 @@ Goal 01 binds the following foundations now:
 
 - the stable identity namespace and canonical operation/audit identity;
 - strict, additive state migration and append-only audit behavior;
-- declared critical-path survivability for one three-server cell;
+- declared critical-path survivability for one three-server reference cell in one
+  region;
 - public reusable backup, restore, HA, and reconciliation contracts separated
   from deployment-specific values and live evidence;
-- explicit non-claims for multi-cell, multi-region, marketplace, and federation.
+- explicit non-claims for whole-cell availability, multi-cell, multi-region,
+  marketplace, remote-product runtime, and federation.
 
-Later goals implement the remote connector protocol, product admission, regional
-offers, quotas, billing, marketplace, service-on-service economics, multi-cell
-operation, and provider federation as independently accepted vertical releases.
+Later goals deliver an OCS release candidate with local and remote runtime and
+provider moderation before dependent products; then identity, offers, entitlements,
+one-region placement, billing, product dogfood, portability, marketplace economics,
+multi-cell operation, and sovereign peer federation as independently accepted
+vertical releases. OCS 1.0 is reserved for Goal 17 after product dogfood and the
+final security review and fixes.
