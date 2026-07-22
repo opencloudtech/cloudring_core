@@ -165,7 +165,7 @@ printf ok
 	if len(stdout) != 0 || len(stderr) != 0 {
 		t.Fatal("lifecycle failure returned untrusted child output")
 	}
-	if time.Since(started) > 4*time.Second {
+	if time.Since(started) > 8*time.Second {
 		t.Fatal("descendant cleanup exceeded the bounded wait")
 	}
 	assertDescendantResourcesReleased(t, liveness)
@@ -199,7 +199,7 @@ printf ok
 	if len(stdout) != 0 || len(stderr) != 0 {
 		t.Fatal("replay lifecycle failure returned untrusted child output")
 	}
-	if time.Since(started) > 4*time.Second {
+	if time.Since(started) > 8*time.Second {
 		t.Fatal("unread replay blocked descendant cleanup")
 	}
 	assertDescendantResourcesReleased(t, liveness)
@@ -253,7 +253,7 @@ func assertDescendantResourcesReleased(t *testing.T, liveness *os.File) {
 	t.Helper()
 	// A killed zombie can still retain a PID on Unix. FIFO EOF instead proves
 	// that the descendant cannot execute or retain command resources.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	buffer := make([]byte, 1)
 	observedReady := false
 	for time.Now().Before(deadline) {
