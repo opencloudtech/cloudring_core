@@ -19,8 +19,8 @@ deployment repository.
 | 01 | Reference-cell critical-path survivability: the declared one-region critical path survives any one server loss, restores off-cell, reconciles through GitOps, and keeps acknowledged portal state. |
 | 02 | Provider-neutral, one-command API installer for one-to-three-node private-datacenter or infrastructure-provider cells. |
 | 03 | Unified observability, SLO, notification, and tamper-evident audit core. |
-| 04 | Progressive blue-green, zero-loss upgrade train, rollback, and self-healing. |
-| 05 | OCS release candidate: durable control plane, universal lifecycle baseline, common local/remote connector runtime, provider moderation, conformance SDKs, optional product APIs, and optional signed sandboxed microfrontends. |
+| 04 | Supported zero-downtime rolling and blue-green upgrade train, mixed-version compatibility, rollback, and self-healing. |
+| 05 | OCS release candidate: durable control plane, universal lifecycle baseline, common local/remote/API-only connector runtime, provider moderation, conformance SDKs, mandatory versioned product APIs, and optional signed sandboxed microfrontends. |
 | 06 | Provider-grade ID, IAM, workload identity, recovery, and audited break-glass. |
 | 07 | Durable product lifecycle, orders, subscriptions, offers, plans, entitlements, quotas, catalog targeting, and initial one-region placement. |
 | 08 | Durable metering, rating, financial ledger, invoicing, budgets, service-on-service charging, and interoperable cost export. |
@@ -50,6 +50,10 @@ deployment repository.
    evidence path in every goal; agent parity is cross-cutting, not a late control plane.
 9. Broad security review is Goal 17. Every earlier goal still fixes correctness and
    safety defects needed for its own function and acceptance.
+10. Survivability is cumulative. Each newly accepted critical identity, registry,
+    lifecycle, billing, product, marketplace, or operations component expands the
+    critical-path inventory and must prove failover, off-cell restore, and zero loss
+    of acknowledged state before its goal is accepted.
 
 The active contract is
 [`GOAL-01-hub-survivability.md`](GOAL-01-hub-survivability.md), with exact requirement

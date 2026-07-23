@@ -75,38 +75,63 @@ func validServiceConnector() ServiceConnector {
 			Version:     "v0.1.0",
 		},
 		Spec: ServiceSpec{
+			ExecutionProfile: ExecutionProfileLocal,
+			ProductAPI: ProductAPIContract{
+				Ref:      "service.api.object-storage.v1alpha1",
+				Version:  "v1alpha1",
+				Protocol: "https-json",
+			},
 			Capabilities: []Capability{{
 				Class:       "object-storage",
 				Name:        "bucket",
 				Description: "Tenant-scoped object storage bucket lifecycle",
 			}},
 			Dependencies: []Dependency{{
-				ID:              "storage-backend",
-				CapabilityClass: "object-storage",
-				Role:            "data-plane",
-				Portability:     "export-import",
+				ID:                     "storage-backend",
+				CapabilityClass:        "object-storage",
+				Role:                   "data-plane",
+				Portability:            "export-import",
+				ProductAPIRef:          "service.api.storage-backend.v1",
+				VersionRange:           ">=1.0.0,<2.0.0",
+				CompatibilityPolicyRef: "policy.compatibility.storage-backend",
 			}},
 			Lifecycle: []LifecycleAction{{
 				Name:           "provision",
+				Applicability:  ApplicabilitySupported,
 				Verb:           "Apply",
 				Idempotent:     true,
 				IdempotencyKey: "metadata.uid",
 			}, {
+				Name:          "hold",
+				Applicability: ApplicabilityNotApplicable,
+				Reason:        "object storage buckets remain available until deprovisioned",
+			}, {
+				Name:          "resume",
+				Applicability: ApplicabilityNotApplicable,
+				Reason:        "hold is not supported",
+			}, {
+				Name:          "resize",
+				Applicability: ApplicabilityNotApplicable,
+				Reason:        "capacity follows plan and quota changes",
+			}, {
+				Name:           "deprovision",
+				Applicability:  ApplicabilitySupported,
+				Verb:           "Delete",
+				Idempotent:     true,
+				IdempotencyKey: "delete.request.id",
+			}, {
 				Name:           "rotateAccessKey",
+				Applicability:  ApplicabilitySupported,
 				Verb:           "Rotate",
 				Idempotent:     true,
 				IdempotencyKey: "rotation.request.id",
 				RollbackRef:    "support.restorePreviousKey",
 			}, {
 				Name:           "export",
+				Applicability:  ApplicabilitySupported,
 				Verb:           "Export",
 				Idempotent:     true,
 				IdempotencyKey: "export.request.id",
-			}, {
-				Name:           "delete",
-				Verb:           "Delete",
-				Idempotent:     true,
-				IdempotencyKey: "delete.request.id",
 			}},
 			Automation: []AutomationTask{{
 				Name:        "rotate-access-key",
@@ -115,8 +140,9 @@ func validServiceConnector() ServiceConnector {
 			}},
 			UsageMeters: []UsageMeter{{Name: "stored_bytes", Unit: "byte-hour"}},
 			Billing: BillingProfile{
-				ConnectorRef: "object-storage-billing",
-				Meters:       []UsageMeter{{Name: "stored_bytes", Unit: "byte-hour"}},
+				Applicability: ApplicabilitySupported,
+				ConnectorRef:  "object-storage-billing",
+				Meters:        []UsageMeter{{Name: "stored_bytes", Unit: "byte-hour"}},
 			},
 			PortalModules: []PortalModule{{
 				Name:        "bucket-overview",
@@ -137,6 +163,7 @@ func validServiceConnector() ServiceConnector {
 					Runtime:         "module-federation",
 					MountRef:        "mount.object-storage.bucket-overview",
 					VersionRange:    ">=0.1.0 <1.0.0",
+					SignatureRef:    "evidence.object-storage.ui.signature",
 					IntegrityRef:    "evidence.object-storage.ui.integrity",
 					Sandbox:         "tenant-iam-context",
 					AllowedEvents:   []string{"bucket.create.requested", "bucket.delete.requested"},
@@ -194,7 +221,7 @@ func validServiceConnector() ServiceConnector {
 					EvidenceRef: "evidence.object-storage.export",
 				},
 				Delete: DataLifecycleAction{
-					ActionRef:   "lifecycle.delete",
+					ActionRef:   "lifecycle.deprovision",
 					Format:      "tenant-object-delete-receipt",
 					EvidenceRef: "evidence.object-storage.delete",
 				},

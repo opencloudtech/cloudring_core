@@ -14,6 +14,7 @@ func validDistributionProfile() DistributionProfile {
 
 func validFederationProfile() FederationProfile {
 	return FederationProfile{
+		Applicability:          ApplicabilitySupported,
 		Modes:                  []string{"standalone", "connected", "federated"},
 		MessageBusRef:          "federation.bus.ocsv3.events",
 		CrossProviderScenarios: []string{"replication", "migration", "support-handoff"},
@@ -23,6 +24,7 @@ func validFederationProfile() FederationProfile {
 
 func validCommercialProfile() CommercialProfile {
 	return CommercialProfile{
+		Applicability:           ApplicabilitySupported,
 		Roles:                   []string{"vendor", "provider", "reseller"},
 		RevenueModel:            "metered-usage-with-revenue-share",
 		LicenseRef:              "license.object-storage.enterprise-marketplace",

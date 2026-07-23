@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.message-delivery.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "message-delivery",
@@ -29,30 +35,52 @@
           "id": "message-transport-contract",
           "capabilityClass": "message-transport",
           "role": "portable delivery transport",
-          "portability": "ocs-portable-message-transport-contract"
+          "portability": "ocs-portable-message-transport-contract",
+          "productAPIRef": "service.api.message-transport.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.message-transport"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "message delivery policy remains active until deprovisioned"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported for message delivery policy resources"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "delivery capacity follows transport and service-plan configuration"
+        },
+        {
           "name": "configure",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
           "name": "send",
+          "applicability": "supported",
           "verb": "Send",
           "idempotent": true,
           "idempotencyKey": "message.request.id"
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Retry",
           "idempotent": true,
           "idempotencyKey": "message.request.id",
@@ -60,12 +88,14 @@
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -73,18 +103,21 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -120,6 +153,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "message-delivery-module-billing",
         "meters": [
           {
@@ -168,6 +202,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.message-delivery.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.message-delivery.ui.signature",
           "integrityRef": "evidence.message-delivery.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -256,7 +291,7 @@
           "evidenceRef": "evidence.message-delivery.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "tenant-message-delete-receipt",
           "evidenceRef": "evidence.message-delivery.delete"
         }
@@ -479,6 +514,7 @@
     "updatePolicyRef": "updates.message-delivery.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected",
@@ -493,6 +529,7 @@
     "portabilityPolicyRef": "policy.message-delivery.ocs-portable-transport"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

@@ -12,8 +12,10 @@ go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.jso
 go test ./... -count=1
 ```
 
-The module demonstrates provision, backup, restore, export, delete, retry, and
-rollback; ready, denied, degraded, blocked, retryable, deleting, and failed
-states; billing events; support diagnostics; evidence receipts; and a portal
-extension manifest. It does not call a live provider API or claim live service
-launch approval.
+The module demonstrates the local execution profile, a versioned public product
+API, lifecycle applicability for provision, hold, resume, resize, and
+deprovision, plus product-specific backup, restore, export, retry, and rollback.
+It also declares ready, denied, degraded, blocked, retryable, deleting, and
+failed states; billing events; support diagnostics; evidence receipts; and an
+optional signed, integrity-checked, sandboxed portal extension. It does not call
+a live provider API or claim live service launch approval.

@@ -24,6 +24,7 @@ type MicrofrontendHostContract struct {
 	Runtime         string   `json:"runtime"`
 	MountRef        string   `json:"mountRef"`
 	VersionRange    string   `json:"versionRange"`
+	SignatureRef    string   `json:"signatureRef"`
 	IntegrityRef    string   `json:"integrityRef"`
 	Sandbox         string   `json:"sandbox"`
 	AllowedEvents   []string `json:"allowedEvents"`

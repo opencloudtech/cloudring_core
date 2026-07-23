@@ -9,10 +9,19 @@ import (
 
 const APIVersion = ocs.APIVersion
 
+const (
+	ExecutionProfileLocal      = ocs.ExecutionProfileLocal
+	ExecutionProfileRemote     = ocs.ExecutionProfileRemote
+	ExecutionProfileAPIOnly    = ocs.ExecutionProfileAPIOnly
+	ApplicabilitySupported     = ocs.ApplicabilitySupported
+	ApplicabilityNotApplicable = ocs.ApplicabilityNotApplicable
+)
+
 type Metadata = ocs.Metadata
 type ConnectorPackage = ocs.ConnectorPackage
 type ServiceConnector = ocs.ServiceConnector
 type ServiceSpec = ocs.ServiceSpec
+type ProductAPIContract = ocs.ProductAPIContract
 type Capability = ocs.Capability
 type Dependency = ocs.Dependency
 type LifecycleAction = ocs.LifecycleAction

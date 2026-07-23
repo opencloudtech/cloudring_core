@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func Test_ConnectorPackageValidate_rejects_missing_ocsv3_distribution_federation_commercial_profiles(t *testing.T) {
+func Test_ConnectorPackageValidate_rejects_missing_distribution_and_applicability_profiles(t *testing.T) {
 	// Given
 	pkg := validConnectorPackage()
 	pkg.Distribution = DistributionProfile{}
@@ -25,13 +25,8 @@ func Test_ConnectorPackageValidate_rejects_missing_ocsv3_distribution_federation
 	for _, want := range []string{
 		"distribution.deploymentProfiles",
 		"distribution.channels",
-		"federation.messageBusRef",
-		"federation.crossProviderScenarios",
-		"commercial.roles",
-		"commercial.expiryBehavior",
-		"commercial.serviceProvenance",
-		"commercial.responsibilityMatrixRef",
-		"commercial.continuityPlanRef",
+		"federation.applicability",
+		"commercial.applicability",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected %q in error %q", want, err.Error())

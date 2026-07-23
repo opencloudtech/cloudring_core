@@ -12,8 +12,8 @@ func validateAlpha2Package(missing *[]string, invalid *[]string, p ConnectorPack
 		if isNonPortable(dependency.Portability) || isProviderLockIn(dependency.Portability) {
 			*invalid = append(*invalid, problem("portability", "service", prefix+".portability", "must describe a portable OCSv3 dependency contract"))
 		}
-		if isPlatformCoupled(dependency.ImplementationRef) {
-			*invalid = append(*invalid, problem("coupling", "service", prefix+".implementationRef", "must not reference platform-core or internal implementation paths"))
+		if dependency.ImplementationRef != "" {
+			*invalid = append(*invalid, problem("coupling", "service", prefix+".implementationRef", "must be omitted; resolve dependencies through productAPIRef, versionRange, and compatibilityPolicyRef"))
 		}
 	}
 	for i, route := range p.Service.Spec.GatewayRoutes {
@@ -25,7 +25,9 @@ func validateAlpha2Package(missing *[]string, invalid *[]string, p ConnectorPack
 }
 
 func validateAlpha2ServiceSpec(missing *[]string, invalid *[]string, spec ServiceSpec) {
-	validateUI(missing, spec.UI)
+	if hasPortalExtension(spec) {
+		validateUI(missing, spec.UI)
+	}
 	validateGatewayRoutes(missing, spec.GatewayRoutes)
 	validateSecrets(missing, invalid, spec.Secrets)
 	validatePolicies(missing, spec.Policies)
@@ -84,8 +86,14 @@ func validatePolicies(missing *[]string, policies []PolicyRule) {
 }
 
 func validateDataLifecycle(missing *[]string, lifecycle DataLifecycle) {
-	validateDataLifecycleAction(missing, "dataLifecycle.export", lifecycle.Export)
+	if hasDataLifecycleAction(lifecycle.Export) {
+		validateDataLifecycleAction(missing, "dataLifecycle.export", lifecycle.Export)
+	}
 	validateDataLifecycleAction(missing, "dataLifecycle.delete", lifecycle.Delete)
+}
+
+func hasDataLifecycleAction(action DataLifecycleAction) bool {
+	return action.ActionRef != "" || action.Format != "" || action.EvidenceRef != ""
 }
 
 func validateDataLifecycleAction(missing *[]string, path string, action DataLifecycleAction) {
@@ -97,7 +105,7 @@ func validateDataLifecycleAction(missing *[]string, path string, action DataLife
 func validateDataLifecycleRefs(invalid *[]string, lifecycle []LifecycleAction, data DataLifecycle) {
 	refs := map[string]bool{}
 	for _, action := range lifecycle {
-		if action.Name == "" {
+		if action.Name == "" || action.Applicability != ApplicabilitySupported {
 			continue
 		}
 		refs[action.Name] = true
@@ -111,7 +119,7 @@ func validateDataLifecycleRefs(invalid *[]string, lifecycle []LifecycleAction, d
 		{path: "dataLifecycle.delete.actionRef", ref: data.Delete.ActionRef},
 	} {
 		if item.ref != "" && !refs[item.ref] {
-			*invalid = append(*invalid, problem("data", "service", item.path, "must reference a lifecycle action"))
+			*invalid = append(*invalid, problem("data", "service", item.path, "must reference a supported lifecycle action"))
 		}
 	}
 }
@@ -162,14 +170,6 @@ func requireSurface(missing *[]string, ok bool, class string, owner string, path
 
 func problem(class string, owner string, path string, detail string) string {
 	return fmt.Sprintf("class=%s owner=%s path=%s detail=%s", class, owner, path, detail)
-}
-
-func isPlatformCoupled(value string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	return strings.Contains(normalized, "internal/") ||
-		strings.Contains(normalized, "internal\\") ||
-		strings.Contains(normalized, "platform-internal") ||
-		strings.Contains(normalized, "github.com/opencloudtech/CloudRING/internal")
 }
 
 func isProviderLockIn(value string) bool {

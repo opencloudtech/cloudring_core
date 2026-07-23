@@ -1,16 +1,41 @@
 package ocs
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-func validateOCSv3Package(missing *[]string, p ConnectorPackage) {
+func validateOCSv3Package(missing *[]string, invalid *[]string, p ConnectorPackage) {
 	requireOCSv3Distribution(missing, p.Distribution)
-	requireOCSv3Federation(missing, p.Federation)
-	requireOCSv3Commercial(missing, p.Commercial)
+	requireOCSv3Federation(missing, invalid, p.Federation)
+	requireOCSv3Commercial(missing, invalid, p.Commercial)
 }
 
 func validateOCSv3ServiceSpec(missing *[]string, spec ServiceSpec) {
-	requireOCSv3ModuleHost(missing, spec.UI.ModuleHost)
+	if hasPortalExtension(spec) {
+		requireOCSv3ModuleHost(missing, spec.UI.ModuleHost)
+	}
 	requireOCSv3AnalyticsEvents(missing, spec.AnalyticsEvents)
+}
+
+func hasPortalExtension(spec ServiceSpec) bool {
+	ui := spec.UI
+	host := ui.ModuleHost
+	return len(spec.PortalModules) > 0 ||
+		ui.EmbedRef != "" ||
+		ui.ContextSchemaRef != "" ||
+		len(ui.HostAuthority) > 0 ||
+		len(ui.ExtensionActions) > 0 ||
+		len(ui.Evidence) > 0 ||
+		host.Host != "" ||
+		host.Runtime != "" ||
+		host.MountRef != "" ||
+		host.VersionRange != "" ||
+		host.SignatureRef != "" ||
+		host.IntegrityRef != "" ||
+		host.Sandbox != "" ||
+		len(host.AllowedEvents) > 0 ||
+		len(host.RequiredContext) > 0
 }
 
 func requireOCSv3ModuleHost(missing *[]string, host MicrofrontendHostContract) {
@@ -18,6 +43,7 @@ func requireOCSv3ModuleHost(missing *[]string, host MicrofrontendHostContract) {
 	requireSurface(missing, host.Runtime != "", "module", "service", "ui.moduleHost.runtime")
 	requireSurface(missing, host.MountRef != "", "module", "service", "ui.moduleHost.mountRef")
 	requireSurface(missing, host.VersionRange != "", "module", "service", "ui.moduleHost.versionRange")
+	requireSurface(missing, host.SignatureRef != "", "module", "service", "ui.moduleHost.signatureRef")
 	requireSurface(missing, host.IntegrityRef != "", "module", "service", "ui.moduleHost.integrityRef")
 	requireSurface(missing, host.Sandbox != "", "module", "service", "ui.moduleHost.sandbox")
 	requireSurface(missing, len(host.AllowedEvents) > 0, "module", "service", "ui.moduleHost.allowedEvents")
@@ -25,7 +51,6 @@ func requireOCSv3ModuleHost(missing *[]string, host MicrofrontendHostContract) {
 }
 
 func requireOCSv3AnalyticsEvents(missing *[]string, events []AnalyticsEvent) {
-	requireSurface(missing, len(events) > 0, "analytics", "service", "analyticsEvents")
 	for i, event := range events {
 		prefix := fmt.Sprintf("analyticsEvents[%d]", i)
 		requireSurface(missing, event.Name != "", "analytics", "service", prefix+".name")
@@ -43,20 +68,50 @@ func requireOCSv3Distribution(missing *[]string, profile DistributionProfile) {
 	requireSurface(missing, profile.UpdatePolicyRef != "", "distribution", "package", "distribution.updatePolicyRef")
 }
 
-func requireOCSv3Federation(missing *[]string, profile FederationProfile) {
-	requireSurface(missing, len(profile.Modes) > 0, "federation", "package", "federation.modes")
-	requireSurface(missing, profile.MessageBusRef != "", "federation", "package", "federation.messageBusRef")
-	requireSurface(missing, len(profile.CrossProviderScenarios) > 0, "federation", "package", "federation.crossProviderScenarios")
-	requireSurface(missing, profile.PortabilityPolicyRef != "", "federation", "package", "federation.portabilityPolicyRef")
+func requireOCSv3Federation(missing *[]string, invalid *[]string, profile FederationProfile) {
+	switch profile.Applicability {
+	case ApplicabilitySupported:
+		requireSurface(missing, len(profile.Modes) > 0, "federation", "package", "federation.modes")
+		requireSurface(missing, profile.MessageBusRef != "", "federation", "package", "federation.messageBusRef")
+		requireSurface(missing, len(profile.CrossProviderScenarios) > 0, "federation", "package", "federation.crossProviderScenarios")
+		requireSurface(missing, profile.PortabilityPolicyRef != "", "federation", "package", "federation.portabilityPolicyRef")
+	case ApplicabilityNotApplicable:
+		requireSurface(missing, strings.TrimSpace(profile.Reason) != "", "federation", "package", "federation.reason")
+		if hasFederationMetadata(profile) {
+			*invalid = append(*invalid, "federation metadata must be omitted when applicability is not_applicable")
+		}
+	default:
+		*invalid = append(*invalid, "federation.applicability must be supported or not_applicable")
+	}
 }
 
-func requireOCSv3Commercial(missing *[]string, profile CommercialProfile) {
-	requireSurface(missing, len(profile.Roles) > 0, "commercial", "package", "commercial.roles")
-	requireSurface(missing, profile.RevenueModel != "", "commercial", "package", "commercial.revenueModel")
-	requireSurface(missing, profile.LicenseRef != "", "commercial", "package", "commercial.licenseRef")
-	requireSurface(missing, profile.ExpiryBehavior != "", "commercial", "package", "commercial.expiryBehavior")
-	requireSurface(missing, profile.SupportRef != "", "commercial", "package", "commercial.supportRef")
-	requireSurface(missing, profile.ServiceProvenance != "", "commercial", "package", "commercial.serviceProvenance")
-	requireSurface(missing, profile.ResponsibilityMatrixRef != "", "commercial", "package", "commercial.responsibilityMatrixRef")
-	requireSurface(missing, profile.ContinuityPlanRef != "", "commercial", "package", "commercial.continuityPlanRef")
+func hasFederationMetadata(profile FederationProfile) bool {
+	return len(profile.Modes) > 0 || profile.MessageBusRef != "" || len(profile.CrossProviderScenarios) > 0 || profile.PortabilityPolicyRef != ""
+}
+
+func requireOCSv3Commercial(missing *[]string, invalid *[]string, profile CommercialProfile) {
+	switch profile.Applicability {
+	case ApplicabilitySupported:
+		requireSurface(missing, len(profile.Roles) > 0, "commercial", "package", "commercial.roles")
+		requireSurface(missing, profile.RevenueModel != "", "commercial", "package", "commercial.revenueModel")
+		requireSurface(missing, profile.LicenseRef != "", "commercial", "package", "commercial.licenseRef")
+		requireSurface(missing, profile.ExpiryBehavior != "", "commercial", "package", "commercial.expiryBehavior")
+		requireSurface(missing, profile.SupportRef != "", "commercial", "package", "commercial.supportRef")
+		requireSurface(missing, profile.ServiceProvenance != "", "commercial", "package", "commercial.serviceProvenance")
+		requireSurface(missing, profile.ResponsibilityMatrixRef != "", "commercial", "package", "commercial.responsibilityMatrixRef")
+		requireSurface(missing, profile.ContinuityPlanRef != "", "commercial", "package", "commercial.continuityPlanRef")
+	case ApplicabilityNotApplicable:
+		requireSurface(missing, strings.TrimSpace(profile.Reason) != "", "commercial", "package", "commercial.reason")
+		if hasCommercialMetadata(profile) {
+			*invalid = append(*invalid, "commercial metadata must be omitted when applicability is not_applicable")
+		}
+	default:
+		*invalid = append(*invalid, "commercial.applicability must be supported or not_applicable")
+	}
+}
+
+func hasCommercialMetadata(profile CommercialProfile) bool {
+	return len(profile.Roles) > 0 || profile.RevenueModel != "" ||
+		profile.LicenseRef != "" || profile.ExpiryBehavior != "" || profile.SupportRef != "" ||
+		profile.ServiceProvenance != "" || profile.ResponsibilityMatrixRef != "" || profile.ContinuityPlanRef != ""
 }

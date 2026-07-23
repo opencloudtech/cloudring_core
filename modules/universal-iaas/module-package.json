@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.universal-iaas.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "universal-iaas",
@@ -30,25 +36,42 @@
           "capabilityClass": "virtualization-runtime",
           "role": "optional virtualization runtime dependency",
           "portability": "ocs-portable-kubernetes-crd-contract",
-          "implementationRef": "dependency.kubevirt.virtualization.contract"
+          "productAPIRef": "service.api.virtualization-runtime.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.virtualization-runtime"
         },
         {
           "id": "cni-network-contract",
           "capabilityClass": "tenant-network",
           "role": "portable network attachment dependency",
-          "portability": "ocs-portable-network-attachment-contract"
+          "portability": "ocs-portable-network-attachment-contract",
+          "productAPIRef": "service.api.tenant-network.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.tenant-network"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid",
           "rollbackRef": "lifecycle.rollback"
         },
         {
-          "name": "scale",
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "IaaS workloads remain active until explicitly deprovisioned"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported by this workload contract"
+        },
+        {
+          "name": "resize",
+          "applicability": "supported",
           "verb": "Scale",
           "idempotent": true,
           "idempotencyKey": "operation.id",
@@ -56,12 +79,14 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id",
@@ -69,12 +94,14 @@
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -82,6 +109,7 @@
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Retry",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -89,6 +117,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -139,6 +168,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "universal-iaas-billing",
         "meters": [
           {
@@ -213,6 +243,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.universal-iaas.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.universal-iaas.ui.signature",
           "integrityRef": "evidence.universal-iaas.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -344,7 +375,7 @@
           "evidenceRef": "evidence.universal-iaas.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "ocs-universal-iaas-delete-receipt",
           "evidenceRef": "evidence.universal-iaas.delete"
         }
@@ -696,6 +727,7 @@
     "updatePolicyRef": "updates.universal-iaas.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected",
@@ -711,6 +743,7 @@
     "portabilityPolicyRef": "policy.universal-iaas.ocs-portable-workload-export-import"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

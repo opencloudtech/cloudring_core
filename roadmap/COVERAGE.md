@@ -4,6 +4,10 @@ This matrix records exact public requirements owned by the active goal. `accepte
 requires the final public SHA plus fresh downstream evidence; local tests or a live
 observation alone do not change status.
 
+The stable definitions and acceptance meaning of every identifier below are in
+`specifications/goal-01.md`. The matrix records delivery state; it does not redefine
+or weaken those requirements.
+
 ## Goal 01 — Reference-cell critical-path survivability
 
 | Requirement | Goal 01 acceptance slice | Status | Evidence |

@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.synthetic-service.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "synthetic-work-queue",
@@ -29,27 +35,48 @@
           "id": "queue-backend",
           "capabilityClass": "synthetic-work-queue",
           "role": "data-plane",
-          "portability": "export-import"
+          "portability": "export-import",
+          "productAPIRef": "service.api.synthetic-work-queue",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.synthetic-work-queue"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
-          "name": "export",
-          "verb": "Export",
-          "idempotent": true,
-          "idempotencyKey": "export.request.id"
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "synthetic queues remain active until deprovisioned"
         },
         {
-          "name": "delete",
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "capacity follows the selected plan"
+        },
+        {
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id"
+        },
+        {
+          "name": "export",
+          "applicability": "supported",
+          "verb": "Export",
+          "idempotent": true,
+          "idempotencyKey": "export.request.id"
         }
       ],
       "automation": [
@@ -66,6 +93,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "synthetic-service-billing",
         "meters": [
           {
@@ -104,6 +132,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.synthetic-service.queue-overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.synthetic-service.ui.signature",
           "integrityRef": "evidence.synthetic-service.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -191,12 +220,26 @@
           "evidenceRef": "evidence.synthetic-service.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "tenant-queue-delete-receipt",
           "evidenceRef": "evidence.synthetic-service.delete"
         }
       },
       "states": [
+        {
+          "name": "ready",
+          "reason": "the queue is accepting work",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.ready",
+          "remediation": "none"
+        },
+        {
+          "name": "denied",
+          "reason": "identity lacks an entitlement or IAM permission",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.denied",
+          "remediation": "request entitlement or permission"
+        },
         {
           "name": "degraded",
           "reason": "portable dependency unavailable",
@@ -210,6 +253,13 @@
           "userVisible": true,
           "evidenceRef": "evidence.synthetic-service.blocked",
           "remediation": "resolve policy or entitlement before retry"
+        },
+        {
+          "name": "retryable",
+          "reason": "a transient dependency failure interrupted the operation",
+          "userVisible": true,
+          "evidenceRef": "evidence.synthetic-service.retryable",
+          "remediation": "retry with the same idempotency key"
         }
       ],
       "support": {
@@ -362,6 +412,7 @@
     "updatePolicyRef": "updates.synthetic-service.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected",
@@ -375,6 +426,7 @@
     "portabilityPolicyRef": "policy.synthetic-service.no-provider-lock-in"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",
