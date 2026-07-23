@@ -68,9 +68,8 @@ func ValidateContract(contract Contract) error {
 	if strings.TrimSpace(contract.Metadata.Name) == "" {
 		return errors.New("GitOps ownership contract metadata.name is required")
 	}
-	if strings.TrimSpace(contract.Spec.KustomizationSelector) == "" {
-		return errors.New("GitOps ownership contract spec.kustomizationSelector is required")
-	}
+	// v1alpha2 uses closed-world discovery; the legacy selector is retained only
+	// as a migration diagnostic and is intentionally non-authoritative.
 	if len(contract.Spec.RequiredFamilies) == 0 {
 		return errors.New("GitOps ownership contract requires at least one resource family")
 	}
