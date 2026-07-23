@@ -12,6 +12,11 @@ it includes portal, billing, IAM, evidence, support, analytics, and rollback.
 Use OCSv3 when a service must be added to CloudRING or another compatible
 platform without hardcoding that service into the platform core.
 
+The service connector is the product-owned integration boundary: it publishes
+the connector package and versioned product API that let an independently
+deployed service join the catalog, lifecycle, IAM, billing, support, and optional
+portal surfaces without giving the platform knowledge of its implementation.
+
 ## Why Not Only Kubernetes API
 
 Kubernetes is one supported substrate. It does not define product catalog metadata,
