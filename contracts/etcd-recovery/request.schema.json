@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CloudRING isolated etcd recovery request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operationId", "snapshotId", "snapshotChecksumSha256", "snapshotBytes", "sourceMode", "endpoint", "region", "bucket", "objectKey", "objectVersion", "objectIdentitySha256", "clusterIdentitySha256", "jobTemplateSha256", "executionProfileSha256", "inputSecretSha256", "workerExecutableSha256", "workerImageDigest", "etcdutlVersion", "etcdutlSha256", "issuedAt", "expiresAt", "timeoutSeconds"],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.etcd-recovery.request/v1"},
+    "operationId": {"$ref": "#/$defs/id"},
+    "snapshotId": {"$ref": "#/$defs/id"},
+    "snapshotChecksumSha256": {"$ref": "#/$defs/sha"},
+    "snapshotBytes": {"type": "integer", "minimum": 1, "maximum": 2147483648},
+    "sourceMode": {"enum": ["local-file", "s3"]},
+    "endpoint": {"type": "string", "maxLength": 2048},
+    "region": {"type": "string", "maxLength": 63},
+    "bucket": {"type": "string", "maxLength": 63},
+    "objectKey": {"type": "string", "maxLength": 2048},
+    "objectVersion": {"type": "string", "maxLength": 512},
+    "objectIdentitySha256": {"$ref": "#/$defs/sha"},
+    "clusterIdentitySha256": {"$ref": "#/$defs/sha"},
+    "jobTemplateSha256": {"$ref": "#/$defs/sha"},
+    "executionProfileSha256": {"$ref": "#/$defs/sha"},
+    "inputSecretSha256": {
+      "description": "SHA-256 of the canonical cloudring.etcd-recovery.input-secret-projection/v1 contract; never a digest of request.json or Secret data.",
+      "$ref": "#/$defs/sha"
+    },
+    "workerExecutableSha256": {"$ref": "#/$defs/sha"},
+    "workerImageDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "etcdutlVersion": {"const": "3.6.13"},
+    "etcdutlSha256": {"const": "d3b1ab51f3277a60ee37dfd749941e663c14184d5bc0c26d0cf06f5414d18199"},
+    "issuedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 1800}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"sourceMode": {"const": "local-file"}}},
+      "then": {
+        "properties": {
+          "endpoint": {"const": ""},
+          "region": {"const": ""},
+          "bucket": {"const": ""},
+          "objectKey": {"const": ""},
+          "objectVersion": {"const": ""}
+        }
+      },
+      "else": {
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\\[[0-9a-f:]+\\])(?::[1-9][0-9]{0,4})?/?$"
+          },
+          "region": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?$"},
+          "bucket": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])$"},
+          "objectKey": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/\\\\][^\\r\\n\\x00\\\\]*$",
+            "not": {"pattern": "(^|/)\\.\\.?(/|$)"}
+          },
+          "objectVersion": {"type": "string", "minLength": 1, "pattern": "^[^\\r\\n\\x00]+$"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$"},
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

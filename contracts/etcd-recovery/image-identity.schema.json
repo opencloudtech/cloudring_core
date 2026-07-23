@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CloudRING isolated etcd recovery worker image identity v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRepository",
+    "sourceCommitSha",
+    "sourceDateEpoch",
+    "buildPlatform",
+    "imageName",
+    "imageDigest",
+    "imageSubjectDigest",
+    "workerExecutableSha256",
+    "etcdutlVersion",
+    "etcdutlSha256",
+    "baseImageName",
+    "baseImageDigest",
+    "containerfileSha256",
+    "componentSbomSha256",
+    "imageSbomSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.etcd-recovery.image-identity/v1"},
+    "sourceRepository": {"const": "https://github.com/opencloudtech/CloudRING"},
+    "sourceCommitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sourceDateEpoch": {"type": "integer", "minimum": 1},
+    "buildPlatform": {"const": "linux/amd64"},
+    "imageName": {"const": "ghcr.io/opencloudtech/cloudring-etcd-recovery-worker"},
+    "imageDigest": {"$ref": "#/$defs/imageDigest"},
+    "imageSubjectDigest": {"$ref": "#/$defs/imageDigest"},
+    "workerExecutableSha256": {"$ref": "#/$defs/sha"},
+    "etcdutlVersion": {"const": "3.6.13"},
+    "etcdutlSha256": {"const": "d3b1ab51f3277a60ee37dfd749941e663c14184d5bc0c26d0cf06f5414d18199"},
+    "baseImageName": {"const": "gcr.io/distroless/static-debian12:nonroot"},
+    "baseImageDigest": {"const": "sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35"},
+    "containerfileSha256": {"$ref": "#/$defs/sha"},
+    "componentSbomSha256": {"$ref": "#/$defs/sha"},
+    "imageSbomSha256": {"$ref": "#/$defs/sha"}
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "imageDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

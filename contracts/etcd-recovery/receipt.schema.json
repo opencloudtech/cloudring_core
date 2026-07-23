@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CloudRING isolated etcd recovery receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "reasonCode", "stage", "memberHealthVerified", "offlineMemberDatabaseVerified", "loopbackOnly", "workspaceCleanupVerified", "startedAt", "completedAt", "observedDurationMilliseconds", "evidenceSha256"],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.etcd-recovery.receipt/v1"},
+    "status": {"enum": ["verified", "failed", "cancelled", "timeout"]},
+    "reasonCode": {"enum": ["offline_restore_verified", "operation_failed", "operation_cancelled", "operation_timed_out", "workspace_cleanup_failed"]},
+    "stage": {"enum": ["initialization", "request", "worker-identity", "workspace", "archive", "tool-identity", "source-status", "restore", "restored-status", "cleanup", "complete"]},
+    "snapshotIdSha256": {"$ref": "#/$defs/sha"},
+    "snapshotChecksumSha256": {"$ref": "#/$defs/sha"},
+    "snapshotBytes": {"type": "integer", "minimum": 1, "maximum": 2147483648},
+    "sourceMode": {"enum": ["local-file", "s3"]},
+    "endpointSha256": {"$ref": "#/$defs/sha"},
+    "objectReferenceSha256": {"$ref": "#/$defs/sha"},
+    "objectIdentitySha256": {"$ref": "#/$defs/sha"},
+    "clusterIdentitySha256": {"$ref": "#/$defs/sha"},
+    "jobTemplateSha256": {"$ref": "#/$defs/sha"},
+    "executionProfileSha256": {"$ref": "#/$defs/sha"},
+    "inputSecretSha256": {"$ref": "#/$defs/sha"},
+    "requestSha256": {"$ref": "#/$defs/sha"},
+    "workerExecutableSha256": {"$ref": "#/$defs/sha"},
+    "workerImageDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "executableSha256"],
+      "properties": {
+        "name": {"const": "etcdutl"},
+        "version": {"const": "3.6.13"},
+        "executableSha256": {"const": "d3b1ab51f3277a60ee37dfd749941e663c14184d5bc0c26d0cf06f5414d18199"}
+      }
+    },
+    "sourceStatusSha256": {"$ref": "#/$defs/sha"},
+    "sourceKvHashSha256": {"$ref": "#/$defs/sha"},
+    "restoredChecksumSha256": {"$ref": "#/$defs/sha"},
+    "restoredBytes": {"type": "integer", "minimum": 1, "maximum": 2147483648},
+    "restoredStatusSha256": {"$ref": "#/$defs/sha"},
+    "restoredKvHashSha256": {"$ref": "#/$defs/sha"},
+    "sandboxStateSha256": {"$ref": "#/$defs/sha"},
+    "memberHealthVerified": {"const": false},
+    "offlineMemberDatabaseVerified": {"type": "boolean"},
+    "loopbackOnly": {"const": true},
+    "workspaceCleanupVerified": {"type": "boolean"},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "completedAt": {"type": "string", "format": "date-time"},
+    "observedDurationMilliseconds": {"type": "integer", "minimum": 0, "maximum": 1830000},
+    "evidenceSha256": {"$ref": "#/$defs/sha"}
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "required": ["sourceMode", "snapshotIdSha256", "snapshotChecksumSha256", "snapshotBytes", "endpointSha256", "objectReferenceSha256", "objectIdentitySha256", "clusterIdentitySha256", "jobTemplateSha256", "executionProfileSha256", "inputSecretSha256", "requestSha256", "workerImageDigest"]
+        },
+        {
+          "not": {
+            "anyOf": [
+              {"required": ["sourceMode"]},
+              {"required": ["snapshotIdSha256"]},
+              {"required": ["snapshotChecksumSha256"]},
+              {"required": ["snapshotBytes"]},
+              {"required": ["endpointSha256"]},
+              {"required": ["objectReferenceSha256"]},
+              {"required": ["objectIdentitySha256"]},
+              {"required": ["clusterIdentitySha256"]},
+              {"required": ["jobTemplateSha256"]},
+              {"required": ["executionProfileSha256"]},
+              {"required": ["inputSecretSha256"]},
+              {"required": ["workerImageDigest"]}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "status": {"const": "verified"},
+            "reasonCode": {"const": "offline_restore_verified"},
+            "stage": {"const": "complete"},
+            "offlineMemberDatabaseVerified": {"const": true},
+            "workspaceCleanupVerified": {"const": true}
+          },
+          "required": ["snapshotIdSha256", "snapshotChecksumSha256", "snapshotBytes", "sourceMode", "endpointSha256", "objectReferenceSha256", "objectIdentitySha256", "clusterIdentitySha256", "jobTemplateSha256", "executionProfileSha256", "inputSecretSha256", "requestSha256", "workerExecutableSha256", "workerImageDigest", "tool", "sourceStatusSha256", "sourceKvHashSha256", "restoredChecksumSha256", "restoredBytes", "restoredStatusSha256", "restoredKvHashSha256", "sandboxStateSha256"]
+        },
+        {
+          "properties": {
+            "status": {"const": "failed"},
+            "offlineMemberDatabaseVerified": {"const": false}
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "reasonCode": {"const": "operation_failed"},
+                "stage": {"enum": ["initialization", "request", "worker-identity", "workspace", "archive", "tool-identity", "source-status", "restore", "restored-status", "cleanup"]},
+                "workspaceCleanupVerified": {"const": true}
+              }
+            },
+            {
+              "properties": {
+                "reasonCode": {"const": "workspace_cleanup_failed"},
+                "stage": {"const": "cleanup"},
+                "workspaceCleanupVerified": {"const": false}
+              }
+            }
+          ],
+          "not": {"$ref": "#/$defs/offlineSuccessFields"}
+        },
+        {
+          "properties": {
+            "status": {"const": "cancelled"},
+            "reasonCode": {"const": "operation_cancelled"},
+            "stage": {"enum": ["initialization", "request", "worker-identity", "workspace", "archive", "tool-identity", "source-status", "restore", "restored-status", "cleanup"]},
+            "offlineMemberDatabaseVerified": {"const": false},
+            "workspaceCleanupVerified": {"const": true}
+          },
+          "not": {"$ref": "#/$defs/offlineSuccessFields"}
+        },
+        {
+          "properties": {
+            "status": {"const": "timeout"},
+            "reasonCode": {"const": "operation_timed_out"},
+            "stage": {"enum": ["initialization", "request", "worker-identity", "workspace", "archive", "tool-identity", "source-status", "restore", "restored-status", "cleanup"]},
+            "offlineMemberDatabaseVerified": {"const": false},
+            "workspaceCleanupVerified": {"const": true}
+          },
+          "not": {"$ref": "#/$defs/offlineSuccessFields"}
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "offlineSuccessFields": {
+      "anyOf": [
+        {"required": ["sourceStatusSha256"]},
+        {"required": ["sourceKvHashSha256"]},
+        {"required": ["restoredChecksumSha256"]},
+        {"required": ["restoredBytes"]},
+        {"required": ["restoredStatusSha256"]},
+        {"required": ["restoredKvHashSha256"]},
+        {"required": ["sandboxStateSha256"]}
+      ]
+    }
+  }
+}

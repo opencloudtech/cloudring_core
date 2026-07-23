@@ -29,6 +29,7 @@ The extraction backlog classifies these paths as publishable `public-core`:
 | --- | --- |
 | `pkg/ocs` | OCSv3 connector package and validator contracts. |
 | `pkg/backup/restoreproof` | Provider-neutral restore proof model, canonical digests, and fail-closed validator. |
+| `pkg/backup/etcdrecovery` | Provider-neutral isolated etcd snapshot fetch, offline restore verification, sanitized receipt, and cleanup runtime. |
 | `pkg/backup/velero118` | Exact Velero 1.18.2 CSI data-mover decoders, archive reader, collectors, and adapter execution boundary. |
 | `pkg/kubeconfigpipe` | Bounded in-memory replay of a brokered pipe-backed kubeconfig plus process-tree-contained execution for multi-query child processes. |
 | `pkg/secureexec` | Content-pinned executable identity, bounded output, process-tree cleanup, and optional kubeconfig replay for downstream collectors. |
@@ -37,6 +38,7 @@ The extraction backlog classifies these paths as publishable `public-core`:
 | `pkg/transactionalstate` | PostgreSQL-backed canonical document state with optimistic revisions, schema migration, readiness, and safe continuity digests. |
 | `internal/privateartifact` | Stable-directory, atomic no-overwrite writer for sanitized owner-only evidence. |
 | `cmd/cloudring-backup` | Read-only baseline, collection, and offline verification workflow. |
+| `cmd/cloudring-etcd-recovery-worker` | Fixed-path, stdout-quiet entry point for the isolated etcd recovery worker. |
 | `cmd/cloudring-id` | Provider-neutral identity contract and offline asymmetric-token verification CLI. |
 | `cmd/cloudring-postgres-migrate` | Pipe-only, secret-safe schema migration entry point for the public transactional-state store. |
 | `deploy/kubernetes/postgresql-ha` | Reusable CloudNativePG HA source profile with pinned controllers and Barman CNPG-I plugin, synchronous replication, retained local snapshots, off-cell WAL/base-backup policy, isolated recovery template, and explicit downstream live gates. |

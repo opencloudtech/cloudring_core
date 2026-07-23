@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "canonicalization": "yq-json+jq-cS",
   "workflows": {
-    ".github/workflows/ci.yml": "b8bae984512df13f810c8421b9cf30f11d21c9dcb8f4232e82152e8710c471f2",
+    ".github/workflows/ci.yml": "1f2c85ca56d66ec99942a6a8df51a2f324ebd54eeb4728bcffdc5033daa18ea2",
     ".github/workflows/cla-dco.yml": "6a931f46518dd3d7a149ca963a2aa5124ca184a746b191889f1d28c4cf4555f7",
     ".github/workflows/license.yml": "d8032e889057a6e760c080e6adb10942ed59b8abd45f92951b956a95b79733df",
-    ".github/workflows/release-provenance.yml": "1d0e5d8c71494fe3979d132d1fee79f54004b55d8539e1f34e443dbc30686ce2",
+    ".github/workflows/release-provenance.yml": "bcf0b8ad5138ae8ad0cef0e067a5919fe5d67c2b9a1f0b32d89130336fd488b0",
     ".github/workflows/security.yml": "8e2210f0caa813ef886ba353d8d3c395f0033e047eb9299d314b27de99bfb4a7",
-    ".github/workflows/supply-chain.yml": "6cb9a3b9a6fec025b8f796c0fc04580fc941fa79859ebfaad0c15ab4571dde6c"
+    ".github/workflows/supply-chain.yml": "3c8a128ed0f1e8c04e4e5d2ffc2b589927c7b701717299fe660057175b6831b4"
   }
 }
