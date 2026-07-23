@@ -127,18 +127,19 @@ func ValidateContract(contract Contract) error {
 					return fmt.Errorf("resource family %q discovery namespaces must be valid and unique", family.ID)
 				}
 				namespaceSet[namespace] = true
+				// Several Flux roots may own different objects of the same Kubernetes
+				// kind in one namespace. Collection is unfiltered; ownership is
+				// resolved by the exact expected/external object inventory below.
 				scopeKey := family.APIVersion + ":" + family.Resource + ":" + namespace
-				if previous, exists := discoveryScopes[scopeKey]; exists {
-					return fmt.Errorf("closed-world discovery scope %q overlaps resource families %q and %q", scopeKey, previous, family.ID)
+				if _, exists := discoveryScopes[scopeKey]; !exists {
+					discoveryScopes[scopeKey] = family.ID
 				}
-				discoveryScopes[scopeKey] = family.ID
 			}
 			if !family.Namespaced {
 				scopeKey := family.APIVersion + ":" + family.Resource + ":<cluster>"
-				if previous, exists := discoveryScopes[scopeKey]; exists {
-					return fmt.Errorf("closed-world discovery scope %q overlaps resource families %q and %q", scopeKey, previous, family.ID)
+				if _, exists := discoveryScopes[scopeKey]; !exists {
+					discoveryScopes[scopeKey] = family.ID
 				}
-				discoveryScopes[scopeKey] = family.ID
 			}
 			seenExpected := map[string]bool{}
 			for _, ref := range family.ExpectedObjects {
