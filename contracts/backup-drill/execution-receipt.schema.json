@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "operationId", "proofId", "installationId", "planSha256", "approvalSha256", "approvalScopeSha256", "adapterExecutableSha256", "status", "completedAt", "journalHeadSha256", "executionEvidenceResponseSha256", "targets", "isolationEvidence", "cleanupEvidence", "objectLockDeleteDenialReceiptSha256", "aggregateProofArtifactSha256", "aggregateProofPathToken", "receiptSha256"],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.backup-drill.execution-receipt/v1"}, "operationId": {"type": "string"}, "proofId": {"type": "string"}, "installationId": {"type": "string"},
+    "planSha256": {"$ref": "#/$defs/sha"}, "approvalSha256": {"$ref": "#/$defs/sha"}, "approvalScopeSha256": {"$ref": "#/$defs/sha"}, "adapterExecutableSha256": {"$ref": "#/$defs/sha"}, "status": {"const": "completed"},
+    "completedAt": {"type": "string", "format": "date-time"}, "journalHeadSha256": {"$ref": "#/$defs/sha"}, "executionEvidenceResponseSha256": {"$ref": "#/$defs/sha"},
+    "targets": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/target"}}, "isolationEvidence": {"$ref": "#/$defs/evidence"}, "cleanupEvidence": {"$ref": "#/$defs/evidence"},
+    "objectLockDeleteDenialReceiptSha256": {"$ref": "#/$defs/sha"}, "aggregateProofArtifactSha256": {"$ref": "#/$defs/sha"}, "aggregateProofPathToken": {"$ref": "#/$defs/pathValue"}, "receiptSha256": {"$ref": "#/$defs/sha"}
+  }, "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "pathValue": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._/-]{0,227}[a-z0-9_])?$", "not": {"pattern": "\\.\\."}},
+    "evidence": {"type": "object", "additionalProperties": false, "required": ["ref", "sha256"], "properties": {"ref": {"$ref": "#/$defs/pathValue"}, "sha256": {"$ref": "#/$defs/sha"}}},
+    "target": {"type": "object", "additionalProperties": false, "required": ["kind", "sourceChecksumSha256", "restoredChecksumSha256", "evidenceRef", "evidenceSha256"], "properties": {"kind": {"enum": ["Etcd", "VirtualMachineClaim", "Volume", "Namespace", "KubernetesClusterClaim"]}, "sourceChecksumSha256": {"$ref": "#/$defs/sha"}, "restoredChecksumSha256": {"$ref": "#/$defs/sha"}, "evidenceRef": {"$ref": "#/$defs/pathValue"}, "evidenceSha256": {"$ref": "#/$defs/sha"}}}
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "cloudring.backup-drill.plan/v1",
+  "operationId": "goal01-synthetic-operation",
+  "proofId": "goal01-synthetic-proof",
+  "installationId": "synthetic-installation",
+  "acceptedPublicSha": "72508dd243fb0ea88dbeea4d5a63f65a8ee71244",
+  "acceptedDownstreamSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "clusterIdentitySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "backupStorageLocation": {"name": "offcell", "uidSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "generation": 7, "configSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+  "objectStore": {"prefix": "goal01/synthetic-operation", "minimumRetentionDays": 30, "objectLockMode": "compliance"},
+  "sourceBaselines": [
+    {"kind": "Etcd", "identitySha256": "1111111111111111111111111111111111111111111111111111111111111111", "stateSha256": "2111111111111111111111111111111111111111111111111111111111111111", "dataSha256": "3111111111111111111111111111111111111111111111111111111111111111"},
+    {"kind": "VirtualMachineClaim", "identitySha256": "1222222222222222222222222222222222222222222222222222222222222222", "stateSha256": "2222222222222222222222222222222222222222222222222222222222222222", "dataSha256": "3222222222222222222222222222222222222222222222222222222222222222"},
+    {"kind": "Volume", "identitySha256": "1333333333333333333333333333333333333333333333333333333333333333", "stateSha256": "2333333333333333333333333333333333333333333333333333333333333333", "dataSha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+    {"kind": "Namespace", "identitySha256": "1444444444444444444444444444444444444444444444444444444444444444", "stateSha256": "2444444444444444444444444444444444444444444444444444444444444444", "dataSha256": "3444444444444444444444444444444444444444444444444444444444444444"},
+    {"kind": "KubernetesClusterClaim", "identitySha256": "1555555555555555555555555555555555555555555555555555555555555555", "stateSha256": "2555555555555555555555555555555555555555555555555555555555555555", "dataSha256": "3555555555555555555555555555555555555555555555555555555555555555"}
+  ],
+  "tool": {"name": "cloudring-backup", "executableSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+  "adapter": {"name": "goal01-adapter", "executableSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+  "backup": {"kind": "Backup", "namespace": "velero", "name": "goal01-synthetic", "scopeSha256": "4111111111111111111111111111111111111111111111111111111111111111"},
+  "restores": [
+    {"kind": "VirtualMachineClaim", "namespace": "velero", "name": "vmc-restore", "scopeSha256": "4222222222222222222222222222222222222222222222222222222222222222"},
+    {"kind": "Volume", "namespace": "velero", "name": "volume-restore", "scopeSha256": "4333333333333333333333333333333333333333333333333333333333333333"},
+    {"kind": "Namespace", "namespace": "velero", "name": "namespace-restore", "scopeSha256": "4444444444444444444444444444444444444444444444444444444444444444"},
+    {"kind": "KubernetesClusterClaim", "namespace": "velero", "name": "kcc-restore", "scopeSha256": "4555555555555555555555555555555555555555555555555555555555555555"}
+  ],
+  "isolatedNamespaces": [
+    {"restoreIndex": 0, "restoreName": "vmc-restore", "restoreScopeSha256": "4222222222222222222222222222222222222222222222222222222222222222", "sourceNamespace": "vmc-source", "destination": {"kind": "Namespace", "name": "isolated-vmc", "scopeSha256": "5222222222222222222222222222222222222222222222222222222222222222"}},
+    {"restoreIndex": 1, "restoreName": "volume-restore", "restoreScopeSha256": "4333333333333333333333333333333333333333333333333333333333333333", "sourceNamespace": "volume-source", "destination": {"kind": "Namespace", "name": "isolated-volume", "scopeSha256": "5333333333333333333333333333333333333333333333333333333333333333"}},
+    {"restoreIndex": 2, "restoreName": "namespace-restore", "restoreScopeSha256": "4444444444444444444444444444444444444444444444444444444444444444", "sourceNamespace": "platform-system", "destination": {"kind": "Namespace", "name": "isolated-platform", "scopeSha256": "5444444444444444444444444444444444444444444444444444444444444444"}},
+    {"restoreIndex": 2, "restoreName": "namespace-restore", "restoreScopeSha256": "4444444444444444444444444444444444444444444444444444444444444444", "sourceNamespace": "flux-system", "destination": {"kind": "Namespace", "name": "isolated-flux", "scopeSha256": "5544444444444444444444444444444444444444444444444444444444444444"}},
+    {"restoreIndex": 3, "restoreName": "kcc-restore", "restoreScopeSha256": "4555555555555555555555555555555555555555555555555555555555555555", "sourceNamespace": "cluster-source", "destination": {"kind": "Namespace", "name": "isolated-kcc", "scopeSha256": "5555555555555555555555555555555555555555555555555555555555555555"}}
+  ],
+  "etcdSandbox": {"kind": "EtcdSandbox", "name": "goal01-etcd-sandbox", "scopeSha256": "6666666666666666666666666666666666666666666666666666666666666666"},
+  "cleanupTargets": [
+    {"kind": "Namespace", "name": "isolated-vmc", "preconditionIdentitySha256": "7222222222222222222222222222222222222222222222222222222222222222"},
+    {"kind": "Namespace", "name": "isolated-volume", "preconditionIdentitySha256": "7333333333333333333333333333333333333333333333333333333333333333"},
+    {"kind": "Namespace", "name": "isolated-platform", "preconditionIdentitySha256": "7444444444444444444444444444444444444444444444444444444444444444"},
+    {"kind": "Namespace", "name": "isolated-flux", "preconditionIdentitySha256": "7544444444444444444444444444444444444444444444444444444444444444"},
+    {"kind": "Namespace", "name": "isolated-kcc", "preconditionIdentitySha256": "7555555555555555555555555555555555555555555555555555555555555555"},
+    {"kind": "EtcdSandbox", "name": "goal01-etcd-sandbox", "preconditionIdentitySha256": "7666666666666666666666666666666666666666666666666666666666666666"}
+  ],
+  "aggregateProofPathToken": "proof/goal01/synthetic-operation",
+  "issuedAt": "2026-07-23T10:00:00Z",
+  "expiresAt": "2026-07-23T10:10:00Z",
+  "runNonceSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+}
