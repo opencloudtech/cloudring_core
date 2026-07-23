@@ -256,10 +256,8 @@ jobs:
             (.components | type == "array") and
             (.components | length >= 2) and
             any(.components[]?.properties[]?;
-              .name == "syft:location:0:path" and
               .value == "/usr/local/bin/cloudring-etcd-recovery-worker") and
             any(.components[]?.properties[]?;
-              .name == "syft:location:0:path" and
               .value == "/usr/local/bin/etcdutl")
           ' dist/etcd-recovery-worker-image.cdx.json >/dev/null
           image_sbom_digest="$(sha256sum dist/etcd-recovery-worker-image.cdx.json | cut -d ' ' -f 1)"
