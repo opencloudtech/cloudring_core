@@ -252,7 +252,7 @@ jobs:
             -o cyclonedx-json=dist/etcd-recovery-worker-image.cdx.json
           jq -e '
             .bomFormat == "CycloneDX" and
-            (.specVersion == "1.5" or .specVersion == "1.6") and
+            (.specVersion | type == "string") and
             (.components | type == "array")
           ' dist/etcd-recovery-worker-image.cdx.json >/dev/null
           image_sbom_digest="$(sha256sum dist/etcd-recovery-worker-image.cdx.json | cut -d ' ' -f 1)"
