@@ -482,7 +482,7 @@ func TestJournalRejectsTruncationReorderTamperAndDuplicateStep(t *testing.T) {
 			if _, err := Apply(t.Context(), plan, approval, approval.ApprovalTuple, journal, adapter, advancingClock(now.Add(time.Second))); err != nil {
 				t.Fatal(err)
 			}
-			payload, err := os.ReadFile(journal)
+			payload, err := os.ReadFile(journal) // #nosec G304 -- journal is the exact test-owned file created beneath this subtest's t.TempDir.
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -499,7 +499,7 @@ func TestJournalRejectsTruncationReorderTamperAndDuplicateStep(t *testing.T) {
 				lines = append(lines[:3], append([][]byte{lines[2]}, lines[3:]...)...)
 				payload = append(bytes.Join(lines, []byte{'\n'}), '\n')
 			}
-			if err := os.WriteFile(journal, payload, 0o600); err != nil {
+			if err := os.WriteFile(journal, payload, 0o600); err != nil { // #nosec G703 -- journal is the exact test-owned file created beneath this subtest's t.TempDir.
 				t.Fatal(err)
 			}
 			if _, err := LoadJournal(journal); err == nil {
@@ -807,7 +807,7 @@ func TestReceiptCannotBeConstructedFromPlanAlone(t *testing.T) {
 func TestPinnedExternalFakeAdapterCompletesPortableProtocol(t *testing.T) {
 	directory := t.TempDir()
 	binary := filepath.Join(directory, "fakeadapter")
-	command := exec.Command("go", "build", "-o", binary, "./testdata/fakeadapter")
+	command := exec.Command("go", "build", "-o", binary, "./testdata/fakeadapter") // #nosec G204 -- fixed test-only Go tool and package; binary is beneath this test's t.TempDir and no shell is used.
 	command.Dir = "."
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build external fake adapter: %v: %s", err, output)
@@ -876,6 +876,7 @@ func mustPreflight(t *testing.T, plan Plan, adapter *Adapter, now time.Time) App
 
 func validTestPlan() (Plan, time.Time) {
 	now := time.Date(2026, 7, 23, 10, 0, 0, 0, time.UTC)
+	// #nosec G101 -- all identifiers and digests in this plan are synthetic test data, not credential material.
 	plan := Plan{
 		SchemaVersion: PlanSchemaVersion, OperationID: "goal01-op", ProofID: "goal01-proof", InstallationID: "installation-a",
 		AcceptedPublicSHA: "72508dd243fb0ea88dbeea4d5a63f65a8ee71244", AcceptedDownstreamSHA: strings.Repeat("b", 40), ClusterIdentitySHA256: testSHA("cluster"),

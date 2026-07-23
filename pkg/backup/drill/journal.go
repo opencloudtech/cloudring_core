@@ -66,27 +66,19 @@ func openJournalTransaction(path string) (*journalTransaction, error) {
 	}
 	file, err := root.OpenFile(name, os.O_RDWR, 0)
 	if err != nil {
-		root.Close()
-		return nil, errors.New("open backup drill journal transaction")
+		return nil, errors.Join(errors.New("open backup drill journal transaction"), root.Close())
 	}
 	opened, statErr := file.Stat()
 	if statErr != nil || !os.SameFile(selected, opened) || !protectedJournalFile(opened) {
-		file.Close()
-		root.Close()
-		return nil, errors.New("backup drill journal transaction inode is invalid")
+		return nil, errors.Join(errors.New("backup drill journal transaction inode is invalid"), file.Close(), root.Close())
 	}
 	if err := lockJournalFile(file); err != nil {
-		file.Close()
-		root.Close()
-		return nil, errors.New("lock backup drill journal transaction")
+		return nil, errors.Join(errors.New("lock backup drill journal transaction"), file.Close(), root.Close())
 	}
 	afterPath, pathErr := os.Lstat(clean)
 	afterOpen, openErr := file.Stat()
 	if pathErr != nil || openErr != nil || !os.SameFile(opened, afterPath) || !os.SameFile(opened, afterOpen) || !protectedJournalFile(afterPath) || !protectedJournalFile(afterOpen) {
-		_ = unlockJournalFile(file)
-		file.Close()
-		root.Close()
-		return nil, errors.New("backup drill journal changed while acquiring lock")
+		return nil, errors.Join(errors.New("backup drill journal changed while acquiring lock"), unlockJournalFile(file), file.Close(), root.Close())
 	}
 	return &journalTransaction{path: clean, root: root, file: file}, nil
 }
