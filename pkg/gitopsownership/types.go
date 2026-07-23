@@ -128,6 +128,7 @@ type Snapshot struct {
 	SourceArtifact           SourceArtifactSnapshot   `json:"sourceArtifact"`
 	AcceptedSourceRevision   string                   `json:"acceptedSourceRevision"`
 	AcceptedArtifactDigest   string                   `json:"acceptedArtifactDigest"`
+	AcceptedPublicGitlinkSHA string                   `json:"acceptedPublicGitlinkSHA"`
 	ObservedPublicGitlinkSHA string                   `json:"observedPublicGitlinkSHA"`
 }
 
@@ -173,6 +174,7 @@ type SourceArtifactReport struct {
 	AcceptedRevision         string `json:"acceptedRevision"`
 	AcceptedDigest           string `json:"acceptedDigest"`
 	ExpectedPublicGitlinkSHA string `json:"expectedPublicGitlinkSHA"`
+	AcceptedPublicGitlinkSHA string `json:"acceptedPublicGitlinkSHA"`
 	ObservedPublicGitlinkSHA string `json:"observedPublicGitlinkSHA"`
 	PublicGitlinkExact       bool   `json:"publicGitlinkExact"`
 	Exact                    bool   `json:"exact"`
