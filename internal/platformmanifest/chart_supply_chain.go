@@ -92,7 +92,7 @@ var reviewedLonghornRuntimeImages = []runtimeImageArtifact{
 
 var expectedRuntimeChartSupplyChain = runtimeChartSupplyChain{
 	SchemaVersion: "cloudring.runtime-chart-supply-chain/v1",
-	VerifiedAt:    "2026-07-22T15:30:00Z",
+	VerifiedAt:    "2026-07-23T05:36:00Z",
 	Artifacts: []runtimeChartArtifact{
 		{
 			ID: "cert-manager", Version: "v1.21.0", SourceKind: "oci-helm-chart",
@@ -111,6 +111,18 @@ var expectedRuntimeChartSupplyChain = runtimeChartSupplyChain{
 			License:          "Apache-2.0", OfficialSource: "https://cloudnative-pg.io/charts/",
 		},
 		{
+			ID: "cloudnative-pg-barman-cloud", Version: "0.7.0", AppVersion: "v0.13.0", SourceKind: "oci-helm-chart",
+			Source:           "oci://ghcr.io/cloudnative-pg/charts/plugin-barman-cloud",
+			ManifestDigest:   "sha256:5d31605cad886f93abb7cd9884170d74ece913fe8b95c74b127ec5e8bcd2b2b6",
+			ContentDigest:    "sha256:eb2d840e2b22fb2678c4554efdfb3a23cfafb8f8597ef84657c433bbc6a327ea",
+			ProvenanceDigest: "sha256:49a423b8a209f252beef4f601795eb005a850595ccd3d1ec0fc7201b5f0bed65",
+			License:          "Apache-2.0", OfficialSource: "https://cloudnative-pg.io/plugin-barman-cloud/docs/installation/",
+			Images: []runtimeImageArtifact{
+				{Key: "manager", Repository: "ghcr.io/cloudnative-pg/plugin-barman-cloud", Tag: "v0.13.0", Digest: "sha256:71589dbac582333442812b07b31f7ea4d00324a8358aac7ca507dabf9f4b6c96"},
+				{Key: "sidecar", Repository: "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar", Tag: "v0.13.0", Digest: "sha256:990361af3319f9e23aafa0f6d7981f99bf1f69b4e6a85cf1bc7d71d6f09bb288"},
+			},
+		},
+		{
 			ID: "longhorn", Version: "1.12.0", AppVersion: "v1.12.0", SourceKind: "vendored-helm-chart",
 			Source:             "https://github.com/longhorn/charts/releases/download/longhorn-1.12.0/longhorn-1.12.0.tgz",
 			ArchiveDigest:      "sha256:869bb20701b154473606f1e8967b27f34f2448a2dfe6eb8970f1cae6957384f5",
@@ -126,6 +138,7 @@ var expectedRuntimeChartSupplyChain = runtimeChartSupplyChain{
 	},
 	NonClaims: []string{
 		"Registry and release-archive digest verification does not prove a live reconciliation or workload health.",
+		"The Barman Cloud Plugin release remains suspended; pinned chart and images do not prove WAL archival, base-backup recovery, bucket retention, or object lock.",
 		"The Longhorn release remains suspended; its exact upstream Git commit does not prove remote Git availability or offline installation.",
 	},
 }

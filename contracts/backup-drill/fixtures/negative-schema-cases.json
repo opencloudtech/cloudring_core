@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "cloudring.backup-drill.negative-schema-cases/v1",
+  "planCases": [
+    {"name": "restore-kind-order-vmc", "path": "restores/0/kind", "value": "Volume"},
+    {"name": "restore-kind-order-volume", "path": "restores/1/kind", "value": "Namespace"},
+    {"name": "restore-kind-order-namespace", "path": "restores/2/kind", "value": "KubernetesClusterClaim"},
+    {"name": "restore-kind-order-kcc", "path": "restores/3/kind", "value": "VirtualMachineClaim"},
+    {"name": "mapping-association-vmc", "path": "isolatedNamespaces/0/restoreIndex", "value": 1},
+    {"name": "mapping-association-volume", "path": "isolatedNamespaces/1/restoreIndex", "value": 2},
+    {"name": "mapping-association-platform", "path": "isolatedNamespaces/2/restoreIndex", "value": 3},
+    {"name": "mapping-association-flux", "path": "isolatedNamespaces/3/restoreIndex", "value": 1},
+    {"name": "mapping-association-kcc", "path": "isolatedNamespaces/4/restoreIndex", "value": 0},
+    {"name": "platform-association", "path": "isolatedNamespaces/2/sourceNamespace", "value": "other-system"},
+    {"name": "flux-association", "path": "isolatedNamespaces/3/sourceNamespace", "value": "other-system"},
+    {"name": "destination-kind", "path": "isolatedNamespaces/3/destination/kind", "value": "Volume"},
+    {"name": "destination-namespace", "path": "isolatedNamespaces/3/destination/namespace", "value": "forbidden"},
+    {"name": "cleanup-namespace-kind", "path": "cleanupTargets/0/kind", "value": "Volume"},
+    {"name": "cleanup-namespace-scope", "path": "cleanupTargets/2/namespace", "value": "forbidden"},
+    {"name": "cleanup-etcd-kind", "path": "cleanupTargets/5/kind", "value": "Namespace"},
+    {"name": "cleanup-etcd-scope", "path": "cleanupTargets/5/namespace", "value": "forbidden"},
+    {"name": "trailing-name-hyphen", "path": "isolatedNamespaces/3/destination/name", "value": "invalid-"},
+    {"name": "trailing-name-dot", "path": "isolatedNamespaces/3/destination/name", "value": "invalid."},
+    {"name": "trailing-prefix", "path": "objectStore/prefix", "value": "goal01/invalid/"},
+    {"name": "absolute-path", "path": "aggregateProofPathToken", "value": "/proof/invalid"},
+    {"name": "dot-traversal", "path": "aggregateProofPathToken", "value": "proof/../invalid"},
+    {"name": "trailing-path-hyphen", "path": "aggregateProofPathToken", "value": "proof/invalid-"},
+    {"name": "trailing-path-dot", "path": "aggregateProofPathToken", "value": "proof/invalid."}
+  ],
+  "invalidEvidenceRefs": ["/absolute", "evidence/../invalid", "evidence/trailing/", "evidence/trailing-", "evidence/trailing."]
+}

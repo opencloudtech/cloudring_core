@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "protocolVersion", "operationId", "planSha256", "approvalScopeSha256", "adapterExecutableSha256", "mode", "step", "requestId", "plan", "requestSha256"],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.backup-drill.adapter-request/v1"}, "protocolVersion": {"const": "cloudring.backup-drill.adapter/v1"}, "operationId": {"type": "string"},
+    "planSha256": {"$ref": "#/$defs/sha"}, "approvalSha256": {"$ref": "#/$defs/sha"}, "approvalScopeSha256": {"$ref": "#/$defs/sha"}, "adapterExecutableSha256": {"$ref": "#/$defs/sha"},
+    "mode": {"enum": ["preflight", "apply", "rollback"]}, "step": {"enum": ["preflight", "etcd-offcell-complete", "velero-backup-complete", "restore-watch-create-observe-complete", "etcd-sandbox-restored", "restore-validation-complete", "cleanup-ready", "isolated-targets-deleted", "residual-sweep-1", "residual-sweep-2", "proof-assembled", "rollback-safe-stop", "rollback-cleanup-requested"]}, "previousJournalSha256": {"$ref": "#/$defs/sha"}, "requestId": {"type": "string"},
+    "plan": {"$ref": "plan.schema.json"}, "retainKinds": {"type": "array", "maxItems": 4, "items": {"enum": ["Backup", "DataUpload", "ObjectStoreRecoveryPoint", "RestoreAuditCR"]}}, "cleanupTargets": {"type": "array", "maxItems": 6, "items": {"$ref": "plan.schema.json#/$defs/cleanup"}}, "requestSha256": {"$ref": "#/$defs/sha"}
+  }, "$defs": {"sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

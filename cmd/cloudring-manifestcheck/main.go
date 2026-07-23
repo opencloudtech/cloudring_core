@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/opencloudtech/CloudRING/internal/platformmanifest"
@@ -19,6 +20,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "unexpected positional arguments")
 		os.Exit(2)
 	}
+	os.Exit(run(*root, os.Stdout, os.Stderr))
+}
+
+func run(root string, stdout, stderr io.Writer) int {
 	reports := make([]platformmanifest.Report, 0, 7)
 	for _, verify := range []func(string) (platformmanifest.Report, error){
 		platformmanifest.VerifySecretManager,
@@ -29,22 +34,32 @@ func main() {
 		platformmanifest.VerifyPostgreSQLHA,
 		platformmanifest.VerifyCDI,
 	} {
-		report, err := verify(*root)
+		report, err := verify(root)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "platform manifest verification blocked")
-			os.Exit(1)
+			fmt.Fprintln(stderr, "platform manifest verification blocked")
+			return 1
 		}
 		reports = append(reports, report)
 	}
+	liveStatus := "not-evaluated"
+	for _, report := range reports {
+		if report.LiveStatus == "blocked" {
+			liveStatus = "blocked"
+			break
+		}
+	}
 	output := struct {
-		Status   string                    `json:"status"`
-		Profiles []platformmanifest.Report `json:"profiles"`
+		Status     string                    `json:"status"`
+		LiveStatus string                    `json:"liveStatus"`
+		Profiles   []platformmanifest.Report `json:"profiles"`
 	}{
-		Status:   "ready",
-		Profiles: reports,
+		Status:     "source-contracts-verified",
+		LiveStatus: liveStatus,
+		Profiles:   reports,
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(output); err != nil {
-		fmt.Fprintln(os.Stderr, "encode platform manifest report")
-		os.Exit(2)
+	if err := json.NewEncoder(stdout).Encode(output); err != nil {
+		fmt.Fprintln(stderr, "encode platform manifest report")
+		return 2
 	}
+	return 0
 }

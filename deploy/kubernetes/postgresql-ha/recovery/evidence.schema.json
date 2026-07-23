@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/schemas/postgresql-cnpg-offcell-recovery-evidence-v1.json",
+  "title": "CloudRING PostgreSQL CNPG off-cell recovery evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRevision",
+    "collectedAt",
+    "expiresAt",
+    "offCell",
+    "baseBackup",
+    "walArchive",
+    "recovery",
+    "checksum",
+    "cleanup",
+    "redaction",
+    "verdict"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.postgresql-cnpg-offcell-recovery-evidence/v1"},
+    "sourceRevision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "collectedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "offCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observedAt", "destinationIdentity", "failureDomainDistinct", "retentionDays", "objectLockMode", "objectLockMinimumDays", "controlDeleteDenied"],
+      "properties": {
+        "observedAt": {"type": "string", "format": "date-time"},
+        "destinationIdentity": {"$ref": "#/$defs/digest"},
+        "failureDomainDistinct": {"const": true},
+        "retentionDays": {"type": "integer", "minimum": 30},
+        "objectLockMode": {"enum": ["governance", "compliance"]},
+        "objectLockMinimumDays": {"type": "integer", "minimum": 30},
+        "controlDeleteDenied": {"const": true}
+      }
+    },
+    "baseBackup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "startedAt", "completedAt", "status", "bytes", "objectInventoryDigest"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/digest"},
+        "startedAt": {"type": "string", "format": "date-time"},
+        "completedAt": {"type": "string", "format": "date-time"},
+        "status": {"const": "completed"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "objectInventoryDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "walArchive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["firstRecoverabilityPoint", "lastArchivedAt", "lastFailedAt", "replayedThrough", "continuous"],
+      "properties": {
+        "firstRecoverabilityPoint": {"type": "string", "format": "date-time"},
+        "lastArchivedAt": {"type": "string", "format": "date-time"},
+        "lastFailedAt": {"type": "null"},
+        "replayedThrough": {"type": "string", "format": "date-time"},
+        "continuous": {"const": true}
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceIdentity", "clusterIdentity", "sourceIdentity", "startedAt", "readyAt", "validatedAt", "readyInstances", "expectedInstances", "productionRouteCount", "writeProbePassed"],
+      "properties": {
+        "namespaceIdentity": {"$ref": "#/$defs/digest"},
+        "clusterIdentity": {"$ref": "#/$defs/digest"},
+        "sourceIdentity": {"$ref": "#/$defs/digest"},
+        "startedAt": {"type": "string", "format": "date-time"},
+        "readyAt": {"type": "string", "format": "date-time"},
+        "validatedAt": {"type": "string", "format": "date-time"},
+        "readyInstances": {"const": 1},
+        "expectedInstances": {"const": 1},
+        "productionRouteCount": {"const": 0},
+        "writeProbePassed": {"const": true}
+      }
+    },
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "projectionVersion", "source", "recovered", "sourceCapturedAt", "recoveredCapturedAt", "sourceLogicalBytes", "recoveredLogicalBytes", "sourceRowCount", "recoveredRowCount", "matched"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "projectionVersion": {"const": "cloudring-postgresql-logical-state/v1"},
+        "source": {"$ref": "#/$defs/digest"},
+        "recovered": {"$ref": "#/$defs/digest"},
+        "sourceCapturedAt": {"type": "string", "format": "date-time"},
+        "recoveredCapturedAt": {"type": "string", "format": "date-time"},
+        "sourceLogicalBytes": {"type": "integer", "minimum": 1},
+        "recoveredLogicalBytes": {"type": "integer", "minimum": 1},
+        "sourceRowCount": {"type": "integer", "minimum": 1},
+        "recoveredRowCount": {"type": "integer", "minimum": 1},
+        "matched": {"const": true}
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "completedAt", "complete", "twoSweepQuietWindowSeconds", "sweeps"],
+      "properties": {
+        "startedAt": {"type": "string", "format": "date-time"},
+        "completedAt": {"type": "string", "format": "date-time"},
+        "complete": {"const": true},
+        "twoSweepQuietWindowSeconds": {"type": "integer", "minimum": 30},
+        "sweeps": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/cleanupSweep"}
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["containsCredentials", "containsEndpoints", "containsTenantData", "verdict"],
+      "properties": {
+        "containsCredentials": {"const": false},
+        "containsEndpoints": {"const": false},
+        "containsTenantData": {"const": false},
+        "verdict": {"const": "pass"}
+      }
+    },
+    "verdict": {"const": "pass"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "cleanupSweep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observedAt", "inventoryDigest", "recoveryNamespaceCount", "clusterCount", "credentialSecretCount", "persistentVolumeClaimCount", "serviceCount", "routeCount"],
+      "properties": {
+        "observedAt": {"type": "string", "format": "date-time"},
+        "inventoryDigest": {"$ref": "#/$defs/digest"},
+        "recoveryNamespaceCount": {"const": 0},
+        "clusterCount": {"const": 0},
+        "credentialSecretCount": {"const": 0},
+        "persistentVolumeClaimCount": {"const": 0},
+        "serviceCount": {"const": 0},
+        "routeCount": {"const": 0}
+      }
+    }
+  }
+}

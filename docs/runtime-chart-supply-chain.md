@@ -12,6 +12,16 @@ and enforced by `internal/platformmanifest`.
 - CloudNativePG chart `0.29.0` / operator `1.30.0` uses the official GHCR OCI
   chart with the same digest-pinned Flux contract. The operator image remains
   digest-pinned independently of the chart.
+- Barman Cloud CNPG-I plugin chart `0.7.0` / application `v0.13.0` uses the
+  official GHCR OCI chart plus immutable manager and sidecar image-index
+  digests. Its Helm values disable chart-generated ServiceAccount and manager
+  RBAC; CloudRING declares a dedicated ServiceAccount and the exact reviewed
+  upstream manager ClusterRole and binding. The manager permission remains
+  cluster-wide because this upstream version has no namespace watch
+  restriction. The chart's separate namespaced leader-election Role and
+  RoleBinding are rendered even with `rbac.create=false` and remain an explicit
+  residual. These pins and RBAC declarations do not prove a live WAL archive or
+  recovery.
 - Longhorn `1.12.0` has no official OCI chart. CloudRING vendors the exact
   official release archive, its Apache-2.0 license, and upstream receipt. Flux
   consumes `./charts/longhorn` from the official Git repository pinned to the
@@ -41,7 +51,9 @@ the Longhorn HelmRelease.
 
 These receipts and structural renders do not prove Flux reconciliation,
 workload health, data durability, restore success, or one-node-loss survival.
-Those remain downstream live release gates.
+Those remain downstream live release gates. A structurally valid PostgreSQL
+profile is reported as `source-contract-ready` with live status `blocked`.
+Those values are limited to source validation and leave every runtime gate open.
 
 ## Verification
 
@@ -49,6 +61,8 @@ Those remain downstream live release gates.
 go test ./internal/platformmanifest -count=1
 kubectl kustomize deploy/kubernetes/cert-manager/controllers >/dev/null
 kubectl kustomize deploy/kubernetes/postgresql-ha/controllers >/dev/null
+kubectl kustomize deploy/kubernetes/postgresql-ha/runtime >/dev/null
+kubectl kustomize deploy/kubernetes/postgresql-ha/recovery >/dev/null
 kubectl kustomize deploy/kubernetes/storage/longhorn-three-node/runtime >/dev/null
 helm template longhorn deploy/kubernetes/storage/longhorn-three-node/vendor/longhorn \
   --namespace longhorn-system >/dev/null

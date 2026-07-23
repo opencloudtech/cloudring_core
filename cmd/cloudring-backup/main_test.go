@@ -12,13 +12,39 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/opencloudtech/CloudRING/pkg/backup/drill"
 	"github.com/opencloudtech/CloudRING/pkg/backup/velero118"
+	"github.com/opencloudtech/CloudRING/pkg/secureexec"
 )
 
 func TestNewCollectorKubectlReaderRejectsStdioDescriptor(t *testing.T) {
 	if _, err := newCollectorKubectlReader("kubectl", 2); err == nil {
 		t.Fatal("stdio kubeconfig descriptor must fail closed")
+	}
+}
+
+func TestValidateDrillToolIdentityPinsCurrentExecutable(t *testing.T) {
+	path, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned, err := secureexec.PinAbsolute(path, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := pinned.IdentitySHA256()
+	if err := pinned.Close(); err != nil {
+		t.Fatal(err)
+	}
+	plan := drill.Plan{Tool: drill.ExecutableIdentity{Name: "cloudring-backup", ExecutableSHA256: digest}}
+	if err := validateDrillToolIdentity(plan); err != nil {
+		t.Fatal(err)
+	}
+	plan.Tool.ExecutableSHA256 = strings.Repeat("f", 64)
+	if err := validateDrillToolIdentity(plan); err == nil {
+		t.Fatal("changed backup drill tool digest accepted")
 	}
 }
 

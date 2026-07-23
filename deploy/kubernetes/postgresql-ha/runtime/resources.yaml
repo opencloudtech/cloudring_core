@@ -7,9 +7,80 @@ metadata:
   name: cloudring-database
   labels:
     app.kubernetes.io/part-of: cloudring-postgresql
+    cloudring.org/openbao-client: "true"
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-postgresql-backup-reader
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudring-postgresql-backup-token-request
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    resourceNames:
+      - cloudring-postgresql-backup-reader
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudring-postgresql-backup-token-request
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudring-postgresql-backup-token-request
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: cloudring-postgresql-backup
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-openbao-policy-role-ca-and-live-sync-proof-required
+spec:
+  provider:
+    vault:
+      server: https://openbao-active.openbao.svc:8200
+      path: cloudring
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: openbao-client-ca
+        key: ca.crt
+      auth:
+        kubernetes:
+          mountPath: kubernetes-cloudring-database
+          role: cloudring-postgresql-backup
+          serviceAccountRef:
+            name: cloudring-postgresql-backup-reader
+            audiences:
+              - openbao
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -90,6 +161,11 @@ spec:
       memory: 8Gi
   monitoring:
     enablePodMonitor: false
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: cloudring-postgres-offcell
   backup:
     target: prefer-standby
     volumeSnapshot:
@@ -112,6 +188,95 @@ spec:
   schedule: "0 0 */6 * * *"
   backupOwnerReference: self
   method: volumeSnapshot
+  immediate: false
+  cluster:
+    name: cloudring-postgres
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudring-postgres-offcell-s3
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-secret-store-sync-and-rotation-evidence-required
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: cloudring-postgresql-backup
+  target:
+    name: cloudring-postgres-offcell-s3
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      metadata:
+        labels:
+          cnpg.io/reload: "true"
+  data:
+    - secretKey: ACCESS_KEY_ID
+      remoteRef:
+        key: services/postgresql/offcell-s3
+        property: access-key-id
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: ACCESS_SECRET_KEY
+      remoteRef:
+        key: services/postgresql/offcell-s3
+        property: secret-access-key
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: cloudring-postgres-offcell
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-off-cell-bucket-wal-base-backup-retention-and-object-lock-evidence-required
+    cloudring.org/off-cell-required: "true"
+    cloudring.org/object-lock-required: governance-or-compliance
+    cloudring.org/object-lock-minimum-days: "30"
+spec:
+  retentionPolicy: 30d
+  configuration:
+    destinationPath: s3://cloudring-postgresql-offcell/cloudring-postgres
+    s3Credentials:
+      accessKeyId:
+        name: cloudring-postgres-offcell-s3
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: cloudring-postgres-offcell-s3
+        key: ACCESS_SECRET_KEY
+    data:
+      compression: gzip
+      encryption: AES256
+      jobs: 2
+      immediateCheckpoint: true
+    wal:
+      compression: gzip
+      encryption: AES256
+      maxParallel: 8
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: cloudring-postgres-offcell
+  namespace: cloudring-database
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+spec:
+  schedule: "0 30 0 * * *"
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  target: prefer-standby
   immediate: false
   cluster:
     name: cloudring-postgres

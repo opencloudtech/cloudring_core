@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "operationId", "planSha256", "approvalScopeSha256", "adapterExecutableSha256", "issuedAt", "expiresAt", "approvalTuple", "preflightRequestSha256", "preflightResponseSha256", "preflightEvidenceRef", "preflightEvidenceSha256", "preflightBindingSha256", "reportSha256"],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.backup-drill.approval/v1"}, "operationId": {"type": "string"}, "planSha256": {"$ref": "#/$defs/sha"}, "approvalScopeSha256": {"$ref": "#/$defs/sha"}, "adapterExecutableSha256": {"$ref": "#/$defs/sha"},
+    "issuedAt": {"type": "string", "format": "date-time"}, "expiresAt": {"type": "string", "format": "date-time"}, "approvalTuple": {"type": "string", "pattern": "^goal01-backup-restore@[0-9]+@[0-9a-f]{40}@[0-9a-f]{64}@[0-9a-f]{64}@[0-9a-f]{64}$"},
+    "preflightRequestSha256": {"$ref": "#/$defs/sha"}, "preflightResponseSha256": {"$ref": "#/$defs/sha"}, "preflightEvidenceRef": {"$ref": "#/$defs/pathValue"}, "preflightEvidenceSha256": {"$ref": "#/$defs/sha"}, "preflightBindingSha256": {"$ref": "#/$defs/sha"}, "reportSha256": {"$ref": "#/$defs/sha"}
+  }, "$defs": {"sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "pathValue": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9._/-]{0,227}[a-z0-9_])?$", "not": {"pattern": "\\.\\."}}}
+}

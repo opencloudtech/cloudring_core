@@ -39,7 +39,7 @@ The extraction backlog classifies these paths as publishable `public-core`:
 | `cmd/cloudring-backup` | Read-only baseline, collection, and offline verification workflow. |
 | `cmd/cloudring-id` | Provider-neutral identity contract and offline asymmetric-token verification CLI. |
 | `cmd/cloudring-postgres-migrate` | Pipe-only, secret-safe schema migration entry point for the public transactional-state store. |
-| `deploy/kubernetes/postgresql-ha` | Reusable CloudNativePG HA source profile with pinned controllers, synchronous replication, retained snapshots, and explicit downstream live gates. |
+| `deploy/kubernetes/postgresql-ha` | Reusable CloudNativePG HA source profile with pinned controllers and Barman CNPG-I plugin, synchronous replication, retained local snapshots, off-cell WAL/base-backup policy, isolated recovery template, and explicit downstream live gates. |
 | `internal/migration` | Go and upstream Kubernetes runtime policy guard candidate. |
 | `contracts/release/release-bom-contract.json` | Release BOM machine contract candidate. |
 | `docs/what-is-ocsv3.md` | External service-team SDK documentation entry point. |

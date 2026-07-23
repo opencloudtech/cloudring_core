@@ -124,10 +124,18 @@ loss, recovery, and cleanup evidence; a source render is never live readiness.
 
 The reusable database profile lives under
 `deploy/kubernetes/postgresql-ha`. It pairs the compact Longhorn profile with
-three hard-separated PostgreSQL instances and synchronous quorum durability.
-Downstream installations still own credential injection, sizing, immutable
-off-cell WAL/base backup, isolated restore, application cutover, and live
-primary-node-loss evidence.
+three hard-separated PostgreSQL instances, synchronous quorum durability, the
+official digest-pinned Barman Cloud CNPG-I plugin, continuous off-cell WAL,
+scheduled base backups, and a separate isolated-recovery template. Downstream
+installations still own the exact bucket/endpoint overlay, external credential
+binding, sizing, retention and Object Lock enforcement, real isolated recovery,
+application checksum, cleanup, cutover, and live primary-node-loss evidence.
+They must also provision the two namespace-scoped OpenBao auth roles and CA
+projections, keep recovery S3 and recovery-database credentials separate from
+production, and replace the fail-closed TEST-NET recovery egress placeholders
+with the exact private API and dedicated object-store CIDRs and ports. Because
+raw NetworkPolicy `ipBlock` matching is sensitive to CNI DNAT ordering, the
+effective on-wire destinations must be verified on the target site.
 
 This slice provides profile preflight, deterministic planning, kubeadm
 rendering, and captured-state verification contracts. It is not an installer,

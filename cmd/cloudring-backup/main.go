@@ -19,9 +19,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/opencloudtech/CloudRING/internal/privateartifact"
 	"github.com/opencloudtech/CloudRING/internal/strictjson"
+	"github.com/opencloudtech/CloudRING/pkg/backup/drill"
 	"github.com/opencloudtech/CloudRING/pkg/backup/restoreproof"
 	"github.com/opencloudtech/CloudRING/pkg/backup/velero118"
+	"github.com/opencloudtech/CloudRING/pkg/kubeconfigpipe"
+	"github.com/opencloudtech/CloudRING/pkg/secureexec"
 )
 
 const maxPrivateArtifactBytes = 8 << 20
@@ -48,9 +52,191 @@ func run(ctx context.Context, arguments []string, stdout io.Writer) error {
 		return runCollect(ctx, arguments[1:], stdout)
 	case "verify":
 		return runVerify(arguments[1:], stdout)
+	case "drill":
+		return runDrill(ctx, arguments[1:], stdout)
 	default:
 		return errors.New("unknown command")
 	}
+}
+
+func runDrill(ctx context.Context, arguments []string, stdout io.Writer) error {
+	if len(arguments) == 0 {
+		return errors.New("backup drill command is required")
+	}
+	switch arguments[0] {
+	case "preflight":
+		return runDrillPreflight(ctx, arguments[1:], stdout)
+	case "apply":
+		return runDrillApply(ctx, arguments[1:], stdout, false)
+	case "recover":
+		return runDrillApply(ctx, arguments[1:], stdout, true)
+	case "rollback":
+		return runDrillRollback(ctx, arguments[1:], stdout)
+	default:
+		return errors.New("unknown backup drill command")
+	}
+}
+
+func runDrillPreflight(ctx context.Context, arguments []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("drill preflight", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	planPath := flags.String("plan", "", "strict versioned drill plan JSON")
+	adapterPath := flags.String("adapter", "", "absolute reviewed adapter executable")
+	approvalPath := flags.String("approval", "", "new owner-only approval report")
+	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
+	timeout := flags.Duration("timeout", 2*time.Minute, "adapter execution timeout")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *planPath == "" || *adapterPath == "" || *approvalPath == "" || *kubeconfigFD < 3 || *timeout <= 0 {
+		return errors.New("invalid backup drill preflight arguments")
+	}
+	if err := validateNewArtifactDestinations(*approvalPath); err != nil {
+		return errors.New("backup drill approval destination is unavailable")
+	}
+	replay, err := kubeconfigpipe.NewFromFD(*kubeconfigFD)
+	if err != nil {
+		return errors.New("read backup drill pipe-backed kubeconfig")
+	}
+	defer replay.Close()
+	adapter, err := drill.PinAdapter(*adapterPath, *timeout, replay)
+	if err != nil {
+		return err
+	}
+	defer adapter.Close()
+	var plan drill.Plan
+	if err := readStrictJSON(*planPath, &plan); err != nil {
+		return errors.New("read backup drill plan")
+	}
+	if err := validateDrillToolIdentity(plan); err != nil {
+		return err
+	}
+	report, err := drill.Preflight(ctx, plan, adapter, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if err := privateartifact.WriteNewJSON(*approvalPath, report); err != nil {
+		return errors.New("write backup drill approval report")
+	}
+	_, _ = fmt.Fprintf(stdout, "status=preflight-approved tuple=%s\n", report.ApprovalTuple)
+	return nil
+}
+
+func runDrillApply(ctx context.Context, arguments []string, stdout io.Writer, recoverRun bool) error {
+	name := "drill apply"
+	if recoverRun {
+		name = "drill recover"
+	}
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	planPath := flags.String("plan", "", "strict versioned drill plan JSON")
+	approvalPath := flags.String("approval", "", "owner-only approval report")
+	adapterPath := flags.String("adapter", "", "absolute reviewed adapter executable")
+	journalPath := flags.String("journal", "", "owner-only append-only drill journal")
+	receiptPath := flags.String("receipt", "", "new owner-only execution receipt")
+	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
+	confirmation := flags.String("confirm", "", "exact preflight-bound approval tuple")
+	timeout := flags.Duration("timeout", 10*time.Minute, "per-adapter-step timeout")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *planPath == "" || *approvalPath == "" || *adapterPath == "" || *journalPath == "" || *receiptPath == "" || *kubeconfigFD < 3 || *timeout <= 0 || *confirmation == "" {
+		return errors.New("invalid backup drill execution arguments")
+	}
+	if err := validateNewArtifactDestinations(*receiptPath); err != nil {
+		return errors.New("backup drill receipt destination is unavailable")
+	}
+	if !recoverRun {
+		if err := validateNewArtifactDestinations(*journalPath); err != nil || samePath(*journalPath, *receiptPath) {
+			return errors.New("backup drill journal destination is unavailable")
+		}
+	}
+	replay, err := kubeconfigpipe.NewFromFD(*kubeconfigFD)
+	if err != nil {
+		return errors.New("read backup drill pipe-backed kubeconfig")
+	}
+	defer replay.Close()
+	adapter, err := drill.PinAdapter(*adapterPath, *timeout, replay)
+	if err != nil {
+		return err
+	}
+	defer adapter.Close()
+	var plan drill.Plan
+	if err := readStrictJSON(*planPath, &plan); err != nil {
+		return errors.New("read backup drill plan")
+	}
+	if err := validateDrillToolIdentity(plan); err != nil {
+		return err
+	}
+	var approval drill.ApprovalReport
+	if err := privateartifact.ReadJSON(*approvalPath, &approval); err != nil {
+		return errors.New("read backup drill approval")
+	}
+	var receipt drill.ExecutionReceipt
+	if recoverRun {
+		receipt, err = drill.Recover(ctx, plan, approval, *confirmation, *journalPath, adapter, drill.SystemClock)
+	} else {
+		receipt, err = drill.Apply(ctx, plan, approval, *confirmation, *journalPath, adapter, drill.SystemClock)
+	}
+	if err != nil {
+		return err
+	}
+	if err := privateartifact.WriteNewJSON(*receiptPath, receipt); err != nil {
+		return errors.New("write backup drill execution receipt")
+	}
+	_, _ = fmt.Fprintln(stdout, "status=drill-completed")
+	return nil
+}
+
+func runDrillRollback(ctx context.Context, arguments []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("drill rollback", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	planPath := flags.String("plan", "", "strict versioned drill plan JSON")
+	approvalPath := flags.String("approval", "", "owner-only approval report")
+	adapterPath := flags.String("adapter", "", "absolute reviewed adapter executable")
+	journalPath := flags.String("journal", "", "owner-only append-only drill journal")
+	confirmation := flags.String("confirm", "", "exact preflight-bound approval tuple")
+	kubeconfigFD := flags.Int("kubeconfig-fd", -1, "pipe descriptor containing kubeconfig; consumed once and replayed in memory")
+	timeout := flags.Duration("timeout", 10*time.Minute, "per-adapter-step timeout")
+	if err := flags.Parse(arguments); err != nil || flags.NArg() != 0 || *planPath == "" || *approvalPath == "" || *adapterPath == "" || *journalPath == "" || *confirmation == "" || *kubeconfigFD < 3 || *timeout <= 0 {
+		return errors.New("invalid backup drill rollback arguments")
+	}
+	replay, err := kubeconfigpipe.NewFromFD(*kubeconfigFD)
+	if err != nil {
+		return errors.New("read backup drill pipe-backed kubeconfig")
+	}
+	defer replay.Close()
+	adapter, err := drill.PinAdapter(*adapterPath, *timeout, replay)
+	if err != nil {
+		return err
+	}
+	defer adapter.Close()
+	var plan drill.Plan
+	if err := readStrictJSON(*planPath, &plan); err != nil {
+		return errors.New("read backup drill plan")
+	}
+	if err := validateDrillToolIdentity(plan); err != nil {
+		return err
+	}
+	var approval drill.ApprovalReport
+	if err := privateartifact.ReadJSON(*approvalPath, &approval); err != nil {
+		return errors.New("read backup drill approval")
+	}
+	if err := drill.Rollback(ctx, plan, approval, *confirmation, *journalPath, adapter, drill.SystemClock); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(stdout, "status=drill-rolled-back")
+	return nil
+}
+
+func validateDrillToolIdentity(plan drill.Plan) error {
+	path, err := os.Executable()
+	if err != nil {
+		return errors.New("resolve backup drill tool identity")
+	}
+	pinned, err := secureexec.PinAbsolute(path, time.Minute)
+	if err != nil {
+		return errors.New("pin backup drill tool identity")
+	}
+	defer pinned.Close()
+	if pinned.IdentitySHA256() != plan.Tool.ExecutableSHA256 {
+		return errors.New("backup drill tool executable digest differs from plan")
+	}
+	return nil
 }
 
 func runObserveDataUploadResult(ctx context.Context, arguments []string, stdout io.Writer) error {

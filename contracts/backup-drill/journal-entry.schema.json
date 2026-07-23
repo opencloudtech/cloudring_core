@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "sequence", "operationId", "planSha256", "approvalSha256", "approvalScopeSha256", "adapterExecutableSha256", "step", "requestSha256", "responseSha256", "recordedAt", "entrySha256"],
+  "properties": {
+    "schemaVersion": {"const": "cloudring.backup-drill.journal-entry/v1"}, "sequence": {"type": "integer", "minimum": 1}, "operationId": {"type": "string"},
+    "planSha256": {"$ref": "#/$defs/sha"}, "approvalSha256": {"$ref": "#/$defs/sha"}, "approvalScopeSha256": {"$ref": "#/$defs/sha"}, "adapterExecutableSha256": {"$ref": "#/$defs/sha"},
+    "step": {"type": "string"}, "requestSha256": {"$ref": "#/$defs/sha"}, "responseSha256": {"$ref": "#/$defs/sha"}, "response": {"$ref": "adapter-response.schema.json"}, "previousEntrySha256": {"$ref": "#/$defs/sha"}, "recordedAt": {"type": "string", "format": "date-time"}, "entrySha256": {"$ref": "#/$defs/sha"}
+  }, "$defs": {"sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

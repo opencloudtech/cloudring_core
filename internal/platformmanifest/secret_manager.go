@@ -32,11 +32,14 @@ exec bao status`
 )
 
 type Report struct {
-	Status    string   `json:"status"`
-	Profile   string   `json:"profile"`
-	Files     int      `json:"files"`
-	Documents int      `json:"documents"`
-	Checks    []string `json:"checks"`
+	Status     string   `json:"status"`
+	LiveStatus string   `json:"liveStatus,omitempty"`
+	Profile    string   `json:"profile"`
+	Files      int      `json:"files"`
+	Documents  int      `json:"documents"`
+	Checks     []string `json:"checks"`
+	Blockers   []string `json:"blockers,omitempty"`
+	NonClaims  []string `json:"nonClaims,omitempty"`
 }
 
 type object struct {
