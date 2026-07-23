@@ -24,6 +24,7 @@ func TestVerifyProvesUniqueInventoryOwnershipWithoutChangingPrune(t *testing.T) 
 		SourceArtifact:           SourceArtifactSnapshot{Kind: "GitRepository", Namespace: "flux-system", Name: "source", Generation: 1, ObservedGeneration: 1, Ready: true, Revision: testSourceRevision, Digest: testArtifactDigest},
 		AcceptedSourceRevision:   testSourceRevision,
 		AcceptedArtifactDigest:   testArtifactDigest,
+		AcceptedPublicGitlinkSHA: contract.Spec.SourceArtifact.PublicGitlinkSHA,
 		ObservedPublicGitlinkSHA: contract.Spec.SourceArtifact.PublicGitlinkSHA,
 	}
 
@@ -42,6 +43,12 @@ func TestVerifyProvesUniqueInventoryOwnershipWithoutChangingPrune(t *testing.T) 
 	}
 	if !report.DriftProof.TargetInventoryOwned {
 		t.Fatal("drift target ownership was not proven")
+	}
+	if !report.SourceArtifact.Exact || !report.SourceArtifact.PublicGitlinkExact ||
+		report.SourceArtifact.ExpectedPublicGitlinkSHA != contract.Spec.SourceArtifact.PublicGitlinkSHA ||
+		report.SourceArtifact.AcceptedPublicGitlinkSHA != contract.Spec.SourceArtifact.PublicGitlinkSHA ||
+		report.SourceArtifact.ObservedPublicGitlinkSHA != contract.Spec.SourceArtifact.PublicGitlinkSHA {
+		t.Fatalf("public gitlink was not bound across contract, receipt, observation, and report: %+v", report.SourceArtifact)
 	}
 }
 
@@ -71,8 +78,14 @@ func TestVerifyRejectsRootSpecAndSourceReceiptDrift(t *testing.T) {
 		}, "source_artifact_digest_mismatch"},
 		{"source not ready", func(snapshot *Snapshot) { snapshot.SourceArtifact.Ready = false }, "source_artifact_not_ready"},
 		{"missing accepted receipt", func(snapshot *Snapshot) { snapshot.AcceptedSourceRevision = "" }, "accepted_source_receipt_invalid"},
-		{"missing public gitlink", func(snapshot *Snapshot) { snapshot.ObservedPublicGitlinkSHA = "" }, "observed_public_gitlink_invalid"},
-		{"wrong public gitlink", func(snapshot *Snapshot) { snapshot.ObservedPublicGitlinkSHA = strings.Repeat("b", 40) }, "public_gitlink_mismatch"},
+		{"missing accepted public gitlink", func(snapshot *Snapshot) { snapshot.AcceptedPublicGitlinkSHA = "" }, "accepted_public_gitlink_invalid"},
+		{"wrong accepted public gitlink", func(snapshot *Snapshot) { snapshot.AcceptedPublicGitlinkSHA = strings.Repeat("b", 40) }, "accepted_public_gitlink_mismatch"},
+		{"accepted and observed public gitlink agree on wrong SHA", func(snapshot *Snapshot) {
+			snapshot.AcceptedPublicGitlinkSHA = strings.Repeat("b", 40)
+			snapshot.ObservedPublicGitlinkSHA = snapshot.AcceptedPublicGitlinkSHA
+		}, "accepted_public_gitlink_mismatch"},
+		{"missing observed public gitlink", func(snapshot *Snapshot) { snapshot.ObservedPublicGitlinkSHA = "" }, "observed_public_gitlink_invalid"},
+		{"observed public gitlink differs from receipt", func(snapshot *Snapshot) { snapshot.ObservedPublicGitlinkSHA = strings.Repeat("b", 40) }, "public_gitlink_receipt_mismatch"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -180,6 +193,26 @@ func TestVerifyRejectsPartiallyAllowlistedCriticalFamily(t *testing.T) {
 	assertBlocker(t, report, "critical_family_ownership_incomplete")
 }
 
+func TestVerifyRejectsEveryIncompleteSourcedFamily(t *testing.T) {
+	contract := testContract()
+	snapshot := readyTestSnapshot(t, contract)
+	delete(snapshot.Resources, "services")
+
+	report, code, err := Verify(contract, snapshot)
+	if err != nil {
+		t.Fatalf("Verify incomplete family returned error: %v", err)
+	}
+	if code != 2 || report.PruneEligible {
+		t.Fatalf("incomplete family code/pruneEligible = %d/%t, want 2/false", code, report.PruneEligible)
+	}
+	assertBlocker(t, report, "required_family_unobserved")
+	for _, family := range report.Families {
+		if family.ID == "services" && family.OwnershipComplete {
+			t.Fatal("unobserved sourced family was marked ownership-complete")
+		}
+	}
+}
+
 func TestVerifyBlocksDuplicateOwnershipAndPrematurePrune(t *testing.T) {
 	contract := testContract()
 	target := contract.Spec.DriftProof.Target
@@ -234,6 +267,12 @@ func TestDecodeContractRejectsUnknownAndTrailingFields(t *testing.T) {
 	}
 	if _, err := DecodeContract(strings.NewReader(strings.Replace(valid, `"metadata":{"name":"test"}`, `"metadata":{"name":"test","name":"duplicate"}`, 1))); err == nil {
 		t.Fatal("DecodeContract accepted duplicate object field")
+	}
+	if _, err := DecodeContract(strings.NewReader(strings.Replace(valid, `"apiVersion":"cloudring.io/v1alpha1"`, `"apiVersion":"cloudring.io/v1alpha1","apiVersion":"cloudring.io/v1alpha1"`, 1))); err == nil {
+		t.Fatal("DecodeContract accepted duplicate top-level field")
+	}
+	if _, err := DecodeContract(strings.NewReader(strings.Replace(valid, `"expectedOwner":{"namespace":"flux-system","name":"foundation"}`, `"expectedOwner":{"namespace":"flux-system","name":"foundation","name":"duplicate"}`, 1))); err == nil {
+		t.Fatal("DecodeContract accepted deeply nested duplicate object field")
 	}
 	if _, err := DecodeContract(strings.NewReader(valid + `{}`)); err == nil {
 		t.Fatal("DecodeContract accepted trailing JSON")
@@ -338,6 +377,15 @@ func TestValidateContractRejectsExpectedObjectSharedAcrossFamilies(t *testing.T)
 	}
 }
 
+func TestValidateContractRejectsDuplicateExpectedObjectWithinFamily(t *testing.T) {
+	contract := testContract()
+	contract.Spec.RequiredFamilies[0].ExpectedObjects = append(contract.Spec.RequiredFamilies[0].ExpectedObjects, contract.Spec.RequiredFamilies[0].ExpectedObjects[0])
+	contract.Spec.RequiredFamilies[0].MinimumCount = 2
+	if err := ValidateContract(contract); err == nil {
+		t.Fatal("ValidateContract accepted a duplicate expected object within one family")
+	}
+}
+
 func testContract() Contract {
 	active, prune, wait := false, false, true
 	return Contract{
@@ -410,6 +458,7 @@ func readyTestSnapshot(t *testing.T, contract Contract) Snapshot {
 		SourceArtifact:           SourceArtifactSnapshot{Kind: "GitRepository", Namespace: "flux-system", Name: "source", Generation: 1, ObservedGeneration: 1, Ready: true, Revision: testSourceRevision, Digest: testArtifactDigest},
 		AcceptedSourceRevision:   testSourceRevision,
 		AcceptedArtifactDigest:   testArtifactDigest,
+		AcceptedPublicGitlinkSHA: contract.Spec.SourceArtifact.PublicGitlinkSHA,
 		ObservedPublicGitlinkSHA: contract.Spec.SourceArtifact.PublicGitlinkSHA,
 	}
 }
@@ -422,8 +471,13 @@ func TestVerifyDoesNotReflectMalformedLiveSourceOrInventoryValues(t *testing.T) 
 	snapshot.SourceArtifact.Name = secretLike
 	snapshot.SourceArtifact.Revision = secretLike
 	snapshot.SourceArtifact.Digest = secretLike
+	snapshot.AcceptedSourceRevision = secretLike
+	snapshot.AcceptedArtifactDigest = secretLike
+	snapshot.AcceptedPublicGitlinkSHA = secretLike
+	snapshot.ObservedPublicGitlinkSHA = secretLike
 	snapshot.Kustomizations[0].LastAppliedRevision = secretLike
 	snapshot.Kustomizations[0].Inventory = append(snapshot.Kustomizations[0].Inventory, InventoryEntry{ID: secretLike, Version: secretLike})
+	snapshot.Kustomizations[0].Inventory = append(snapshot.Kustomizations[0].Inventory, InventoryEntry{ID: "platform-system_provider-api__Service", Version: secretLike})
 	snapshot.Kustomizations = append(snapshot.Kustomizations, KustomizationSnapshot{
 		Namespace: secretLike, Name: secretLike, Generation: 1, ObservedGeneration: 1,
 	})
@@ -444,6 +498,175 @@ func TestVerifyDoesNotReflectMalformedLiveSourceOrInventoryValues(t *testing.T) 
 	}
 	if strings.Contains(string(payload), secretLike) {
 		t.Fatal("report reflected malformed live evidence")
+	}
+	assertBlocker(t, report, "accepted_source_receipt_invalid")
+	assertBlocker(t, report, "accepted_public_gitlink_invalid")
+	assertBlocker(t, report, "observed_public_gitlink_invalid")
+	assertBlocker(t, report, "flux_inventory_entry_invalid")
+}
+
+func TestInventoryIDRejectsMalformedIdentityComponents(t *testing.T) {
+	tests := []ResourceRef{
+		{APIVersion: "v1/extra/more", Kind: "Service", Namespace: "platform-system", Name: "provider-api"},
+		{APIVersion: "bad..group/v1", Kind: "Service", Namespace: "platform-system", Name: "provider-api"},
+		{APIVersion: "v1", Kind: "Service/Secret", Namespace: "platform-system", Name: "provider-api"},
+		{APIVersion: "v1", Kind: "Service", Namespace: "BAD", Name: "provider-api"},
+		{APIVersion: "v1", Kind: "Service", Namespace: "platform-system", Name: "bad..name"},
+	}
+	for _, ref := range tests {
+		if _, err := InventoryID(ref); err == nil {
+			t.Fatalf("InventoryID accepted malformed resource identity: %+v", ref)
+		}
+	}
+}
+
+func TestInventoryIDMatchesFluxObjMetadataRBACEncoding(t *testing.T) {
+	ref := ResourceRef{
+		APIVersion: "rbac.authorization.k8s.io/v1",
+		Kind:       "ClusterRole",
+		Name:       "system:controller",
+	}
+	entry, err := InventoryID(ref)
+	if err != nil {
+		t.Fatalf("InventoryID returned error: %v", err)
+	}
+	if entry.ID != "_system__controller_rbac.authorization.k8s.io_ClusterRole" || entry.Version != "v1" {
+		t.Fatalf("InventoryID RBAC entry = %+v, want Flux ObjMetadata encoding", entry)
+	}
+	parsed, err := parseInventoryEntry(entry)
+	if err != nil {
+		t.Fatalf("parseInventoryEntry returned error: %v", err)
+	}
+	if parsed != ref {
+		t.Fatalf("parseInventoryEntry = %+v, want %+v", parsed, ref)
+	}
+}
+
+func TestVerifyProvesFluxEncodedRBACInventoryOwnership(t *testing.T) {
+	contract := testContract()
+	rbac := ResourceRef{
+		APIVersion: "rbac.authorization.k8s.io/v1",
+		Kind:       "ClusterRole",
+		Name:       "system:controller",
+	}
+	contract.Spec.Scope.CriticalFamilyIDs = append(contract.Spec.Scope.CriticalFamilyIDs, "cluster-roles")
+	contract.Spec.RequiredFamilies = append(contract.Spec.RequiredFamilies, ResourceFamily{
+		ID:              "cluster-roles",
+		APIVersion:      rbac.APIVersion,
+		Kind:            rbac.Kind,
+		Resource:        "clusterroles.rbac.authorization.k8s.io",
+		LabelSelector:   "cloudring.io/installation=test",
+		MinimumCount:    1,
+		Critical:        true,
+		SourceState:     "sourced",
+		ExpectedOwner:   NamespacedName{Namespace: "flux-system", Name: "foundation"},
+		ExpectedObjects: []ResourceRef{rbac},
+	})
+	snapshot := readyTestSnapshot(t, contract)
+	entry, err := InventoryID(rbac)
+	if err != nil {
+		t.Fatalf("InventoryID returned error: %v", err)
+	}
+	snapshot.Kustomizations[0].Inventory = append(snapshot.Kustomizations[0].Inventory, entry)
+	snapshot.Resources["cluster-roles"] = []ResourceRef{rbac}
+
+	report, code, err := Verify(contract, snapshot)
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if code != 0 || report.Status != statusReady || !report.PruneEligible {
+		t.Fatalf("RBAC ownership code/status/pruneEligible = %d/%s/%t, want 0/ready/true; blockers=%+v", code, report.Status, report.PruneEligible, report.Blockers)
+	}
+}
+
+func TestParseInventoryEntryUsesFluxFirstAndLastSeparators(t *testing.T) {
+	entry := InventoryEntry{
+		ID:      "test-namespace_system____leader_locking_rbac.authorization.k8s.io_Role",
+		Version: "v1",
+	}
+	parsed, err := parseInventoryEntry(entry)
+	if err != nil {
+		t.Fatalf("parseInventoryEntry returned error: %v", err)
+	}
+	want := ResourceRef{
+		APIVersion: "rbac.authorization.k8s.io/v1",
+		Kind:       "Role",
+		Namespace:  "test-namespace",
+		Name:       "system::leader_locking",
+	}
+	if parsed != want {
+		t.Fatalf("parseInventoryEntry = %+v, want %+v", parsed, want)
+	}
+}
+
+func TestAPIVersionUsesKubernetesDNS1035VersionSemantics(t *testing.T) {
+	ref := ResourceRef{APIVersion: "example.io/v1-alpha1", Kind: "Widget", Namespace: "default", Name: "test"}
+	entry, err := InventoryID(ref)
+	if err != nil {
+		t.Fatalf("InventoryID rejected DNS-1035 API version: %v", err)
+	}
+	if entry.Version != "v1-alpha1" {
+		t.Fatalf("InventoryID version = %q, want v1-alpha1", entry.Version)
+	}
+	if parsed, err := parseInventoryEntry(entry); err != nil || parsed != ref {
+		t.Fatalf("parseInventoryEntry(%+v) = %+v, %v; want %+v", entry, parsed, err, ref)
+	}
+
+	invalidVersions := []string{
+		"1v",
+		"V1",
+		"v1_foo",
+		"v1-",
+		strings.Repeat("a", 64),
+	}
+	for _, version := range invalidVersions {
+		entry := InventoryEntry{ID: "default_test_example.io_Widget", Version: version}
+		if _, err := parseInventoryEntry(entry); err == nil {
+			t.Fatalf("parseInventoryEntry accepted invalid API version %q", version)
+		}
+	}
+}
+
+func TestKindUsesMixedCaseDNS1035Semantics(t *testing.T) {
+	ref := ResourceRef{APIVersion: "example.io/v1", Kind: "My-Widget", Namespace: "default", Name: "test"}
+	entry, err := InventoryID(ref)
+	if err != nil {
+		t.Fatalf("InventoryID rejected mixed-case DNS-1035 Kind: %v", err)
+	}
+	if parsed, err := parseInventoryEntry(entry); err != nil || parsed != ref {
+		t.Fatalf("parseInventoryEntry(%+v) = %+v, %v; want %+v", entry, parsed, err, ref)
+	}
+
+	invalidKinds := []string{
+		"1Widget",
+		"-Widget",
+		"Widget-",
+		"My_Widget",
+		"My/Widget",
+		strings.Repeat("W", 64),
+	}
+	for _, kind := range invalidKinds {
+		invalid := ref
+		invalid.Kind = kind
+		if _, err := InventoryID(invalid); err == nil {
+			t.Fatalf("InventoryID accepted invalid Kind %q", kind)
+		}
+	}
+}
+
+func TestParseInventoryEntryRejectsMalformedFluxMetadata(t *testing.T) {
+	tests := []InventoryEntry{
+		{ID: "missing-separators", Version: "v1"},
+		{ID: "_name_group", Version: "v1"},
+		{ID: "bad_namespace_name_group_Kind", Version: "v1"},
+		{ID: "_bad%name_rbac.authorization.k8s.io_ClusterRole", Version: "v1"},
+		{ID: "default_name_bad..group_Kind", Version: "v1"},
+		{ID: "default_name_group_Bad/Kind", Version: "v1"},
+	}
+	for _, entry := range tests {
+		if _, err := parseInventoryEntry(entry); err == nil {
+			t.Fatalf("parseInventoryEntry accepted malformed entry %+v", entry)
+		}
 	}
 }
 

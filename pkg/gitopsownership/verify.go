@@ -21,6 +21,9 @@ var (
 	acceptedSourceRevisionPattern = regexp.MustCompile(`^main@sha1:[0-9a-f]{40}$`)
 	artifactDigestPattern         = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	gitSHA1Pattern                = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	dns1035LabelPattern           = regexp.MustCompile(`^[a-z](?:[-a-z0-9]*[a-z0-9])?$`)
+	dnsLabelPattern               = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+	dnsSubdomainPattern           = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$`)
 )
 
 const (
@@ -299,6 +302,7 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 			Revision: canonicalSourceRevision(snapshot.SourceArtifact.Revision), Digest: canonicalArtifactDigest(snapshot.SourceArtifact.Digest),
 			AcceptedRevision: canonicalSourceRevision(snapshot.AcceptedSourceRevision), AcceptedDigest: canonicalArtifactDigest(snapshot.AcceptedArtifactDigest),
 			ExpectedPublicGitlinkSHA: contract.Spec.SourceArtifact.PublicGitlinkSHA,
+			AcceptedPublicGitlinkSHA: canonicalGitSHA1(snapshot.AcceptedPublicGitlinkSHA),
 			ObservedPublicGitlinkSHA: canonicalGitSHA1(snapshot.ObservedPublicGitlinkSHA),
 		},
 	}
@@ -319,13 +323,23 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 	if snapshot.SourceArtifact.Digest != snapshot.AcceptedArtifactDigest {
 		block(&report, "source_artifact_digest_mismatch", "live GitRepository artifact digest differs from the accepted artifact digest", "", "")
 	}
-	publicGitlinkValid := gitSHA1Pattern.MatchString(snapshot.ObservedPublicGitlinkSHA)
-	if !publicGitlinkValid {
+	acceptedPublicGitlinkValid := gitSHA1Pattern.MatchString(snapshot.AcceptedPublicGitlinkSHA)
+	if !acceptedPublicGitlinkValid {
+		block(&report, "accepted_public_gitlink_invalid", "accepted public gitlink receipt must be one canonical lowercase SHA-1", "", "")
+	} else if snapshot.AcceptedPublicGitlinkSHA != contract.Spec.SourceArtifact.PublicGitlinkSHA {
+		block(&report, "accepted_public_gitlink_mismatch", "accepted public gitlink receipt differs from the contracted CloudRING revision", "", "")
+	}
+	observedPublicGitlinkValid := gitSHA1Pattern.MatchString(snapshot.ObservedPublicGitlinkSHA)
+	if !observedPublicGitlinkValid {
 		block(&report, "observed_public_gitlink_invalid", "observed public gitlink must be one canonical lowercase SHA-1", "", "")
-	} else if snapshot.ObservedPublicGitlinkSHA != contract.Spec.SourceArtifact.PublicGitlinkSHA {
+	} else if acceptedPublicGitlinkValid && snapshot.ObservedPublicGitlinkSHA != snapshot.AcceptedPublicGitlinkSHA {
+		block(&report, "public_gitlink_receipt_mismatch", "observed downstream public gitlink differs from the accepted public gitlink receipt", "", "")
+	} else if acceptedPublicGitlinkValid && snapshot.ObservedPublicGitlinkSHA != contract.Spec.SourceArtifact.PublicGitlinkSHA {
 		block(&report, "public_gitlink_mismatch", "observed downstream public gitlink differs from the contracted CloudRING revision", "", "")
 	}
-	report.SourceArtifact.PublicGitlinkExact = publicGitlinkValid && snapshot.ObservedPublicGitlinkSHA == contract.Spec.SourceArtifact.PublicGitlinkSHA
+	report.SourceArtifact.PublicGitlinkExact = acceptedPublicGitlinkValid && observedPublicGitlinkValid &&
+		snapshot.AcceptedPublicGitlinkSHA == contract.Spec.SourceArtifact.PublicGitlinkSHA &&
+		snapshot.ObservedPublicGitlinkSHA == snapshot.AcceptedPublicGitlinkSHA
 	report.SourceArtifact.Exact = acceptedInputsValid && sourceIdentityExact && snapshot.SourceArtifact.Generation > 0 && snapshot.SourceArtifact.ObservedGeneration == snapshot.SourceArtifact.Generation && snapshot.SourceArtifact.Ready && snapshot.SourceArtifact.Revision == snapshot.AcceptedSourceRevision && snapshot.SourceArtifact.Digest == snapshot.AcceptedArtifactDigest && report.SourceArtifact.PublicGitlinkExact
 
 	rootSpecs := make(map[string]RootSpecContract, len(contract.Spec.RootSpecs))
@@ -577,15 +591,32 @@ func rootSpecSHA256(root KustomizationSnapshot) string {
 }
 
 func parseInventoryEntry(entry InventoryEntry) (ResourceRef, error) {
-	parts := strings.Split(entry.ID, "_")
-	if len(parts) != 4 || entry.Version == "" {
+	if !validDNS1035Label(entry.Version) {
 		return ResourceRef{}, errors.New("Flux inventory entry id/version is invalid")
 	}
-	ref := ResourceRef{Namespace: parts[0], Name: parts[1], Kind: parts[3]}
-	if parts[2] == "" {
+	namespaceEnd := strings.Index(entry.ID, "_")
+	if namespaceEnd < 0 {
+		return ResourceRef{}, errors.New("Flux inventory entry id/version is invalid")
+	}
+	namespace := entry.ID[:namespaceEnd]
+	remainder := entry.ID[namespaceEnd+1:]
+	kindStart := strings.LastIndex(remainder, "_")
+	if kindStart < 0 {
+		return ResourceRef{}, errors.New("Flux inventory entry id/version is invalid")
+	}
+	kind := remainder[kindStart+1:]
+	remainder = remainder[:kindStart]
+	groupStart := strings.LastIndex(remainder, "_")
+	if groupStart < 0 {
+		return ResourceRef{}, errors.New("Flux inventory entry id/version is invalid")
+	}
+	group := remainder[groupStart+1:]
+	name := strings.ReplaceAll(remainder[:groupStart], "__", ":")
+	ref := ResourceRef{Namespace: namespace, Name: name, Kind: kind}
+	if group == "" {
 		ref.APIVersion = entry.Version
 	} else {
-		ref.APIVersion = parts[2] + "/" + entry.Version
+		ref.APIVersion = group + "/" + entry.Version
 	}
 	if err := validateRef(ref); err != nil {
 		return ResourceRef{}, err
@@ -623,17 +654,73 @@ func InventoryID(ref ResourceRef) (InventoryEntry, error) {
 		version = group
 		group = ""
 	}
-	return InventoryEntry{ID: strings.Join([]string{ref.Namespace, ref.Name, group, ref.Kind}, "_"), Version: version}, nil
+	name := ref.Name
+	if isRBACResource(group, ref.Kind) {
+		name = strings.ReplaceAll(name, ":", "__")
+	}
+	return InventoryEntry{ID: strings.Join([]string{ref.Namespace, name, group, ref.Kind}, "_"), Version: version}, nil
 }
 
 func validateRef(ref ResourceRef) error {
-	if ref.APIVersion == "" || ref.Kind == "" || ref.Name == "" {
+	group, _, _ := strings.Cut(ref.APIVersion, "/")
+	if !validAPIVersion(ref.APIVersion) || !validKind(ref.Kind) || !validResourceName(group, ref.Kind, ref.Name) {
 		return errors.New("resource reference requires apiVersion, kind, and name")
 	}
-	if strings.ContainsAny(ref.Namespace+ref.Name, "_\n\r\t") {
-		return errors.New("resource namespace and name must be Kubernetes names without underscores or whitespace")
+	if ref.Namespace != "" && !validDNSLabel(ref.Namespace) {
+		return errors.New("resource namespace must be a Kubernetes DNS label")
 	}
 	return nil
+}
+
+func validDNSLabel(value string) bool {
+	return len(value) <= 63 && dnsLabelPattern.MatchString(value)
+}
+
+func validDNSSubdomain(value string) bool {
+	if len(value) == 0 || len(value) > 253 || !dnsSubdomainPattern.MatchString(value) {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if !validDNSLabel(label) {
+			return false
+		}
+	}
+	return true
+}
+
+func validAPIVersion(value string) bool {
+	group, version, grouped := strings.Cut(value, "/")
+	if !grouped {
+		return validDNS1035Label(group)
+	}
+	return !strings.Contains(version, "/") && validDNSSubdomain(group) && validDNS1035Label(version)
+}
+
+func validDNS1035Label(value string) bool {
+	return len(value) <= 63 && dns1035LabelPattern.MatchString(value)
+}
+
+func validKind(value string) bool {
+	return validDNS1035Label(strings.ToLower(value))
+}
+
+func validResourceName(group, kind, name string) bool {
+	if !isRBACResource(group, kind) {
+		return validDNSSubdomain(name)
+	}
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/%")
+}
+
+func isRBACResource(group, kind string) bool {
+	if group != "rbac.authorization.k8s.io" {
+		return false
+	}
+	switch kind {
+	case "Role", "ClusterRole", "RoleBinding", "ClusterRoleBinding":
+		return true
+	default:
+		return false
+	}
 }
 
 func refKey(ref ResourceRef) string {
