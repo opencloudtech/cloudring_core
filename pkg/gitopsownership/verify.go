@@ -27,12 +27,13 @@ var (
 )
 
 const (
-	contractAPIVersion = "cloudring.io/v1alpha1"
-	contractKind       = "GitOpsOwnershipContract"
-	reportAPIVersion   = "cloudring.gitops.ownership/v1"
-	statusReady        = "ready"
-	statusBlocked      = "blocked"
-	driftMode          = "read-only-plan"
+	ContractAPIVersion       = "cloudring.io/v1alpha2"
+	ContractKind             = "GitOpsOwnershipContract"
+	ReportAPIVersion         = "cloudring.gitops.ownership/v2"
+	DiscoveryModeClosedWorld = "closed-world"
+	statusReady              = "ready"
+	statusBlocked            = "blocked"
+	driftMode                = "read-only-plan"
 )
 
 func DecodeContract(reader io.Reader) (Contract, error) {
@@ -61,8 +62,8 @@ func ValidateAcceptedSource(revision, digest string) error {
 }
 
 func ValidateContract(contract Contract) error {
-	if contract.APIVersion != contractAPIVersion || contract.Kind != contractKind {
-		return fmt.Errorf("GitOps ownership contract identity must be %s %s", contractAPIVersion, contractKind)
+	if contract.APIVersion != ContractAPIVersion || contract.Kind != ContractKind {
+		return fmt.Errorf("GitOps ownership contract identity must be %s %s", ContractAPIVersion, ContractKind)
 	}
 	if strings.TrimSpace(contract.Metadata.Name) == "" {
 		return errors.New("GitOps ownership contract metadata.name is required")
@@ -86,6 +87,7 @@ func ValidateContract(contract Contract) error {
 	familyIDs := map[string]bool{}
 	criticalIDs := map[string]bool{}
 	expectedObjectFamilies := map[string]string{}
+	discoveryScopes := map[string]string{}
 	for _, id := range contract.Spec.Scope.CriticalFamilyIDs {
 		if id == "" || criticalIDs[id] {
 			return fmt.Errorf("scope critical family id %q must be non-empty and unique", id)
@@ -105,18 +107,47 @@ func ValidateContract(contract Contract) error {
 		}
 		switch family.SourceState {
 		case "sourced":
-			if family.LabelSelector == "" || family.MinimumCount < 1 || len(family.ExpectedObjects) == 0 || family.MinimumCount != len(family.ExpectedObjects) {
-				return fmt.Errorf("sourced resource family %q must set labelSelector and an exact expectedObjects/minimumCount inventory", family.ID)
+			if family.MinimumCount < 1 || len(family.ExpectedObjects) == 0 || family.MinimumCount != len(family.ExpectedObjects) {
+				return fmt.Errorf("sourced resource family %q must set an exact expectedObjects/minimumCount inventory", family.ID)
+			}
+			if family.Discovery.Mode != DiscoveryModeClosedWorld {
+				return fmt.Errorf("sourced resource family %q discovery.mode must be %q", family.ID, DiscoveryModeClosedWorld)
+			}
+			if family.Namespaced && len(family.Discovery.Namespaces) == 0 {
+				return fmt.Errorf("namespaced sourced resource family %q requires exact discovery.namespaces", family.ID)
+			}
+			if !family.Namespaced && len(family.Discovery.Namespaces) != 0 {
+				return fmt.Errorf("cluster-scoped sourced resource family %q must not set discovery.namespaces", family.ID)
 			}
 			if family.ExpectedOwner.Namespace == "" || family.ExpectedOwner.Name == "" {
 				return fmt.Errorf("sourced resource family %q requires expectedOwner", family.ID)
+			}
+			namespaceSet := map[string]bool{}
+			for _, namespace := range family.Discovery.Namespaces {
+				if !validDNSLabel(namespace) || namespaceSet[namespace] {
+					return fmt.Errorf("resource family %q discovery namespaces must be valid and unique", family.ID)
+				}
+				namespaceSet[namespace] = true
+				scopeKey := family.APIVersion + ":" + family.Resource + ":" + namespace
+				if previous, exists := discoveryScopes[scopeKey]; exists {
+					return fmt.Errorf("closed-world discovery scope %q overlaps resource families %q and %q", scopeKey, previous, family.ID)
+				}
+				discoveryScopes[scopeKey] = family.ID
+			}
+			if !family.Namespaced {
+				scopeKey := family.APIVersion + ":" + family.Resource + ":<cluster>"
+				if previous, exists := discoveryScopes[scopeKey]; exists {
+					return fmt.Errorf("closed-world discovery scope %q overlaps resource families %q and %q", scopeKey, previous, family.ID)
+				}
+				discoveryScopes[scopeKey] = family.ID
 			}
 			seenExpected := map[string]bool{}
 			for _, ref := range family.ExpectedObjects {
 				if err := validateRef(ref); err != nil {
 					return fmt.Errorf("resource family %q has invalid expected object: %w", family.ID, err)
 				}
-				if ref.APIVersion != family.APIVersion || ref.Kind != family.Kind || (family.Namespaced && ref.Namespace == "") || (!family.Namespaced && ref.Namespace != "") {
+				if ref.APIVersion != family.APIVersion || ref.Kind != family.Kind ||
+					(family.Namespaced && !namespaceSet[ref.Namespace]) || (!family.Namespaced && ref.Namespace != "") {
 					return fmt.Errorf("resource family %q expected object does not match its identity and scope", family.ID)
 				}
 				key := refKey(ref)
@@ -129,8 +160,28 @@ func ValidateContract(contract Contract) error {
 				seenExpected[key] = true
 				expectedObjectFamilies[key] = family.ID
 			}
+			seenExternal := map[string]bool{}
+			for _, ref := range family.Discovery.ExternalObjects {
+				if err := validateRef(ref); err != nil {
+					return fmt.Errorf("resource family %q has invalid external object: %w", family.ID, err)
+				}
+				if ref.APIVersion != family.APIVersion || ref.Kind != family.Kind ||
+					(family.Namespaced && !namespaceSet[ref.Namespace]) || (!family.Namespaced && ref.Namespace != "") {
+					return fmt.Errorf("resource family %q external object does not match its identity and scope", family.ID)
+				}
+				key := refKey(ref)
+				if seenExternal[key] || seenExpected[key] {
+					return fmt.Errorf("resource family %q external object %s must be unique and disjoint from expectedObjects", family.ID, key)
+				}
+				if previousFamily, exists := expectedObjectFamilies[key]; exists {
+					return fmt.Errorf("external object %s overlaps expected inventory in resource family %q", key, previousFamily)
+				}
+				seenExternal[key] = true
+			}
 		case "not-sourced":
-			if family.MissingSourceBlocker == "" || family.MinimumCount != 0 || len(family.ExpectedObjects) != 0 || family.LabelSelector != "" || family.ExpectedOwner != (NamespacedName{}) {
+			if family.MissingSourceBlocker == "" || family.MinimumCount != 0 || len(family.ExpectedObjects) != 0 ||
+				family.LabelSelector != "" || family.ExpectedOwner != (NamespacedName{}) ||
+				family.Discovery.Mode != "" || len(family.Discovery.Namespaces) != 0 || len(family.Discovery.ExternalObjects) != 0 {
 				return fmt.Errorf("not-sourced resource family %q must declare only missingSourceBlocker and zero inventory", family.ID)
 			}
 		default:
@@ -145,16 +196,8 @@ func ValidateContract(contract Contract) error {
 			return fmt.Errorf("scope critical family %q is not declared in requiredFamilies", id)
 		}
 	}
-	allow := map[string]bool{}
-	for _, ref := range contract.Spec.AllowUnmanaged {
-		if err := validateRef(ref); err != nil {
-			return fmt.Errorf("invalid allowUnmanaged entry: %w", err)
-		}
-		key := refKey(ref)
-		if allow[key] {
-			return fmt.Errorf("duplicate allowUnmanaged entry %s", key)
-		}
-		allow[key] = true
+	if len(contract.Spec.AllowUnmanaged) != 0 {
+		return errors.New("closed-world ownership contracts require an empty allowUnmanaged list; declare reviewed non-CloudRING occupants as discovery.externalObjects")
 	}
 	if len(contract.Spec.PruneGate.Kustomizations) == 0 {
 		return errors.New("GitOps ownership contract pruneGate.kustomizations must not be empty")
@@ -265,7 +308,7 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 		return Report{}, 1, err
 	}
 	report := Report{
-		APIVersion:               reportAPIVersion,
+		APIVersion:               ReportAPIVersion,
 		Kind:                     "GitOpsOwnershipReport",
 		Contract:                 contract.Metadata.Name,
 		Status:                   statusReady,
@@ -279,6 +322,7 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 			Complete:                    contract.Spec.Scope.Complete,
 			AllCriticalFamiliesDeclared: true,
 			AllSelectedRootsDeclared:    true,
+			ClosedWorldComplete:         true,
 			CriticalFamilyCount:         len(contract.Spec.Scope.CriticalFamilyIDs),
 			DeclaredFamilyCount:         len(contract.Spec.RequiredFamilies),
 			SelectedRootCount:           len(contract.Spec.Scope.SelectedRoots),
@@ -350,10 +394,31 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 	for _, root := range contract.Spec.Scope.SelectedRoots {
 		declaredRoots[namespacedNameKey(root)] = true
 	}
-	owners, roots := inventoryOwners(snapshot.Kustomizations, declaredRoots, &report)
+	if !snapshot.KustomizationsComplete ||
+		!artifactDigestPattern.MatchString(snapshot.KustomizationsRVHash) ||
+		snapshot.KustomizationsPageCount < 1 ||
+		snapshot.KustomizationsPageCount > maxCollectionPages ||
+		snapshot.KustomizationsItemCount != len(snapshot.Kustomizations) ||
+		snapshot.KustomizationsItemCount > maxCollectionObjects ||
+		hasDuplicateKustomizations(snapshot.Kustomizations) {
+		report.Scope.ClosedWorldComplete = false
+		block(&report, "flux_root_collection_incomplete", "unfiltered all-namespace Flux Kustomization collection is incomplete or internally inconsistent", "", "")
+	}
+	owners, roots := inventoryOwners(
+		snapshot.Kustomizations,
+		declaredRoots,
+		contract.Spec.SourceArtifact,
+		contract.Spec.RequiredFamilies,
+		&report,
+	)
 	for key := range roots {
 		if !declaredRoots[key] {
-			block(&report, "undeclared_flux_root", "selected live query returned a Flux root absent from scope.selectedRoots", "", "")
+			evidenceRoot := ""
+			namespace, name, ok := strings.Cut(key, "/")
+			if ok && validDNSLabel(namespace) && validDNSLabel(name) {
+				evidenceRoot = key
+			}
+			block(&report, "undeclared_relevant_flux_root", "an undeclared Flux root uses the accepted source or intersects a closed-world resource scope", "", evidenceRoot)
 		}
 	}
 	for _, declared := range contract.Spec.Scope.SelectedRoots {
@@ -405,38 +470,59 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 		report.Roots = append(report.Roots, rootReport)
 	}
 	report.Scope.AllSelectedRootsObserved = report.Scope.ObservedRootCount == report.Scope.SelectedRootCount
-	allow := make(map[string]bool, len(contract.Spec.AllowUnmanaged))
-	for _, ref := range contract.Spec.AllowUnmanaged {
-		allow[refKey(ref)] = true
-	}
-	observedAllow := map[string]bool{}
-
 	for _, family := range contract.Spec.RequiredFamilies {
 		familyReport := FamilyReport{
 			ID: family.ID, Critical: family.Critical, SourceState: family.SourceState,
 			ExpectedCount: len(family.ExpectedObjects), ExpectedOwner: namespacedNameKey(family.ExpectedOwner),
+			DiscoveryMode:   family.Discovery.Mode,
+			DiscoveryScopes: len(family.Discovery.Namespaces),
+		}
+		if !family.Namespaced && family.SourceState == "sourced" {
+			familyReport.DiscoveryScopes = 1
 		}
 		if family.SourceState == "not-sourced" {
+			familyReport.ClosedWorldComplete = false
+			report.Scope.ClosedWorldComplete = false
 			report.Scope.SourceMissingFamilies = append(report.Scope.SourceMissingFamilies, family.ID)
 			block(&report, "critical_family_source_missing", family.MissingSourceBlocker, family.ID, "")
 			report.Families = append(report.Families, familyReport)
 			continue
 		}
-		resources, ok := snapshot.Resources[family.ID]
+		collection, ok := snapshot.Collections[family.ID]
 		if !ok {
-			block(&report, "required_family_unobserved", "live collection did not return this required resource family", family.ID, "")
+			report.Scope.ClosedWorldComplete = false
+			block(&report, "required_family_unobserved", "closed-world collection did not return this required resource family", family.ID, "")
 			report.Families = append(report.Families, familyReport)
 			continue
 		}
+		familyReport.CollectionComplete = collection.Complete
+		familyReport.ResourceVersionSHA256 = canonicalArtifactDigest(collection.ResourceVersionSHA256)
+		familyReport.PageCount = collection.PageCount
+		familyReport.ItemCount = collection.ItemCount
+		collectionMetaValid := collection.Complete &&
+			artifactDigestPattern.MatchString(collection.ResourceVersionSHA256) &&
+			collection.PageCount >= familyReport.DiscoveryScopes &&
+			collection.PageCount <= maxCollectionPages &&
+			collection.ItemCount == len(collection.Objects) &&
+			collection.ItemCount <= maxCollectionObjects
+		if !collectionMetaValid {
+			report.Scope.ClosedWorldComplete = false
+			block(&report, "family_collection_incomplete", "closed-world family collection is incomplete or internally inconsistent", family.ID, "")
+		}
+		resources := collection.Objects
 		expected := make(map[string]bool, len(family.ExpectedObjects))
+		external := make(map[string]bool, len(family.Discovery.ExternalObjects))
 		observed := make(map[string]bool, len(resources))
 		for _, ref := range family.ExpectedObjects {
 			expected[refKey(ref)] = true
 		}
+		for _, ref := range family.Discovery.ExternalObjects {
+			external[refKey(ref)] = true
+		}
 		for _, ref := range resources {
 			key := refKey(ref)
 			evidenceObject := ""
-			if expected[key] {
+			if expected[key] || external[key] {
 				evidenceObject = key
 			}
 			if observed[key] {
@@ -446,30 +532,38 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 			observed[key] = true
 			familyReport.ObservedCount++
 			report.ObservedResourceCount++
-			if ref.APIVersion != family.APIVersion || ref.Kind != family.Kind || (family.Namespaced && ref.Namespace == "") || (!family.Namespaced && ref.Namespace != "") {
+			if !refInFamilyScope(ref, family) {
 				block(&report, "resource_family_identity_mismatch", "observed object does not match the contracted family identity and scope", family.ID, evidenceObject)
 				continue
 			}
+			if external[key] {
+				familyReport.ExternalCount++
+				report.ExternalResourceCount++
+				if len(owners[key]) != 0 {
+					familyReport.UnmanagedCount++
+					report.UnmanagedResourceCount++
+					block(&report, "external_object_flux_owned", "reviewed external object must not be inventory-owned by a selected or relevant Flux root", family.ID, key)
+				}
+				continue
+			}
 			if !expected[key] {
-				block(&report, "undeclared_resource_in_critical_family", "live labelled object is absent from the family's declared inventory", family.ID, "")
+				familyReport.UnexpectedCount++
+				report.UnexpectedResourceCount++
+				block(&report, "undeclared_resource_in_closed_world_scope", "unfiltered live collection returned an object absent from expectedObjects and externalObjects", family.ID, "")
 				continue
 			}
 			objectOwners := owners[key]
 			switch {
 			case len(objectOwners) == 1 && objectOwners[0] != namespacedNameKey(family.ExpectedOwner):
 				block(&report, "resource_wrong_flux_owner", "required live object is inventory-owned by a different selected Flux root", family.ID, key)
-			case len(objectOwners) == 1 && allow[key]:
-				block(&report, "managed_object_allowlisted", "managed object must not remain in the unmanaged allowlist", family.ID, key)
 			case len(objectOwners) == 1:
 				familyReport.ManagedCount++
 				report.ManagedResourceCount++
 			case len(objectOwners) > 1:
 				block(&report, "multiple_flux_owners", "object occurs in more than one Flux inventory", family.ID, key)
-			case allow[key]:
-				familyReport.AllowlistedCount++
-				report.AllowlistedResourceCount++
-				observedAllow[key] = true
 			default:
+				familyReport.UnmanagedCount++
+				report.UnmanagedResourceCount++
 				block(&report, "resource_not_flux_managed", "required live object is absent from selected Flux status.inventory entries", family.ID, key)
 			}
 		}
@@ -479,24 +573,38 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 				block(&report, "declared_resource_missing", "declared critical resource was not returned by the live family query", family.ID, key)
 			}
 		}
-		if familyReport.ObservedCount < family.MinimumCount {
-			block(&report, "required_family_below_minimum", fmt.Sprintf("observed %d objects, requires at least %d", familyReport.ObservedCount, family.MinimumCount), family.ID, "")
+		for _, ref := range family.Discovery.ExternalObjects {
+			key := refKey(ref)
+			if !observed[key] {
+				block(&report, "declared_external_resource_missing", "reviewed external object was not returned by the closed-world live query", family.ID, key)
+			}
+		}
+		if familyReport.ObservedCount < family.MinimumCount+len(family.Discovery.ExternalObjects) {
+			block(&report, "required_family_below_minimum", fmt.Sprintf("observed %d objects, requires exactly %d expected plus %d reviewed external objects", familyReport.ObservedCount, family.MinimumCount, len(family.Discovery.ExternalObjects)), family.ID, "")
 		}
 		if familyReport.ManagedCount == 0 {
 			block(&report, "required_family_has_no_managed_objects", "at least one object in every required family must be Flux inventory-owned", family.ID, "")
 		}
-		familyReport.OwnershipComplete = familyReport.ObservedCount == familyReport.ExpectedCount && familyReport.ManagedCount == familyReport.ExpectedCount && familyReport.AllowlistedCount == 0
+		familyReport.ClosedWorldComplete = collectionMetaValid &&
+			familyReport.UnexpectedCount == 0 &&
+			familyReport.UnmanagedCount == 0 &&
+			familyReport.ObservedCount == familyReport.ExpectedCount+familyReport.ExternalCount
+		if !familyReport.ClosedWorldComplete {
+			report.Scope.ClosedWorldComplete = false
+		}
+		familyReport.OwnershipComplete = familyReport.ClosedWorldComplete &&
+			familyReport.ManagedCount == familyReport.ExpectedCount &&
+			familyReport.ExternalCount == len(family.Discovery.ExternalObjects)
 		if !familyReport.OwnershipComplete {
-			block(&report, "critical_family_ownership_incomplete", "every declared critical resource must be observed exactly once and uniquely inventory-owned by its expected Flux root", family.ID, "")
+			block(&report, "critical_family_ownership_incomplete", "closed-world scope must contain exactly the declared expected and external objects, with every expected object uniquely owned by its contracted Flux root", family.ID, "")
 		}
 		report.Families = append(report.Families, familyReport)
 	}
-
-	for key := range allow {
-		if !observedAllow[key] {
-			block(&report, "stale_unmanaged_allowlist_entry", "allowlist object was not observed as an unmanaged required object", "", key)
-		}
-	}
+	report.ClosedWorldComplete = report.Scope.ClosedWorldComplete &&
+		snapshot.KustomizationsComplete &&
+		report.UnexpectedResourceCount == 0 &&
+		report.UnmanagedResourceCount == 0 &&
+		report.AllowlistedResourceCount == 0
 
 	for _, gated := range contract.Spec.PruneGate.Kustomizations {
 		_, ok := roots[namespacedNameKey(gated)]
@@ -529,14 +637,60 @@ func Verify(contract Contract, snapshot Snapshot) (Report, int, error) {
 	return report, 0, nil
 }
 
-func inventoryOwners(kustomizations []KustomizationSnapshot, declaredRoots map[string]bool, report *Report) (map[string][]string, map[string]KustomizationSnapshot) {
+func hasDuplicateKustomizations(kustomizations []KustomizationSnapshot) bool {
+	seen := make(map[string]bool, len(kustomizations))
+	for _, root := range kustomizations {
+		key := namespacedNameKey(NamespacedName{Namespace: root.Namespace, Name: root.Name})
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
+	}
+	return false
+}
+
+func inventoryOwners(
+	kustomizations []KustomizationSnapshot,
+	declaredRoots map[string]bool,
+	source SourceArtifactContract,
+	families []ResourceFamily,
+	report *Report,
+) (map[string][]string, map[string]KustomizationSnapshot) {
 	owners := map[string][]string{}
 	roots := map[string]KustomizationSnapshot{}
 	for _, root := range kustomizations {
 		rootKey := namespacedNameKey(NamespacedName{Namespace: root.Namespace, Name: root.Name})
+		validRootIdentity := validDNSLabel(root.Namespace) && validDNSLabel(root.Name)
+		parsedInventory := make([]ResourceRef, 0, len(root.Inventory))
+		inventoryInvalid := false
+		intersectsClosedWorld := false
+		for _, entry := range root.Inventory {
+			ref, err := parseInventoryEntry(entry)
+			if err != nil {
+				inventoryInvalid = true
+				continue
+			}
+			parsedInventory = append(parsedInventory, ref)
+			if refInAnyFamilyScope(ref, families) {
+				intersectsClosedWorld = true
+			}
+		}
+		sourceMatches := root.SourceRef.Kind == source.Kind &&
+			root.SourceRef.Namespace == source.Namespace &&
+			root.SourceRef.Name == source.Name
+		relevant := declaredRoots[rootKey] || sourceMatches || intersectsClosedWorld || inventoryInvalid
+		if !relevant {
+			continue
+		}
 		evidenceRoot := ""
-		if declaredRoots[rootKey] {
+		if validRootIdentity {
 			evidenceRoot = rootKey
+		}
+		if !validRootIdentity {
+			block(report, "flux_kustomization_identity_invalid", "relevant Flux Kustomization namespace/name is invalid", "", "")
+		}
+		if inventoryInvalid {
+			block(report, "flux_inventory_entry_invalid", "relevant Flux inventory contains an invalid entry, so closed-world intersection cannot be excluded", "", evidenceRoot)
 		}
 		if _, exists := roots[rootKey]; exists {
 			block(report, "flux_kustomization_duplicate", "selected Flux query returned the same Kustomization more than once", "", evidenceRoot)
@@ -557,12 +711,7 @@ func inventoryOwners(kustomizations []KustomizationSnapshot, declaredRoots map[s
 		if root.Prune == nil || *root.Prune {
 			block(report, "prune_enabled_before_gate", "all selected ownership roots must retain prune=false until a ready report and separate reviewed change", "", evidenceRoot)
 		}
-		for _, entry := range root.Inventory {
-			ref, err := parseInventoryEntry(entry)
-			if err != nil {
-				block(report, "flux_inventory_entry_invalid", "Flux inventory entry id/version is invalid", "", evidenceRoot)
-				continue
-			}
+		for _, ref := range parsedInventory {
 			key := refKey(ref)
 			owners[key] = append(owners[key], rootKey)
 		}
@@ -571,6 +720,30 @@ func inventoryOwners(kustomizations []KustomizationSnapshot, declaredRoots map[s
 		sort.Strings(owners[key])
 	}
 	return owners, roots
+}
+
+func refInAnyFamilyScope(ref ResourceRef, families []ResourceFamily) bool {
+	for _, family := range families {
+		if family.SourceState == "sourced" && refInFamilyScope(ref, family) {
+			return true
+		}
+	}
+	return false
+}
+
+func refInFamilyScope(ref ResourceRef, family ResourceFamily) bool {
+	if ref.APIVersion != family.APIVersion || ref.Kind != family.Kind {
+		return false
+	}
+	if !family.Namespaced {
+		return ref.Namespace == ""
+	}
+	for _, namespace := range family.Discovery.Namespaces {
+		if ref.Namespace == namespace {
+			return true
+		}
+	}
+	return false
 }
 
 func equalBoolPointer(left, right *bool) bool {
