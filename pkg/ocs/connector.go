@@ -16,8 +16,12 @@ func (p ConnectorPackage) Validate() error {
 	if err := p.Service.Validate(); err != nil {
 		invalid = append(invalid, "service: "+err.Error())
 	}
-	if err := p.Billing.Validate(); err != nil {
-		invalid = append(invalid, "billing: "+err.Error())
+	if p.Service.Spec.Billing.Applicability == ApplicabilitySupported {
+		if err := p.Billing.Validate(); err != nil {
+			invalid = append(invalid, "billing: "+err.Error())
+		}
+	} else if p.Service.Spec.Billing.Applicability == ApplicabilityNotApplicable && hasBillingConnector(p.Billing) {
+		invalid = append(invalid, "non-billable package must omit billing connector")
 	}
 
 	require(&missing, p.Catalog.ServiceClass != "", "catalog.serviceClass")
@@ -68,9 +72,11 @@ func (p ConnectorPackage) Validate() error {
 	}
 
 	validateAutomationRefs(&missing, &invalid, p.Service.Spec.Lifecycle, p.Service.Spec.Automation)
-	validateBillingMeters(&missing, &invalid, p.Service.Spec.UsageMeters, p.Service.Spec.Billing.Meters, p.Billing.Meters)
+	if p.Service.Spec.Billing.Applicability == ApplicabilitySupported {
+		validateBillingMeters(&missing, &invalid, p.Service.Spec.UsageMeters, p.Service.Spec.Billing.Meters, p.Billing.Meters)
+	}
 	validateAlpha2Package(&missing, &invalid, p)
-	validateOCSv3Package(&missing, p)
+	validateOCSv3Package(&missing, &invalid, p)
 
 	for i, dependency := range p.Service.Spec.Dependencies {
 		if isNonPortable(dependency.Portability) {
@@ -84,6 +90,11 @@ func (p ConnectorPackage) Validate() error {
 		return fmt.Errorf("connector package invalid: %s", strings.Join(problems, ", "))
 	}
 	return nil
+}
+
+func hasBillingConnector(connector BillingConnector) bool {
+	return connector.APIVersion != "" || connector.Kind != "" || connector.Metadata != (Metadata{}) ||
+		len(connector.Meters) > 0 || len(connector.CostMeters) > 0 || len(connector.Events) > 0
 }
 
 func requireMetadata(missing *[]string, metadata Metadata) {
@@ -120,7 +131,7 @@ func capabilityClassExists(capabilities []Capability, class string) bool {
 func validateAutomationRefs(missing *[]string, invalid *[]string, lifecycle []LifecycleAction, tasks []AutomationTask) {
 	refs := map[string]bool{}
 	for _, action := range lifecycle {
-		if action.Name == "" {
+		if action.Name == "" || action.Applicability != ApplicabilitySupported {
 			continue
 		}
 		refs["lifecycle."+action.Name] = true

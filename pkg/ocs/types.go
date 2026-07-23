@@ -2,6 +2,15 @@ package ocs
 
 const APIVersion = "ocsv3.cloudring.io/v1alpha1"
 
+const (
+	ExecutionProfileLocal   = "local"
+	ExecutionProfileRemote  = "remote"
+	ExecutionProfileAPIOnly = "api-only"
+
+	ApplicabilitySupported     = "supported"
+	ApplicabilityNotApplicable = "not_applicable"
+)
+
 type Metadata struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
@@ -33,6 +42,8 @@ type ServiceConnector struct {
 }
 
 type ServiceSpec struct {
+	ExecutionProfile   string              `json:"executionProfile"`
+	ProductAPI         ProductAPIContract  `json:"productAPI"`
 	Capabilities       []Capability        `json:"capabilities"`
 	Dependencies       []Dependency        `json:"dependencies"`
 	Lifecycle          []LifecycleAction   `json:"lifecycle"`
@@ -52,6 +63,15 @@ type ServiceSpec struct {
 	EvidenceBundles    []EvidenceBundle    `json:"evidenceBundles"`
 }
 
+type ProductAPIContract struct {
+	Ref            string `json:"ref"`
+	Version        string `json:"version"`
+	Protocol       string `json:"protocol"`
+	EndpointRef    string `json:"endpointRef,omitempty"`
+	TrustPolicyRef string `json:"trustPolicyRef,omitempty"`
+	HealthRef      string `json:"healthRef,omitempty"`
+}
+
 type Capability struct {
 	Class       string `json:"class"`
 	Name        string `json:"name"`
@@ -59,15 +79,20 @@ type Capability struct {
 }
 
 type Dependency struct {
-	ID                string `json:"id"`
-	CapabilityClass   string `json:"capabilityClass"`
-	Role              string `json:"role"`
-	Portability       string `json:"portability"`
-	ImplementationRef string `json:"implementationRef,omitempty"`
+	ID                     string `json:"id"`
+	CapabilityClass        string `json:"capabilityClass"`
+	Role                   string `json:"role"`
+	Portability            string `json:"portability"`
+	ProductAPIRef          string `json:"productAPIRef"`
+	VersionRange           string `json:"versionRange"`
+	CompatibilityPolicyRef string `json:"compatibilityPolicyRef"`
+	ImplementationRef      string `json:"implementationRef,omitempty"`
 }
 
 type LifecycleAction struct {
 	Name           string `json:"name"`
+	Applicability  string `json:"applicability"`
+	Reason         string `json:"reason,omitempty"`
 	Verb           string `json:"verb"`
 	Idempotent     bool   `json:"idempotent"`
 	IdempotencyKey string `json:"idempotencyKey"`
@@ -87,8 +112,10 @@ type UsageMeter struct {
 }
 
 type BillingProfile struct {
-	ConnectorRef string       `json:"connectorRef"`
-	Meters       []UsageMeter `json:"meters"`
+	Applicability string       `json:"applicability"`
+	Reason        string       `json:"reason,omitempty"`
+	ConnectorRef  string       `json:"connectorRef"`
+	Meters        []UsageMeter `json:"meters"`
 }
 
 type KubernetesBinding struct {

@@ -73,10 +73,10 @@ func Test_ConnectorPackageValidate_rejects_missing_billing_cost_meter_evidence_w
 	}
 }
 
-func Test_ConnectorPackageValidate_rejects_platform_coupling_and_single_vendor_lock_in(t *testing.T) {
+func Test_ConnectorPackageValidate_rejects_implementation_reference_and_single_vendor_lock_in(t *testing.T) {
 	// Given
 	pkg := validAlpha2ConnectorPackage()
-	pkg.Service.Spec.Dependencies[0].ImplementationRef = "internal/synthetic-adapter"
+	pkg.Service.Spec.Dependencies[0].ImplementationRef = "adapter.synthetic-service"
 	pkg.Service.Spec.Dependencies[0].Portability = "single-vendor-binding"
 	pkg.Service.Spec.GatewayRoutes[0].ParentRef = "single-vendor/gateway/private-route"
 
@@ -85,7 +85,7 @@ func Test_ConnectorPackageValidate_rejects_platform_coupling_and_single_vendor_l
 
 	// Then
 	if err == nil {
-		t.Fatal("expected platform coupling and provider lock-in to fail")
+		t.Fatal("expected implementation coupling and provider lock-in to fail")
 	}
 	for _, want := range []string{
 		"class=portability owner=service path=service.spec.dependencies[0].portability",
@@ -95,6 +95,34 @@ func Test_ConnectorPackageValidate_rejects_platform_coupling_and_single_vendor_l
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected %q in error %q", want, err.Error())
 		}
+	}
+}
+
+func Test_ConnectorPackageValidate_rejects_data_lifecycle_reference_to_not_applicable_action(t *testing.T) {
+	// Given
+	pkg := validAlpha2ConnectorPackage()
+	for i := range pkg.Service.Spec.Lifecycle {
+		if pkg.Service.Spec.Lifecycle[i].Name != "deprovision" {
+			continue
+		}
+		pkg.Service.Spec.Lifecycle[i].Applicability = ApplicabilityNotApplicable
+		pkg.Service.Spec.Lifecycle[i].Reason = "the product retains no customer data"
+		pkg.Service.Spec.Lifecycle[i].Verb = ""
+		pkg.Service.Spec.Lifecycle[i].Idempotent = false
+		pkg.Service.Spec.Lifecycle[i].IdempotencyKey = ""
+		pkg.Service.Spec.Lifecycle[i].RollbackRef = ""
+	}
+
+	// When
+	err := pkg.Validate()
+
+	// Then
+	if err == nil {
+		t.Fatal("expected a data lifecycle reference to a non-executable action to fail")
+	}
+	if !strings.Contains(err.Error(), "dataLifecycle.delete.actionRef") ||
+		!strings.Contains(err.Error(), "must reference a supported lifecycle action") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -110,6 +138,7 @@ func validAlpha2ConnectorPackage() ConnectorPackage {
 			Runtime:         "module-federation",
 			MountRef:        "mount.object-storage.bucket-overview",
 			VersionRange:    ">=0.1.0 <1.0.0",
+			SignatureRef:    "evidence.object-storage.ui.signature",
 			IntegrityRef:    "evidence.object-storage.ui.integrity",
 			Sandbox:         "tenant-iam-context",
 			AllowedEvents:   []string{"bucket.create.requested", "bucket.delete.requested"},
@@ -150,7 +179,7 @@ func validAlpha2ConnectorPackage() ConnectorPackage {
 			EvidenceRef: "evidence.object-storage.export",
 		},
 		Delete: DataLifecycleAction{
-			ActionRef:   "lifecycle.delete",
+			ActionRef:   "lifecycle.deprovision",
 			Format:      "tenant-object-delete-receipt",
 			EvidenceRef: "evidence.object-storage.delete",
 		},

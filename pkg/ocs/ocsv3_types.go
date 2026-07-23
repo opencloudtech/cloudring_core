@@ -8,6 +8,8 @@ type DistributionProfile struct {
 }
 
 type FederationProfile struct {
+	Applicability          string   `json:"applicability"`
+	Reason                 string   `json:"reason,omitempty"`
 	Modes                  []string `json:"modes"`
 	MessageBusRef          string   `json:"messageBusRef"`
 	CrossProviderScenarios []string `json:"crossProviderScenarios"`
@@ -15,6 +17,8 @@ type FederationProfile struct {
 }
 
 type CommercialProfile struct {
+	Applicability           string   `json:"applicability"`
+	Reason                  string   `json:"reason,omitempty"`
 	Roles                   []string `json:"roles"`
 	RevenueModel            string   `json:"revenueModel"`
 	LicenseRef              string   `json:"licenseRef"`

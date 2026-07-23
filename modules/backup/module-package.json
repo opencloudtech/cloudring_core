@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.backup.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "backup",
@@ -29,42 +35,66 @@
           "id": "durability-target-contract",
           "capabilityClass": "durability-target",
           "role": "portable backup target",
-          "portability": "ocs-portable-durability-target-contract"
+          "portability": "ocs-portable-durability-target-contract",
+          "productAPIRef": "service.api.durability-target.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.durability-target"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "backup policy remains active until deprovisioned"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported for backup policy resources"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "protected capacity follows policy and service-plan configuration"
+        },
+        {
           "name": "configure",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -72,6 +102,7 @@
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -79,6 +110,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -114,6 +146,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "backup-module-billing",
         "meters": [
           {
@@ -162,6 +195,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.backup.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.backup.ui.signature",
           "integrityRef": "evidence.backup.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -250,7 +284,7 @@
           "evidenceRef": "evidence.backup.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "tenant-backup-delete-receipt",
           "evidenceRef": "evidence.backup.delete"
         }
@@ -480,6 +514,7 @@
     "updatePolicyRef": "updates.backup.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected",
@@ -494,6 +529,7 @@
     "portabilityPolicyRef": "policy.backup.ocs-portable-backup-restore"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

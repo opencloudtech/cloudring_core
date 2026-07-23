@@ -17,16 +17,17 @@ func Test_ServiceConnectorValidate_accepts_declarative_kubernetes_connector(t *t
 	}
 }
 
-func Test_ServiceConnectorValidate_rejects_missing_portal_and_billing_surfaces(t *testing.T) {
+func Test_ServiceConnectorValidate_allows_omitted_portal_but_rejects_missing_billing_surfaces(t *testing.T) {
 	connector := validServiceConnector()
 	connector.Spec.PortalModules = nil
+	connector.Spec.UI = UIExtensionManifest{}
 	connector.Spec.Billing.Meters = nil
 
 	err := connector.Validate()
 	if err == nil {
 		t.Fatal("expected missing portal and billing surfaces to fail")
 	}
-	for _, want := range []string{"portalModules", "billing.meters"} {
+	for _, want := range []string{"billing.meters"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected %q in error %q", want, err.Error())
 		}
@@ -120,7 +121,7 @@ func Test_ServiceConnectorValidate_rejects_missing_idempotency_contract(t *testi
 	if err == nil {
 		t.Fatal("expected missing idempotency contracts to fail")
 	}
-	for _, want := range []string{"lifecycle[0].idempotencyKey", "lifecycle[1].idempotencyKey"} {
+	for _, want := range []string{"lifecycle[0].idempotencyKey", "lifecycle[4].idempotencyKey"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected %q in error %q", want, err.Error())
 		}
@@ -175,7 +176,6 @@ func Test_ConnectorPackageValidate_rejects_missing_declarative_kubernetes_surfac
 		"readiness[0].evidenceRef",
 		"tenantAccess.entitlements",
 		"durability.recoveryEvidence",
-		"events[0].idempotencyKey",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected %q in error %q", want, err.Error())

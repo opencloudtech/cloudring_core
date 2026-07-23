@@ -28,16 +28,13 @@ func Test_ConnectorPackageValidate_rejects_missing_microfrontend_host_contract(t
 	}
 }
 
-func Test_ConnectorPackageValidate_rejects_missing_module_analytics_events(t *testing.T) {
+func Test_ConnectorPackageValidate_accepts_omitted_product_analytics_events(t *testing.T) {
 	pkg := validConnectorPackage()
 	pkg.Service.Spec.AnalyticsEvents = nil
 
 	err := pkg.Validate()
-	if err == nil {
-		t.Fatal("expected missing analytics events to fail")
-	}
-	if !strings.Contains(err.Error(), "analyticsEvents") {
-		t.Fatalf("expected analyticsEvents in error %q", err.Error())
+	if err != nil {
+		t.Fatalf("expected product analytics to be optional: %v", err)
 	}
 }
 

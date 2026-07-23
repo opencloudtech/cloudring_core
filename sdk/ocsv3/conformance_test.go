@@ -46,8 +46,8 @@ func TestCheckConformance_reports_independent_surface_failures(t *testing.T) {
 		t.Fatalf("parse public reference package: %v", err)
 	}
 	pkg.Service.Spec.Policies = nil
-	pkg.Durability.BackupPolicyRef = ""
-	pkg.Service.Spec.Lifecycle = removeLifecycleAction(pkg.Service.Spec.Lifecycle, "backup")
+	pkg.Service.Spec.ProductAPI.Version = ""
+	pkg.Service.Spec.Lifecycle = removeLifecycleAction(pkg.Service.Spec.Lifecycle, "resize")
 
 	report := ocsv3.CheckConformance(pkg)
 
@@ -57,8 +57,8 @@ func TestCheckConformance_reports_independent_surface_failures(t *testing.T) {
 	for _, field := range []string{
 		"package",
 		"service.spec.policies",
-		"durability.backupPolicyRef",
-		"service.spec.lifecycle.backup",
+		"service.spec.productAPI.version",
+		"service.spec.lifecycle.resize",
 	} {
 		if !hasProblem(report.Problems, field) {
 			t.Fatalf("expected problem for %q: %+v", field, report.Problems)

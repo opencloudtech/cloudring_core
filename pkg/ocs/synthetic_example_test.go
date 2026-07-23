@@ -10,14 +10,14 @@ import (
 	"testing"
 )
 
-func Test_SyntheticConnectorPackageExample_validates(t *testing.T) {
-	raw, err := os.ReadFile("../../examples/synthetic-service-module/connector-package.json")
+func Test_SyntheticConnectorPackageReference_validates(t *testing.T) {
+	raw, err := os.ReadFile("../../reference/synthetic-service/module-package.json")
 	if err != nil {
-		t.Fatalf("read synthetic connector package example: %v", err)
+		t.Fatalf("read synthetic connector package reference: %v", err)
 	}
 	var pkg ConnectorPackage
 	if err := json.Unmarshal(raw, &pkg); err != nil {
-		t.Fatalf("unmarshal synthetic connector package example: %v", err)
+		t.Fatalf("unmarshal synthetic connector package reference: %v", err)
 	}
 	if err := pkg.Validate(); err != nil {
 		t.Fatalf("expected synthetic connector package to validate: %v", err)

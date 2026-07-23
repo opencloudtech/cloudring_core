@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.slurm.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "slurm",
@@ -29,60 +35,95 @@
           "id": "slurm-26-05-window",
           "capabilityClass": "slurm-runtime",
           "role": "optional scheduler runtime",
-          "portability": "ocs-portable-slurm-26.05-window"
+          "portability": "ocs-portable-slurm-26.05-window",
+          "productAPIRef": "service.api.slurm-runtime.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.slurm-runtime"
         },
         {
           "id": "kubernetes-1-35-window",
           "capabilityClass": "kubernetes",
           "role": "upstream Kubernetes API target for module control",
-          "portability": "ocs-portable-kubernetes-1.35-patch-window"
+          "portability": "ocs-portable-kubernetes-1.35-patch-window",
+          "productAPIRef": "service.api.kubernetes.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.kubernetes"
         },
         {
           "id": "flux-2-window",
           "capabilityClass": "gitops",
           "role": "module delivery contract",
-          "portability": "ocs-portable-flux-2-compatible"
+          "portability": "ocs-portable-flux-2-compatible",
+          "productAPIRef": "service.api.gitops.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.gitops"
         },
         {
           "id": "policy-engine-window",
           "capabilityClass": "policy",
           "role": "account and QOS admission policy",
-          "portability": "ocs-portable-policy-engine-contract"
+          "portability": "ocs-portable-policy-engine-contract",
+          "productAPIRef": "service.api.policy.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.policy"
         },
         {
           "id": "secret-manager-window",
           "capabilityClass": "secret-manager",
           "role": "referenced credentials only",
-          "portability": "ocs-portable-secret-reference-contract"
+          "portability": "ocs-portable-secret-reference-contract",
+          "productAPIRef": "service.api.secret-manager.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.secret-manager"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "Slurm partitions use explicit enable and disable actions"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported; use the explicit enable action"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "partition capacity follows scheduler and service-plan configuration"
+        },
+        {
           "name": "enable",
+          "applicability": "supported",
           "verb": "Enable",
           "idempotent": true,
           "idempotencyKey": "module.request.id"
         },
         {
           "name": "disable",
+          "applicability": "supported",
           "verb": "Disable",
           "idempotent": true,
           "idempotencyKey": "module.request.id"
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -90,18 +131,21 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -109,6 +153,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -134,6 +179,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "slurm-module-billing",
         "meters": [
           {
@@ -175,6 +221,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.slurm.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.slurm.ui.signature",
           "integrityRef": "evidence.slurm.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -261,7 +308,7 @@
           "evidenceRef": "evidence.slurm.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "ocs-slurm-delete-receipt",
           "evidenceRef": "evidence.slurm.delete"
         }
@@ -475,6 +522,7 @@
     "updatePolicyRef": "updates.slurm.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected"
@@ -487,6 +535,7 @@
     "portabilityPolicyRef": "policy.slurm.ocs-portable-slurm-module"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

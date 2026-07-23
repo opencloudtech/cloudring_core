@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.gpu.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "gpu",
@@ -29,72 +35,113 @@
           "id": "kubernetes-1-35-window",
           "capabilityClass": "kubernetes",
           "role": "upstream Kubernetes API target",
-          "portability": "ocs-portable-kubernetes-1.35-patch-window"
+          "portability": "ocs-portable-kubernetes-1.35-patch-window",
+          "productAPIRef": "service.api.kubernetes.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.kubernetes"
         },
         {
           "id": "cilium-1-19-window",
           "capabilityClass": "network-policy",
           "role": "portable dataplane policy contract",
-          "portability": "ocs-portable-cilium-1.19-compatible"
+          "portability": "ocs-portable-cilium-1.19-compatible",
+          "productAPIRef": "service.api.network-policy.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.network-policy"
         },
         {
           "id": "nvidia-gpu-operator-26-3-window",
           "capabilityClass": "gpu-operator",
           "role": "optional accelerator operator contract",
-          "portability": "ocs-portable-gpu-operator-version-window"
+          "portability": "ocs-portable-gpu-operator-version-window",
+          "productAPIRef": "service.api.gpu-operator.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.gpu-operator"
         },
         {
           "id": "nvidia-network-operator-26-4-window",
           "capabilityClass": "network-operator",
           "role": "optional RDMA fabric operator contract",
-          "portability": "ocs-portable-network-operator-version-window"
+          "portability": "ocs-portable-network-operator-version-window",
+          "productAPIRef": "service.api.network-operator.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.network-operator"
         },
         {
           "id": "kubevirt-1-8-optional-window",
           "capabilityClass": "virtualization",
           "role": "optional passthrough VM dependency",
-          "portability": "ocs-portable-kubevirt-version-window"
+          "portability": "ocs-portable-kubevirt-version-window",
+          "productAPIRef": "service.api.virtualization.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.virtualization"
         },
         {
           "id": "policy-engine-window",
           "capabilityClass": "policy",
           "role": "admission and quota policy",
-          "portability": "ocs-portable-policy-engine-contract"
+          "portability": "ocs-portable-policy-engine-contract",
+          "productAPIRef": "service.api.policy.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.policy"
         },
         {
           "id": "secret-manager-window",
           "capabilityClass": "secret-manager",
           "role": "referenced credentials only",
-          "portability": "ocs-portable-secret-reference-contract"
+          "portability": "ocs-portable-secret-reference-contract",
+          "productAPIRef": "service.api.secret-manager.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.secret-manager"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "GPU pools use explicit enable and disable actions"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported; use the explicit enable action"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "GPU pool capacity follows accelerator and service-plan configuration"
+        },
+        {
           "name": "enable",
+          "applicability": "supported",
           "verb": "Enable",
           "idempotent": true,
           "idempotencyKey": "module.request.id"
         },
         {
           "name": "disable",
+          "applicability": "supported",
           "verb": "Disable",
           "idempotent": true,
           "idempotencyKey": "module.request.id"
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -102,18 +149,21 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -121,6 +171,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -146,6 +197,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "gpu-module-billing",
         "meters": [
           {
@@ -187,6 +239,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.gpu.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.gpu.ui.signature",
           "integrityRef": "evidence.gpu.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -273,7 +326,7 @@
           "evidenceRef": "evidence.gpu.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "ocs-gpu-delete-receipt",
           "evidenceRef": "evidence.gpu.delete"
         }
@@ -487,6 +540,7 @@
     "updatePolicyRef": "updates.gpu.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected"
@@ -499,6 +553,7 @@
     "portabilityPolicyRef": "policy.gpu.ocs-portable-gpu-module"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

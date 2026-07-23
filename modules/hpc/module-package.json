@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.hpc.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "hpc",
@@ -29,72 +35,113 @@
           "id": "kubernetes-1-35-window",
           "capabilityClass": "kubernetes",
           "role": "upstream Kubernetes API target",
-          "portability": "ocs-portable-kubernetes-1.35-patch-window"
+          "portability": "ocs-portable-kubernetes-1.35-patch-window",
+          "productAPIRef": "service.api.kubernetes.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.kubernetes"
         },
         {
           "id": "cilium-1-19-window",
           "capabilityClass": "network-policy",
           "role": "portable dataplane policy contract",
-          "portability": "ocs-portable-cilium-1.19-compatible"
+          "portability": "ocs-portable-cilium-1.19-compatible",
+          "productAPIRef": "service.api.network-policy.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.network-policy"
         },
         {
           "id": "flux-2-window",
           "capabilityClass": "gitops",
           "role": "module delivery contract",
-          "portability": "ocs-portable-flux-2-compatible"
+          "portability": "ocs-portable-flux-2-compatible",
+          "productAPIRef": "service.api.gitops.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.gitops"
         },
         {
           "id": "slurm-26-05-optional-window",
           "capabilityClass": "slurm",
           "role": "optional scheduler backend",
-          "portability": "ocs-portable-slurm-26.05-window"
+          "portability": "ocs-portable-slurm-26.05-window",
+          "productAPIRef": "service.api.slurm.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.slurm"
         },
         {
           "id": "kueue-queue-window",
           "capabilityClass": "scheduler",
           "role": "Kubernetes-native admission backend",
-          "portability": "ocs-portable-kueue-scheduler-window"
+          "portability": "ocs-portable-kueue-scheduler-window",
+          "productAPIRef": "service.api.scheduler.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.scheduler"
         },
         {
           "id": "policy-engine-window",
           "capabilityClass": "policy",
           "role": "quota and admission policy",
-          "portability": "ocs-portable-policy-engine-contract"
+          "portability": "ocs-portable-policy-engine-contract",
+          "productAPIRef": "service.api.policy.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.policy"
         },
         {
           "id": "secret-manager-window",
           "capabilityClass": "secret-manager",
           "role": "referenced credentials only",
-          "portability": "ocs-portable-secret-reference-contract"
+          "portability": "ocs-portable-secret-reference-contract",
+          "productAPIRef": "service.api.secret-manager.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.secret-manager"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "HPC reservations use explicit enable and disable actions"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported; use the explicit enable action"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "reservation capacity follows scheduler and service-plan configuration"
+        },
+        {
           "name": "enable",
+          "applicability": "supported",
           "verb": "Enable",
           "idempotent": true,
           "idempotencyKey": "module.request.id"
         },
         {
           "name": "disable",
+          "applicability": "supported",
           "verb": "Disable",
           "idempotent": true,
           "idempotencyKey": "module.request.id"
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -102,18 +149,21 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -121,6 +171,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -146,6 +197,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "hpc-module-billing",
         "meters": [
           {
@@ -187,6 +239,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.hpc.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.hpc.ui.signature",
           "integrityRef": "evidence.hpc.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -273,7 +326,7 @@
           "evidenceRef": "evidence.hpc.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "ocs-hpc-delete-receipt",
           "evidenceRef": "evidence.hpc.delete"
         }
@@ -487,6 +540,7 @@
     "updatePolicyRef": "updates.hpc.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected"
@@ -499,6 +553,7 @@
     "portabilityPolicyRef": "policy.hpc.ocs-portable-hpc-module"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

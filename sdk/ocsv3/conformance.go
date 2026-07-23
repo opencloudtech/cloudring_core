@@ -89,16 +89,37 @@ func BuildEvidenceReceipt(report ConformanceReport) EvidenceReceipt {
 }
 
 func checkServiceSpec(problems *[]ConformanceProblem, spec ServiceSpec) {
+	requireSurface(problems, spec.ProductAPI.Ref != "", "api", "service.spec.productAPI.ref", "declare a stable public product API reference")
+	requireSurface(problems, spec.ProductAPI.Version != "", "api", "service.spec.productAPI.version", "version the public product API")
+	requireSurface(problems, spec.ProductAPI.Protocol != "", "api", "service.spec.productAPI.protocol", "declare the public product API protocol")
 	requireSurface(problems, len(spec.Capabilities) > 0, "service", "service.spec.capabilities", "declare at least one service capability")
-	requireSurface(problems, len(spec.Dependencies) > 0, "service", "service.spec.dependencies", "declare portable service dependencies")
 	requireLifecycle(problems, spec.Lifecycle)
 	requireSurface(problems, len(spec.Automation) > 0, "automation", "service.spec.automation", "declare at least one lifecycle automation task")
-	requireSurface(problems, len(spec.UsageMeters) > 0, "billing", "service.spec.usageMeters", "declare usage meters")
-	requireSurface(problems, spec.Billing.ConnectorRef != "", "billing", "service.spec.billing.connectorRef", "link service billing profile to billing connector")
-	requireSurface(problems, len(spec.Billing.Meters) > 0, "billing", "service.spec.billing.meters", "link billing meters to usage meters")
-	requirePortal(problems, spec)
-	requireSurface(problems, len(spec.AnalyticsEvents) > 0, "analytics", "service.spec.analyticsEvents", "declare product analytics events")
-	requireSurface(problems, len(spec.KubernetesBindings) > 0, "kubernetes", "service.spec.kubernetesBindings", "declare upstream Kubernetes API bindings")
+	switch spec.Billing.Applicability {
+	case ApplicabilitySupported:
+		requireSurface(problems, len(spec.UsageMeters) > 0, "billing", "service.spec.usageMeters", "declare usage meters")
+		requireSurface(problems, spec.Billing.ConnectorRef != "", "billing", "service.spec.billing.connectorRef", "link service billing profile to billing connector")
+		requireSurface(problems, len(spec.Billing.Meters) > 0, "billing", "service.spec.billing.meters", "link billing meters to usage meters")
+	case ApplicabilityNotApplicable:
+		requireSurface(problems, strings.TrimSpace(spec.Billing.Reason) != "", "billing", "service.spec.billing.reason", "explain why billing is not applicable")
+	default:
+		requireSurface(problems, false, "billing", "service.spec.billing.applicability", "declare supported or not_applicable")
+	}
+	if hasPortalExtension(spec) {
+		requirePortal(problems, spec)
+	}
+	switch spec.ExecutionProfile {
+	case ExecutionProfileLocal:
+		// Kubernetes bindings are optional for local products and validated by
+		// the canonical package validator when declared.
+	case ExecutionProfileRemote, ExecutionProfileAPIOnly:
+		requireSurface(problems, spec.ProductAPI.EndpointRef != "", "api", "service.spec.productAPI.endpointRef", "declare a source-safe connection endpoint reference")
+		requireSurface(problems, spec.ProductAPI.TrustPolicyRef != "", "api", "service.spec.productAPI.trustPolicyRef", "declare a source-safe trust policy reference")
+		requireSurface(problems, spec.ProductAPI.HealthRef != "", "api", "service.spec.productAPI.healthRef", "declare a source-safe health reference")
+		requireSurface(problems, len(spec.KubernetesBindings) == 0, "kubernetes", "service.spec.kubernetesBindings", "omit local Kubernetes bindings for remote and API-only products")
+	default:
+		requireSurface(problems, false, "service", "service.spec.executionProfile", "select local, remote, or api-only")
+	}
 	requireSurface(problems, spec.Secrets.WorkloadIdentityRef != "", "secrets", "service.spec.secrets.workloadIdentityRef", "use workload identity instead of raw secrets")
 	requireSurface(problems, len(spec.Policies) > 0, "iam", "service.spec.policies", "declare IAM/policy decisions")
 	requireDataLifecycle(problems, spec.DataLifecycle)
@@ -108,21 +129,31 @@ func checkServiceSpec(problems *[]ConformanceProblem, spec ServiceSpec) {
 }
 
 func requireLifecycle(problems *[]ConformanceProblem, actions []LifecycleAction) {
-	required := map[string]bool{"provision": false, "backup": false, "restore": false, "export": false, "delete": false, "retry": false, "rollback": false}
+	required := map[string]bool{"provision": false, "resume": false, "resize": false, "deprovision": false}
+	holdOrSuspend := false
 	for _, action := range actions {
 		name := strings.ToLower(strings.TrimSpace(action.Name))
 		if _, ok := required[name]; ok {
 			required[name] = true
 		}
-		if name == "delete" || name == "retry" || name == "repair" {
-			requireSurface(problems, action.RollbackRef != "", "lifecycle", "service.spec.lifecycle."+name+".rollbackRef", "link mutating lifecycle action to rollback evidence")
+		if name == "hold" || name == "suspend" {
+			holdOrSuspend = true
 		}
-		requireSurface(problems, action.Idempotent, "lifecycle", "service.spec.lifecycle."+name+".idempotent", "make lifecycle action idempotent")
-		requireSurface(problems, action.IdempotencyKey != "", "lifecycle", "service.spec.lifecycle."+name+".idempotencyKey", "declare idempotency key")
+		switch action.Applicability {
+		case ApplicabilitySupported:
+			requireSurface(problems, action.Idempotent, "lifecycle", "service.spec.lifecycle."+name+".idempotent", "make supported lifecycle action idempotent")
+			requireSurface(problems, action.IdempotencyKey != "", "lifecycle", "service.spec.lifecycle."+name+".idempotencyKey", "declare idempotency key")
+		case ApplicabilityNotApplicable:
+			requireSurface(problems, strings.TrimSpace(action.Reason) != "", "lifecycle", "service.spec.lifecycle."+name+".reason", "explain why the lifecycle action is not applicable")
+			requireSurface(problems, action.Verb == "" && !action.Idempotent && action.IdempotencyKey == "" && action.RollbackRef == "", "lifecycle", "service.spec.lifecycle."+name+".executableFields", "omit executable fields for a not_applicable action")
+		default:
+			requireSurface(problems, false, "lifecycle", "service.spec.lifecycle."+name+".applicability", "declare supported or not_applicable")
+		}
 	}
 	for name, seen := range required {
-		requireSurface(problems, seen, "lifecycle", "service.spec.lifecycle."+name, "cover provision, backup, restore, export, delete, retry, and rollback")
+		requireSurface(problems, seen, "lifecycle", "service.spec.lifecycle."+name, "declare the universal lifecycle baseline")
 	}
+	requireSurface(problems, holdOrSuspend, "lifecycle", "service.spec.lifecycle.holdOrSuspend", "declare hold or suspend applicability")
 }
 
 func requirePortal(problems *[]ConformanceProblem, spec ServiceSpec) {
@@ -131,13 +162,27 @@ func requirePortal(problems *[]ConformanceProblem, spec ServiceSpec) {
 	requireSurface(problems, host.Host != "", "portal", "service.spec.ui.moduleHost.host", "declare microfrontend host")
 	requireSurface(problems, host.Runtime != "", "portal", "service.spec.ui.moduleHost.runtime", "declare microfrontend runtime")
 	requireSurface(problems, host.MountRef != "", "portal", "service.spec.ui.moduleHost.mountRef", "declare microfrontend mount reference")
+	requireSurface(problems, host.VersionRange != "", "portal", "service.spec.ui.moduleHost.versionRange", "declare compatible host versions")
+	requireSurface(problems, host.SignatureRef != "", "portal", "service.spec.ui.moduleHost.signatureRef", "declare signature verification evidence")
 	requireSurface(problems, host.IntegrityRef != "", "portal", "service.spec.ui.moduleHost.integrityRef", "declare integrity evidence")
 	requireSurface(problems, host.Sandbox != "", "portal", "service.spec.ui.moduleHost.sandbox", "declare sandbox policy")
 }
 
+func hasPortalExtension(spec ServiceSpec) bool {
+	ui := spec.UI
+	host := ui.ModuleHost
+	return len(spec.PortalModules) > 0 || ui.EmbedRef != "" || ui.ContextSchemaRef != "" ||
+		len(ui.HostAuthority) > 0 || len(ui.ExtensionActions) > 0 || len(ui.Evidence) > 0 ||
+		host.Host != "" || host.Runtime != "" || host.MountRef != "" || host.VersionRange != "" ||
+		host.SignatureRef != "" || host.IntegrityRef != "" || host.Sandbox != "" ||
+		len(host.AllowedEvents) > 0 || len(host.RequiredContext) > 0
+}
+
 func requireDataLifecycle(problems *[]ConformanceProblem, lifecycle DataLifecycle) {
-	requireSurface(problems, lifecycle.Export.ActionRef != "", "data", "service.spec.dataLifecycle.export.actionRef", "declare export action")
-	requireSurface(problems, lifecycle.Export.EvidenceRef != "", "data", "service.spec.dataLifecycle.export.evidenceRef", "link export evidence")
+	if lifecycle.Export.ActionRef != "" || lifecycle.Export.Format != "" || lifecycle.Export.EvidenceRef != "" {
+		requireSurface(problems, lifecycle.Export.ActionRef != "", "data", "service.spec.dataLifecycle.export.actionRef", "declare export action")
+		requireSurface(problems, lifecycle.Export.EvidenceRef != "", "data", "service.spec.dataLifecycle.export.evidenceRef", "link export evidence")
+	}
 	requireSurface(problems, lifecycle.Delete.ActionRef != "", "data", "service.spec.dataLifecycle.delete.actionRef", "declare delete action")
 	requireSurface(problems, lifecycle.Delete.EvidenceRef != "", "data", "service.spec.dataLifecycle.delete.evidenceRef", "link delete evidence")
 }
@@ -168,11 +213,36 @@ func checkPackageProfiles(problems *[]ConformanceProblem, pkg ConnectorPackage) 
 	requireSurface(problems, len(pkg.Readiness) > 0, "readiness", "readiness", "declare readiness checks")
 	requireSurface(problems, len(pkg.TenantAccess.Entitlements) > 0, "tenant", "tenantAccess.entitlements", "declare tenant entitlements")
 	requireSurface(problems, len(pkg.TenantAccess.Permissions) > 0, "iam", "tenantAccess.permissions", "declare IAM permissions")
-	requireSurface(problems, pkg.Durability.BackupPolicyRef != "", "durability", "durability.backupPolicyRef", "declare backup policy")
 	requireSurface(problems, len(pkg.Durability.RecoveryEvidence) > 0, "durability", "durability.recoveryEvidence", "link recovery evidence")
 	requireSurface(problems, len(pkg.Distribution.DeploymentProfiles) > 0, "distribution", "distribution.deploymentProfiles", "declare distribution profiles")
-	requireSurface(problems, len(pkg.Federation.Modes) > 0, "federation", "federation.modes", "declare federation modes")
-	requireSurface(problems, len(pkg.Commercial.Roles) > 0, "commercial", "commercial.roles", "declare commercial roles")
+	switch pkg.Federation.Applicability {
+	case ApplicabilitySupported:
+		requireSurface(problems, len(pkg.Federation.Modes) > 0, "federation", "federation.modes", "declare federation modes when federation is enabled")
+	case ApplicabilityNotApplicable:
+		requireSurface(problems, strings.TrimSpace(pkg.Federation.Reason) != "", "federation", "federation.reason", "explain why federation is not applicable")
+		requireSurface(problems, !hasFederationMetadata(pkg.Federation), "federation", "federation.metadata", "omit federation metadata when not applicable")
+	default:
+		requireSurface(problems, false, "federation", "federation.applicability", "declare supported or not_applicable")
+	}
+	switch pkg.Commercial.Applicability {
+	case ApplicabilitySupported:
+		requireSurface(problems, len(pkg.Commercial.Roles) > 0, "commercial", "commercial.roles", "declare commercial roles")
+	case ApplicabilityNotApplicable:
+		requireSurface(problems, strings.TrimSpace(pkg.Commercial.Reason) != "", "commercial", "commercial.reason", "explain why commercial metadata is not applicable")
+		requireSurface(problems, !hasCommercialMetadata(pkg.Commercial), "commercial", "commercial.metadata", "omit commercial metadata when not applicable")
+	default:
+		requireSurface(problems, false, "commercial", "commercial.applicability", "declare supported or not_applicable")
+	}
+}
+
+func hasFederationMetadata(profile FederationProfile) bool {
+	return len(profile.Modes) > 0 || profile.MessageBusRef != "" || len(profile.CrossProviderScenarios) > 0 || profile.PortabilityPolicyRef != ""
+}
+
+func hasCommercialMetadata(profile CommercialProfile) bool {
+	return len(profile.Roles) > 0 || profile.RevenueModel != "" || profile.LicenseRef != "" ||
+		profile.ExpiryBehavior != "" || profile.SupportRef != "" || profile.ServiceProvenance != "" ||
+		profile.ResponsibilityMatrixRef != "" || profile.ContinuityPlanRef != ""
 }
 
 func requireSurface(problems *[]ConformanceProblem, ok bool, surface string, field string, remediation string) {
@@ -188,7 +258,7 @@ func problem(surface string, field string, message string, remediation string) C
 
 func conformanceSurfaces() []string {
 	return []string{
-		"schema", "service", "billing", "portal", "iam", "tenant", "support", "evidence", "readiness", "lifecycle", "durability", "states", "analytics", "distribution", "federation", "commercial",
+		"schema", "api", "service", "billing", "portal", "iam", "tenant", "support", "evidence", "readiness", "lifecycle", "durability", "states", "analytics", "distribution", "federation", "commercial",
 	}
 }
 

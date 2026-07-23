@@ -35,7 +35,10 @@
           "capabilityClass": "s3-compatible-api",
           "role": "data-plane",
           "portability": "s3-compatible-api-contract",
-        "implementationRef": "github.com/opencloudtech/CloudRING/internal/synthetic-adapter"
+          "productAPIRef": "service.api.s3-compatible.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.s3-compatible",
+          "implementationRef": "adapter.synthetic-service"
         }
       ],
       "lifecycle": [

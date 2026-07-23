@@ -9,12 +9,19 @@ runtime; the package handed to the platform is declarative metadata.
 Declare these surfaces in the connector package:
 
 - service identity, owner, version, and support owner;
-- capability classes and portable dependency roles;
-- idempotent lifecycle actions with idempotency keys;
+- capability classes and any portable dependency roles the product actually uses;
+  each dependency names the target public product API, compatible version range,
+  and compatibility-policy reference;
+- one `local`, `remote`, or `api-only` execution profile and a versioned public
+  product API; remote and API-only profiles also declare endpoint, trust-policy,
+  and health references;
+- explicit applicability for provision, hold or suspend, resume, resize, and
+  deprovision; supported actions are idempotent and `not_applicable` actions explain
+  why;
 - automation actions for operator, tenant, or agent workflows;
-- usage meters and billing connector refs;
-- portal modules with route, API ref, host ref, mount ref, and permissions;
-- UI extension metadata with microfrontend host and runtime contract;
+- usage meters and billing connector refs, or an explicit non-billable profile;
+- optional portal modules and UI extension metadata; when present, the
+  microfrontend is signed, integrity-pinned, sandboxed, and permission-scoped;
 - Gateway API route refs that are portable;
 - workload identity and secret refs, with no raw secret values;
 - policy refs for placement, data, support access, or audit decisions;
@@ -29,9 +36,10 @@ Declare these surfaces in the connector package:
    service rather than the backing implementation.
 2. Define the public API refs and lifecycle actions the platform may invoke.
 3. Add tenant permissions and entitlement refs.
-4. Link the billing connector in `service.spec.billing.connectorRef`.
-5. Link evidence refs for readiness, support, UI certification, policy, data
-   lifecycle, and recovery.
+4. Declare billing, federation, and commercial applicability. Link the billing
+   connector only when billing is supported.
+5. Link evidence refs for readiness, support, policy, data lifecycle, and recovery,
+   plus UI certification only when a UI is present.
 6. Validate the package:
 
 ```sh
@@ -41,10 +49,10 @@ go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-packa
 ## Boundary Rules
 
 The package must be buildable and reviewable without importing platform
-internals. Use public OCSv3 fields such as `implementationRef` only for portable
-adapter refs owned by the service team. Do not name private code paths,
-provider-specific APIs, service database tables, or platform implementation
-packages.
+internals. Dependencies use `productAPIRef`, `versionRange`, and
+`compatibilityPolicyRef`; `implementationRef` is not accepted. Do not name private
+code paths, provider-specific APIs, service database tables, or platform
+implementation packages.
 
 This document does not claim production readiness. It defines the module
 authoring contract that must pass validation before review.

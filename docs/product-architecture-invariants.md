@@ -17,9 +17,11 @@ and any product-specific API or user experience it chooses to expose.
 Products integrate only through versioned OCS contracts. A local product may run
 inside the provider cell behind a local adapter; a remote product may run in another
 cell or independently operated installation behind the remote connector protocol.
-Both modes expose the same resource, lifecycle, identity, policy, operation, usage,
-and evidence semantics. Location is a deployment choice, not a second product model.
-The core must not import product implementation details or require a product to use
+An API-only product may expose no Kubernetes binding and no provider-shell module.
+All three execution profiles expose the same versioned public product API and the
+same resource, lifecycle, identity, policy, operation, usage, and evidence semantics.
+Location and presentation are deployment choices, not separate product models. The
+core must not import product implementation details or require a product to use
 Kubernetes, Go, or the platform's storage internally.
 
 Management-plane dependencies such as Kubernetes, networking, certificates,
@@ -63,11 +65,12 @@ plan, policy, apply, audit, and evidence semantics.
 An installable product package declares, with digests and compatibility ranges:
 
 - service identity, ownership, versions, capabilities, dependencies, and regions;
-- OCS transport, workload identity, health, readiness, and discovery, plus any
-  optional product-specific API schema;
-- the universal lifecycle baseline `provision`, `hold`, `resize`, and
-  `deprovision`; additional actions such as suspend, resume, export, retry, cancel,
-  and product-specific operations are declared only where applicable;
+- exactly one execution profile: `local`, `remote`, or `api-only`;
+- the mandatory versioned public product API and OCS transport, identity, health,
+  readiness, and discovery contracts, plus any optional product-specific actions;
+- applicability for the universal lifecycle vocabulary `provision`, `hold` or
+  `suspend`, `resume`, `resize`, and `deprovision`; every action is either supported
+  with an idempotent API contract or `not_applicable` with a reason;
 - asynchronous operation, idempotency, rollback, cleanup, and failure semantics;
 - IAM permissions, tenant and project scoping, quota dimensions, placement, and
   availability objectives;
@@ -77,6 +80,23 @@ An installable product package declares, with digests and compatibility ranges:
   provider-shell SDK;
 - provider moderation state and the explicit provider decision that admits,
   targets, suspends, or withdraws the product.
+
+The execution profile controls only profile-specific surfaces. `local` may declare
+Kubernetes bindings; `remote` declares a remote endpoint and trust boundary;
+`api-only` needs neither Kubernetes bindings nor a microfrontend. A declared
+microfrontend must be signed, integrity-pinned, sandboxed, permission-scoped, and
+revocable. Federation and commercial metadata are explicit applicability profiles:
+each declares `supported` or `not_applicable` with a reason; complete metadata is
+validated only when supported. They are never prerequisites for a private,
+non-commercial, or non-federated product. Remote and API-only packages use
+source-safe endpoint, trust-policy, and health references rather than raw endpoints
+or credentials.
+
+Every service-to-service dependency binds a capability class to a target public
+product API, a compatible version range, and a provider-resolved compatibility
+policy. The dependency never embeds an implementation endpoint. This lets the
+provider select an admitted local or remote product and attribute the consuming
+service's infrastructure usage without changing either product's implementation.
 
 Unknown required fields, unsupported major versions, digest mismatches, and
 incompatible lifecycle changes fail closed. Minor-version evolution must be
@@ -136,12 +156,18 @@ The control plane, identity path, product registry, billing ingestion, provider
 shell, state stores, secret path, and reconciliation path declare replicas, failure
 domains, stable endpoints, failover, retry behavior, RPO/RTO, backup coverage, and
 evidence. A component is not called highly available merely because it has multiple
-pods.
+pods. This inventory is cumulative: every later critical component must join the
+same one-failure, off-cell-restore, and acknowledged-state continuity gate before its
+goal is accepted.
 
-Supported updates preserve acknowledged operations and stay within the declared
-SLO. Database and API changes must be compatible across the rollout window.
-Progressive delivery, health gates, rollback to the prior signed revision, and a
-tested restore path are required before a production mutation can be promoted.
+Every declared supported update path is zero-downtime. CloudRING uses rolling
+delivery where versions can safely coexist and blue-green delivery where isolation
+or an atomic traffic switch is required. Zero-downtime means no lost acknowledged
+operation and no user-visible interruption on the declared supported path, while
+continuous control, identity, and billing probes remain successful. Database and API
+changes must be compatible across the mixed-version rollout window. Health gates,
+rollback to the prior signed revision, and a tested restore path are required before
+a production mutation can be promoted.
 
 ## Federation boundary
 

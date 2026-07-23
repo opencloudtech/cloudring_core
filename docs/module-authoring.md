@@ -7,20 +7,24 @@ portable manifest that the platform reads:
 cp -r reference/synthetic-service my-service
 ```
 
-Then change names, CRD group, service class, meters, portal route, diagnostics,
-and docs references. Keep lifecycle and evidence surfaces complete.
+Then change names, execution profile, service class, API contract, diagnostics,
+and docs references. Add CRD bindings, meters, or a portal route only when they
+apply. Keep lifecycle applicability and evidence surfaces complete.
 
 ## Required Package Sections
 
 - `metadata`: name, display name, owner, version.
-- `service.spec`: capabilities, dependencies, lifecycle, automation, meters,
-  billing, portal modules, UI host, analytics, Kubernetes bindings, gateway
-  routes, secrets, policies, data lifecycle, states, support, evidence bundles.
-- `billing`: meters, cost meters, idempotent events.
+- `service.spec`: execution profile, public product API, capabilities, lifecycle
+  applicability, automation, billing applicability, gateway routes, workload
+  identity, policies, data lifecycle, states, support, and evidence bundles;
+  dependencies, analytics, portal/UI, and Kubernetes bindings only when applicable.
+- `billing`: meters, cost meters, and idempotent events when billing is supported;
+  otherwise declare `not_applicable` with a reason and omit the connector.
 - `catalog`: class, visibility, portability, plans.
 - `tenantAccess`: entitlements and permissions.
 - `durability`: state class, data classes, backup policy, recovery objective.
-- `distribution`, `federation`, `commercial`: release contract metadata.
+- `distribution`: release contract metadata; `federation` and `commercial` declare
+  `supported` or `not_applicable`, with complete metadata only when supported.
 
 Run conformance before publishing:
 

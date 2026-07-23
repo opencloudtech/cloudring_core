@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.billing-finops.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "billing-finops",
@@ -29,42 +35,66 @@
           "id": "commercial-ledger-adapter-contract",
           "capabilityClass": "commercial-ledger",
           "role": "portable commercial ledger adapter",
-          "portability": "ocs-portable-commercial-ledger-contract"
+          "portability": "ocs-portable-commercial-ledger-contract",
+          "productAPIRef": "service.api.commercial-ledger.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.commercial-ledger"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "usage ledger processing remains available until deprovisioned"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported for the usage ledger"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "ledger capacity is managed by the selected service plan"
+        },
+        {
           "name": "ingest",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "usageEvent.id"
         },
         {
           "name": "allocate",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "allocation.run.id"
         },
         {
           "name": "preview",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "preview.request.id"
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -72,18 +102,21 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -91,6 +124,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -126,6 +160,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "billing-finops-module-billing",
         "meters": [
           {
@@ -176,6 +211,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.billing-finops.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.billing-finops.ui.signature",
           "integrityRef": "evidence.billing-finops.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -265,7 +301,7 @@
           "evidenceRef": "evidence.billing-finops.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "tenant-billing-finops-delete-receipt",
           "evidenceRef": "evidence.billing-finops.delete"
         }
@@ -488,6 +524,7 @@
     "updatePolicyRef": "updates.billing-finops.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected",
@@ -502,6 +539,7 @@
     "portabilityPolicyRef": "policy.billing-finops.ocs-portable-commercial-ledger"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",

@@ -17,6 +17,12 @@
       "version": "v0.1.0"
     },
     "spec": {
+      "executionProfile": "local",
+      "productAPI": {
+        "ref": "service.api.support.v1alpha1",
+        "version": "v1alpha1",
+        "protocol": "https-json"
+      },
       "capabilities": [
         {
           "class": "support",
@@ -29,42 +35,66 @@
           "id": "support-system-adapter-contract",
           "capabilityClass": "support-system",
           "role": "portable case management adapter",
-          "portability": "ocs-portable-support-system-contract"
+          "portability": "ocs-portable-support-system-contract",
+          "productAPIRef": "service.api.support-system.v1",
+          "versionRange": ">=1.0.0,<2.0.0",
+          "compatibilityPolicyRef": "policy.compatibility.support-system"
         }
       ],
       "lifecycle": [
         {
           "name": "provision",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "metadata.uid"
         },
         {
+          "name": "hold",
+          "applicability": "not_applicable",
+          "reason": "support cases remain active until explicitly deprovisioned"
+        },
+        {
+          "name": "resume",
+          "applicability": "not_applicable",
+          "reason": "hold is not supported by the support case lifecycle"
+        },
+        {
+          "name": "resize",
+          "applicability": "not_applicable",
+          "reason": "support cases do not expose a capacity resize operation"
+        },
+        {
           "name": "open",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "case.request.id"
         },
         {
           "name": "attachDiagnostic",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "diagnostic.bundle.id"
         },
         {
           "name": "escalate",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "escalation.request.id"
         },
         {
           "name": "export",
+          "applicability": "supported",
           "verb": "Export",
           "idempotent": true,
           "idempotencyKey": "export.request.id"
         },
         {
-          "name": "delete",
+          "name": "deprovision",
+          "applicability": "supported",
           "verb": "Delete",
           "idempotent": true,
           "idempotencyKey": "delete.request.id",
@@ -72,18 +102,21 @@
         },
         {
           "name": "backup",
+          "applicability": "supported",
           "verb": "Backup",
           "idempotent": true,
           "idempotencyKey": "backup.request.id"
         },
         {
           "name": "restore",
+          "applicability": "supported",
           "verb": "Restore",
           "idempotent": true,
           "idempotencyKey": "restore.request.id"
         },
         {
           "name": "retry",
+          "applicability": "supported",
           "verb": "Apply",
           "idempotent": true,
           "idempotencyKey": "retry.request.id",
@@ -91,6 +124,7 @@
         },
         {
           "name": "rollback",
+          "applicability": "supported",
           "verb": "Rollback",
           "idempotent": true,
           "idempotencyKey": "rollback.request.id"
@@ -126,6 +160,7 @@
         }
       ],
       "billing": {
+        "applicability": "supported",
         "connectorRef": "support-module-billing",
         "meters": [
           {
@@ -174,6 +209,7 @@
           "runtime": "module-federation",
           "mountRef": "mount.support.overview",
           "versionRange": ">=0.1.0 <1.0.0",
+          "signatureRef": "evidence.support.ui.signature",
           "integrityRef": "evidence.support.ui.integrity",
           "sandbox": "tenant-iam-context",
           "allowedEvents": [
@@ -262,7 +298,7 @@
           "evidenceRef": "evidence.support.export"
         },
         "delete": {
-          "actionRef": "lifecycle.delete",
+          "actionRef": "lifecycle.deprovision",
           "format": "tenant-support-delete-receipt",
           "evidenceRef": "evidence.support.delete"
         }
@@ -486,6 +522,7 @@
     "updatePolicyRef": "updates.support.compatibility-reviewed"
   },
   "federation": {
+    "applicability": "supported",
     "modes": [
       "standalone",
       "connected",
@@ -500,6 +537,7 @@
     "portabilityPolicyRef": "policy.support.ocs-portable-case-handoff"
   },
   "commercial": {
+    "applicability": "supported",
     "roles": [
       "vendor",
       "provider",
