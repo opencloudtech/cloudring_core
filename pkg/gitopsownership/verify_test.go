@@ -499,15 +499,14 @@ func TestValidateContractRejectsInvalidClosedWorldScopes(t *testing.T) {
 			},
 		},
 		{
-			name: "overlapping family discovery scope",
+			name: "duplicate expected object across shared discovery scope",
 			mutate: func(contract *Contract) {
 				duplicate := contract.Spec.RequiredFamilies[0]
 				duplicate.ID = "gateways-copy"
 				duplicate.ExpectedObjects = []ResourceRef{{
 					APIVersion: duplicate.APIVersion,
 					Kind:       duplicate.Kind,
-					Namespace:  "platform-system",
-					Name:       "cloudring-public-copy",
+					Name:       "cilium",
 				}}
 				contract.Spec.RequiredFamilies = append(contract.Spec.RequiredFamilies, duplicate)
 				contract.Spec.Scope.CriticalFamilyIDs = append(contract.Spec.Scope.CriticalFamilyIDs, duplicate.ID)
