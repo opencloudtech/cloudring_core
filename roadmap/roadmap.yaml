@@ -1,0 +1,207 @@
+apiVersion: roadmap.cloudring.org/v1alpha1
+kind: DeliveryRoadmap
+metadata:
+  name: cloudring-1-0
+spec:
+  executionContract: EXECUTION_CONTRACT.md
+  targetArchitecture: TARGET_ARCHITECTURE.md
+  currentState: CURRENT_STATE.md
+  issueMap: ISSUE_MAP.md
+  legacyWorkMap: LEGACY_WORK_MAP.md
+  hubPrerequisites: HUB_PREREQUISITES.md
+  measurementContract: MEASUREMENT_CONTRACT.md
+  evidencePolicy: EVIDENCE_POLICY.md
+  verificationMatrix: VERIFICATION_MATRIX.md
+  stateSchema: state.schema.json
+  evidenceSchema: evidence.schema.json
+  defaultDeploymentTargets: [public_clean_room, hub]
+  deliveryOrder:
+    - id: G00
+      file: goals/G00-truthful-baseline-and-protected-delivery.md
+      dependsOn: []
+      requirementIds: [CR-G00-DELIVERY]
+      status: not_started
+      liveDeployment: required
+    - id: G01
+      file: goals/G01-disposable-public-development-installation.md
+      dependsOn: [G00]
+      requirementIds: [CR-G01-DEV-INSTALL]
+      status: not_started
+      liveDeployment: required
+    - id: G02
+      file: goals/G02-production-ha-empty-provider.md
+      dependsOn: [G01]
+      requirementIds: [CR-G02-HA-INSTALL]
+      status: not_started
+      liveDeployment: required
+    - id: G03
+      file: goals/G03-durable-resource-and-operation-kernel.md
+      dependsOn: [G02]
+      requirementIds: [CR-G03-KERNEL]
+      status: not_started
+      liveDeployment: required
+    - id: G04
+      file: goals/G04-human-identity-and-account-lifecycle.md
+      dependsOn: [G03]
+      requirementIds: [CR-G04-IDENTITY]
+      status: not_started
+      liveDeployment: required
+    - id: G05
+      file: goals/G05-iam-workload-identity-and-tenant-isolation.md
+      dependsOn: [G04]
+      requirementIds: [CR-G05-IAM]
+      status: not_started
+      liveDeployment: required
+    - id: G06
+      file: goals/G06-provider-inventory-adoption-and-operation-execution.md
+      dependsOn: [G05]
+      requirementIds: [CR-G06-PROVIDER-OPS]
+      status: not_started
+      liveDeployment: required
+    - id: G07
+      file: goals/G07-open-cloud-standard-release-candidate.md
+      dependsOn: [G06]
+      requirementIds: [CR-G07-OCS-RC]
+      status: not_started
+      liveDeployment: required
+    - id: G08
+      file: goals/G08-service-registry-moderation-and-extension-host.md
+      dependsOn: [G07]
+      requirementIds: [CR-G08-REGISTRY]
+      status: not_started
+      liveDeployment: required
+    - id: G09
+      file: goals/G09-orders-subscriptions-lifecycle-quota-and-capacity.md
+      dependsOn: [G08]
+      requirementIds: [CR-G09-LIFECYCLE]
+      status: not_started
+      liveDeployment: required
+    - id: G10
+      file: goals/G10-metering-rating-and-billing.md
+      dependsOn: [G09]
+      requirementIds: [CR-G10-BILLING]
+      status: not_started
+      liveDeployment: required
+    - id: G11
+      file: goals/G11-unified-human-and-agent-experience.md
+      dependsOn: [G10]
+      requirementIds: [CR-G11-EXPERIENCE]
+      status: not_started
+      liveDeployment: required
+    - id: G12
+      file: goals/G12-network-cloud-product.md
+      dependsOn: [G11]
+      requirementIds: [CR-G12-NETWORK]
+      status: not_started
+      liveDeployment: required
+    - id: G13
+      file: goals/G13-volume-cloud-product.md
+      dependsOn: [G12]
+      requirementIds: [CR-G13-VOLUME]
+      status: not_started
+      liveDeployment: required
+    - id: G14
+      file: goals/G14-image-and-artifact-cloud-product.md
+      dependsOn: [G13]
+      requirementIds: [CR-G14-ARTIFACT]
+      status: not_started
+      liveDeployment: required
+    - id: G15
+      file: goals/G15-compute-vm-cloud-product.md
+      dependsOn: [G14]
+      requirementIds: [CR-G15-COMPUTE]
+      status: not_started
+      liveDeployment: required
+    - id: G16
+      file: goals/G16-managed-kubernetes-cloud-product.md
+      dependsOn: [G15]
+      requirementIds: [CR-G16-KUBERNETES]
+      status: not_started
+      liveDeployment: required
+    - id: G17
+      file: goals/G17-object-storage-cloud-product.md
+      dependsOn: [G16]
+      requirementIds: [CR-G17-OBJECT]
+      status: not_started
+      liveDeployment: required
+    - id: G18
+      file: goals/G18-backup-cloud-product.md
+      dependsOn: [G17]
+      requirementIds: [CR-G18-BACKUP]
+      status: not_started
+      liveDeployment: required
+    - id: G19
+      file: goals/G19-controlled-access-cloud-product.md
+      dependsOn: [G18]
+      requirementIds: [CR-G19-ACCESS]
+      status: not_started
+      liveDeployment: required
+    - id: G20
+      file: goals/G20-support-cloud-product.md
+      dependsOn: [G19]
+      requirementIds: [CR-G20-SUPPORT]
+      status: not_started
+      liveDeployment: required
+    - id: G21
+      file: goals/G21-external-integration-product.md
+      dependsOn: [G20]
+      requirementIds: [CR-G21-EXTERNAL]
+      status: not_started
+      liveDeployment: required
+    - id: G22
+      file: goals/G22-one-engineer-operations-and-autonomous-recovery.md
+      dependsOn: [G21]
+      requirementIds: [CR-G22-OPERATIONS]
+      status: not_started
+      liveDeployment: required
+    - id: G23
+      file: goals/G23-zero-downtime-upgrades-and-failure-resilience.md
+      dependsOn: [G22]
+      requirementIds: [CR-G23-RESILIENCE]
+      status: not_started
+      liveDeployment: required
+    - id: G24
+      file: goals/G24-portable-provider-certification.md
+      dependsOn: [G23]
+      requirementIds: [CR-G24-PORTABILITY]
+      status: not_started
+      liveDeployment: required
+      deploymentTargets: [public_clean_room, hub, cloudlinux]
+    - id: G27
+      file: goals/G27-final-security-compliance-and-1-0-release.md
+      dependsOn: [G24]
+      requirementIds: [CR-G27-RELEASE]
+      status: not_started
+      liveDeployment: required
+      deploymentTargets: [public_clean_room, hub, cloudlinux]
+    - id: G25
+      file: goals/G25-regional-cells-multi-region-and-scale.md
+      dependsOn: [G27]
+      requirementIds: [CR-G25-CELLS]
+      status: not_started
+      releaseTrack: post_1_0
+      liveDeployment: required
+      deploymentTargets: [public_clean_room, hub, cloudlinux, region_primary, region_secondary]
+    - id: G26
+      file: goals/G26-sovereign-federation.md
+      dependsOn: [G27]
+      requirementIds: [CR-G26-FEDERATION]
+      status: not_started
+      releaseTrack: post_1_0
+      liveDeployment: required
+      deploymentTargets: [public_clean_room, hub, cloudlinux, federation_provider_a, federation_provider_b]
+  invariant:
+    - complete_in_dependency_order
+    - reusable_implementation_is_oss
+    - public_clean_room_proof_precedes_downstreams
+    - protected_main_only
+    - exact_downstream_pins
+    - every_provider_pin_passes_safepush_stage_9
+    - deploy_every_goal_to_hub_cloudring_org
+    - cumulative_live_regression_every_goal
+    - signed_prerelease_sbom_and_provenance_every_goal
+    - no_scaffold_or_fixture_readiness_claims
+    - final_broad_security_review_on_1_0_path_is_G27
+    - every_post_1_0_track_requires_terminal_security_review
+    - cloudring_1_0_does_not_depend_on_multi_region_or_federation
+    - federation_is_opt_in_and_never_a_standalone_provider_dependency

@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/schemas/roadmap-evidence-v1.json",
+  "title": "Sanitized CloudRING roadmap evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "goal",
+    "requirement",
+    "sourceSha",
+    "releaseManifest",
+    "observedAt",
+    "expiresAt",
+    "environment",
+    "verdict",
+    "proof",
+    "redaction",
+    "cleanup",
+    "attestation"
+  ],
+  "properties": {
+    "goal": {
+      "enum": [
+        "G00", "G01", "G02", "G03", "G04", "G05", "G06", "G07",
+        "G08", "G09", "G10", "G11", "G12", "G13", "G14", "G15",
+        "G16", "G17", "G18", "G19", "G20", "G21", "G22", "G23",
+        "G24", "G25", "G26", "G27"
+      ]
+    },
+    "requirement": {
+      "type": "string",
+      "pattern": "^CR-G[0-9]{2}-[A-Z0-9-]+$"
+    },
+    "sourceSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "releaseManifest": {"$ref": "#/$defs/evidenceRef"},
+    "observedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "fingerprint", "profile", "gitOpsRevision"],
+      "properties": {
+        "class": {
+          "enum": [
+            "public_clean_room",
+            "hub",
+            "cloudlinux",
+            "region",
+            "federation_provider",
+            "local_test",
+            "ci"
+          ]
+        },
+        "fingerprint": {"$ref": "#/$defs/digest"},
+        "profile": {"$ref": "#/$defs/evidenceRef"},
+        "gitOpsRevision": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "verdict": {"enum": ["pass", "fail", "blocked"]},
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "summary", "artifact"],
+      "properties": {
+        "kind": {
+          "enum": ["test", "ci", "clean_clone", "live", "review", "release", "measurement"]
+        },
+        "summary": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "artifact": {"$ref": "#/$defs/evidenceRef"}
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profileVersion",
+        "workloadDigest",
+        "datasetDigest",
+        "thresholds",
+        "results",
+        "startedAt",
+        "endedAt",
+        "clockSyncHealthy",
+        "operationCount",
+        "excludedOperationCount",
+        "formulaVersion",
+        "assertion"
+      ],
+      "properties": {
+        "profileVersion": {"type": "string", "minLength": 1},
+        "workloadDigest": {"$ref": "#/$defs/digest"},
+        "datasetDigest": {"$ref": "#/$defs/digest"},
+        "thresholds": {"$ref": "#/$defs/evidenceRef"},
+        "results": {"$ref": "#/$defs/evidenceRef"},
+        "startedAt": {"type": "string", "format": "date-time"},
+        "endedAt": {"type": "string", "format": "date-time"},
+        "clockSyncHealthy": {"type": "boolean"},
+        "operationCount": {"type": "integer", "minimum": 1},
+        "excludedOperationCount": {"type": "integer", "minimum": 0},
+        "formulaVersion": {"type": "string", "minLength": 1},
+        "assertion": {"enum": ["pass", "fail"]},
+        "abortThresholdsDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validatorVersion", "verdict"],
+      "properties": {
+        "validatorVersion": {"type": "string", "minLength": 1},
+        "verdict": {"const": "pass"}
+      }
+    },
+    "cleanup": {"enum": ["complete", "not_applicable"]},
+    "attestation": {"$ref": "#/$defs/evidenceRef"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "proof": {
+            "type": "object",
+            "properties": {"kind": {"const": "measurement"}}
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "required": ["measurement"],
+        "properties": {"measurement": {"type": "object"}}
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "proof": {
+            "type": "object",
+            "properties": {"kind": {"const": "measurement"}}
+          },
+          "verdict": {"const": "pass"}
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "measurement": {
+            "type": "object",
+            "properties": {
+              "clockSyncHealthy": {"const": true},
+              "assertion": {"const": "pass"}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "locator", "retentionUntil"],
+      "properties": {
+        "digest": {"$ref": "#/$defs/digest"},
+        "locator": {
+          "type": "string",
+          "pattern": "^(oci|protected)://\\S+$",
+          "maxLength": 512
+        },
+        "retentionUntil": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

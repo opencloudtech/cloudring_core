@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudring.org/schemas/roadmap-state-v1.json",
+  "title": "CloudRING roadmap goal state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "goal",
+    "status",
+    "requirements",
+    "requirementResults",
+    "updatedAt",
+    "repositories",
+    "artifacts",
+    "deployments",
+    "blockers",
+    "rollbackBoundary",
+    "predecessorRegression",
+    "releaseManifest",
+    "verdict"
+  ],
+  "properties": {
+    "goal": {
+      "enum": [
+        "G00", "G01", "G02", "G03", "G04", "G05", "G06", "G07",
+        "G08", "G09", "G10", "G11", "G12", "G13", "G14", "G15",
+        "G16", "G17", "G18", "G19", "G20", "G21", "G22", "G23",
+        "G24", "G25", "G26", "G27"
+      ]
+    },
+    "status": {"enum": ["not_started", "in_progress", "blocked", "delivered"]},
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "pattern": "^CR-G[0-9]{2}-[A-Z0-9-]+$"},
+      "uniqueItems": true
+    },
+    "requirementResults": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/requirementResult"}
+    },
+    "updatedAt": {"type": "string", "format": "date-time"},
+    "repositories": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public", "enterprise", "provider"],
+      "properties": {
+        "public": {"$ref": "#/$defs/repositoryProof"},
+        "enterprise": {"$ref": "#/$defs/repositoryProof"},
+        "provider": {"$ref": "#/$defs/repositoryProof"}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evidenceRef"},
+      "uniqueItems": true
+    },
+    "deployments": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/deploymentProof"}
+    },
+    "blockers": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "rollbackBoundary": {"type": ["string", "null"], "minLength": 1},
+    "predecessorRegression": {
+      "oneOf": [{"$ref": "#/$defs/evidenceRef"}, {"type": "null"}]
+    },
+    "releaseManifest": {
+      "oneOf": [{"$ref": "#/$defs/evidenceRef"}, {"type": "null"}]
+    },
+    "verdict": {"enum": ["unverified", "pass", "fail", "blocked"]}
+  },
+  "allOf": [
+    {
+      "if": {"type": "object", "properties": {"status": {"const": "delivered"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "verdict": {"const": "pass"},
+          "blockers": {"type": "array", "maxItems": 0},
+          "requirementResults": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/deliveredRequirementResult"}
+          },
+          "artifacts": {"type": "array", "minItems": 1},
+          "deployments": {"type": "array", "minItems": 2},
+          "rollbackBoundary": {"type": "string", "minLength": 1},
+          "releaseManifest": {"$ref": "#/$defs/evidenceRef"},
+          "repositories": {
+            "type": "object",
+            "properties": {
+              "public": {
+                "type": "object",
+                "properties": {
+                  "main": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "checks": {"const": "green"},
+                  "pin": {"type": "null"}
+                }
+              },
+              "enterprise": {
+                "type": "object",
+                "properties": {
+                  "main": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "checks": {"const": "green"},
+                  "pin": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+                }
+              },
+              "provider": {
+                "type": "object",
+                "properties": {
+                  "main": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "checks": {"const": "green"},
+                  "pin": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "status": {"const": "delivered"},
+          "goal": {"not": {"const": "G00"}}
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "predecessorRegression": {"$ref": "#/$defs/evidenceRef"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"status": {"const": "blocked"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "verdict": {"const": "blocked"},
+          "blockers": {"type": "array", "minItems": 1}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "locator", "retentionUntil"],
+      "properties": {
+        "digest": {"$ref": "#/$defs/digest"},
+        "locator": {
+          "type": "string",
+          "pattern": "^(oci|protected)://\\S+$",
+          "maxLength": 512
+        },
+        "retentionUntil": {"type": "string", "format": "date-time"}
+      }
+    },
+    "repositoryProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["main", "checks", "pin"],
+      "properties": {
+        "main": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "checks": {"enum": ["unverified", "green", "red", "not_applicable"]},
+        "pin": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "requirementResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "applicability", "reason", "evidence", "approvalEvidence", "verdict"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^CR-G[0-9]{2}-[A-Z0-9-]+$"},
+        "applicability": {"enum": ["required", "not_applicable"]},
+        "reason": {"type": ["string", "null"], "minLength": 1},
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidenceRef"}},
+        "approvalEvidence": {
+          "oneOf": [{"$ref": "#/$defs/evidenceRef"}, {"type": "null"}]
+        },
+        "verdict": {"enum": ["unverified", "pass", "fail", "blocked"]}
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {"applicability": {"const": "not_applicable"}}
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "reason": {"type": "string", "minLength": 1},
+              "approvalEvidence": {"$ref": "#/$defs/evidenceRef"}
+            }
+          }
+        }
+      ]
+    },
+    "deliveredRequirementResult": {
+      "allOf": [
+        {"$ref": "#/$defs/requirementResult"},
+        {
+          "type": "object",
+          "properties": {"verdict": {"const": "pass"}},
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "applicability": {"const": "required"},
+                "evidence": {"type": "array", "minItems": 1}
+              }
+            },
+            {
+              "type": "object",
+              "properties": {"applicability": {"const": "not_applicable"}}
+            }
+          ]
+        }
+      ]
+    },
+    "deploymentProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "environmentFingerprint",
+        "profile",
+        "gitOpsRevision",
+        "evidence",
+        "cleanup",
+        "verdict"
+      ],
+      "properties": {
+        "target": {
+          "enum": [
+            "public_clean_room",
+            "hub",
+            "cloudlinux",
+            "region_primary",
+            "region_secondary",
+            "federation_provider_a",
+            "federation_provider_b"
+          ]
+        },
+        "environmentFingerprint": {"$ref": "#/$defs/digest"},
+        "profile": {"$ref": "#/$defs/evidenceRef"},
+        "gitOpsRevision": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidenceRef"}
+        },
+        "cleanup": {"enum": ["complete", "not_applicable"]},
+        "verdict": {"const": "pass"}
+      }
+    }
+  }
+}

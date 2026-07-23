@@ -194,9 +194,10 @@ The federation runtime and economy are later goals. Single-cell work is accepted
 only when it does not introduce an incompatible identifier, event, operation, or
 service boundary that would require a second platform implementation later.
 
-## Goal 01 binding subset
+## Legacy Goal 01 obligations in the canonical roadmap
 
-Goal 01 binds the following foundations now:
+The former Goal 01 bound the following foundations. They are now carried by the
+single G00-G27 delivery graph rather than a competing roadmap:
 
 - the stable identity namespace and canonical operation/audit identity;
 - strict, additive state migration and append-only audit behavior;
@@ -211,5 +212,5 @@ Later goals deliver an OCS release candidate with local and remote runtime and
 provider moderation before dependent products; then identity, offers, entitlements,
 one-region placement, billing, product dogfood, portability, marketplace economics,
 multi-cell operation, and sovereign peer federation as independently accepted
-vertical releases. OCS 1.0 is reserved for Goal 17 after product dogfood and the
-final security review and fixes.
+vertical releases. OCS 1.0 is reserved for G27 after product dogfood and the
+final security review, fixes and full regression.
