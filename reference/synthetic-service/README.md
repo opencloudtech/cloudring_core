@@ -10,7 +10,15 @@ Run:
 go run ./cmd/ocsctl validate ./reference/synthetic-service/module-package.json
 go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 go test ./... -count=1
+docker build --file ./reference/synthetic-service/Containerfile --tag cloudring-synthetic-service:dev .
+docker run --rm cloudring-synthetic-service:dev --mode=mock-provider --check
 ```
+
+The image build uses a digest-pinned Go builder and a `scratch` runtime. The
+Kubernetes manifest references the resulting development tag. The executable
+wires the reference reconciliation library into a local mock-provider process;
+`--check` performs one deterministic synthetic reconciliation before exiting.
+It does not watch Kubernetes resources or connect to a provider API.
 
 The module demonstrates the local execution profile, a versioned public product
 API, lifecycle applicability for provision, hold, resume, resize, and
