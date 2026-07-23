@@ -22,11 +22,20 @@ func TestRoadmapCoverageReferencesDefinedPublicRequirements(t *testing.T) {
 		t.Fatal("resolve test source path")
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(source), "..", ".."))
+	repository, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatalf("open repository root: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := repository.Close(); err != nil {
+			t.Errorf("close repository root: %v", err)
+		}
+	})
 
-	coverage := readFile(t, filepath.Join(root, "roadmap", "COVERAGE.md"))
+	coverage := readFile(t, repository, filepath.Join("roadmap", "COVERAGE.md"))
 	definitions := map[string][]string{}
-	goalRequirementsPath := filepath.Join(root, "specifications", "goal-01.md")
-	for _, match := range definedRequirement.FindAllStringSubmatch(readFile(t, goalRequirementsPath), -1) {
+	goalRequirementsPath := filepath.Join("specifications", "goal-01.md")
+	for _, match := range definedRequirement.FindAllStringSubmatch(readFile(t, repository, goalRequirementsPath), -1) {
 		definitions[match[1]] = append(definitions[match[1]], filepath.Base(goalRequirementsPath))
 	}
 
@@ -58,9 +67,9 @@ func TestRoadmapCoverageReferencesDefinedPublicRequirements(t *testing.T) {
 	}
 }
 
-func readFile(t *testing.T, path string) string {
+func readFile(t *testing.T, repository *os.Root, path string) string {
 	t.Helper()
-	data, err := os.ReadFile(path)
+	data, err := repository.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}

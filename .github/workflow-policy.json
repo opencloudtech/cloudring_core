@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "canonicalization": "yq-json+jq-cS",
   "workflows": {
-    ".github/workflows/ci.yml": "d2ee585f1362cc3c0ebd1c45f4084d9eb910c869ea333f84c7dec58bd5f074df",
+    ".github/workflows/ci.yml": "949367c48b0503b47568350df537c5f408d4d6e243f195d4473b8198519d3467",
     ".github/workflows/cla-dco.yml": "6a931f46518dd3d7a149ca963a2aa5124ca184a746b191889f1d28c4cf4555f7",
     ".github/workflows/license.yml": "d8032e889057a6e760c080e6adb10942ed59b8abd45f92951b956a95b79733df",
     ".github/workflows/release-provenance.yml": "1d0e5d8c71494fe3979d132d1fee79f54004b55d8539e1f34e443dbc30686ce2",
