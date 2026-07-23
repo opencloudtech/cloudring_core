@@ -52,6 +52,9 @@ not contain provider credentials, topology values, tenant data, or live evidence
 | `CR-DPL-050` | The reference installation MUST reconcile from an accepted signed Git revision and MUST fail closed on repository, revision, or inventory mismatch. |
 | `CR-DPL-150` | Database changes MUST use expand/contract migrations compatible with mixed application versions and MUST preserve accepted writes across rollout and rollback. |
 
-Goal 01 acceptance is governed by
+The former Goal 01 scheduling unit is superseded, but these requirement
+definitions remain binding. Their compatibility transition is documented in
 [`roadmap/GOAL-01-hub-survivability.md`](../roadmap/GOAL-01-hub-survivability.md)
-and current status by [`roadmap/COVERAGE.md`](../roadmap/COVERAGE.md).
+and [`roadmap/COVERAGE.md`](../roadmap/COVERAGE.md); authoritative execution and
+accepted status come only from [`roadmap/roadmap.yaml`](../roadmap/roadmap.yaml)
+and its schema-validated state records.

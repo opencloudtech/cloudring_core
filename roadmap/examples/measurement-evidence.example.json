@@ -1,0 +1,64 @@
+{
+  "goal": "G01",
+  "requirement": "CR-G01-DEV-INSTALL",
+  "sourceSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "releaseManifest": {
+    "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "locator": "oci://registry.example.invalid/cloudring/releases/g01",
+    "retentionUntil": "2035-01-01T00:00:00Z"
+  },
+  "observedAt": "2026-07-22T00:00:00Z",
+  "expiresAt": "2026-08-22T00:00:00Z",
+  "environment": {
+    "class": "public_clean_room",
+    "fingerprint": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "profile": {
+      "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "locator": "oci://registry.example.invalid/cloudring/profiles/clean-room",
+      "retentionUntil": "2035-01-01T00:00:00Z"
+    },
+    "gitOpsRevision": null
+  },
+  "verdict": "pass",
+  "proof": {
+    "kind": "measurement",
+    "summary": "Non-authoritative schema example with sanitized placeholder data.",
+    "artifact": {
+      "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "locator": "oci://registry.example.invalid/cloudring/evidence/measurement",
+      "retentionUntil": "2035-01-01T00:00:00Z"
+    }
+  },
+  "measurement": {
+    "profileVersion": "example-v1",
+    "workloadDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "datasetDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+    "thresholds": {
+      "digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "locator": "oci://registry.example.invalid/cloudring/profiles/thresholds",
+      "retentionUntil": "2035-01-01T00:00:00Z"
+    },
+    "results": {
+      "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "locator": "oci://registry.example.invalid/cloudring/evidence/results",
+      "retentionUntil": "2035-01-01T00:00:00Z"
+    },
+    "startedAt": "2026-07-21T00:00:00Z",
+    "endedAt": "2026-07-22T00:00:00Z",
+    "clockSyncHealthy": true,
+    "operationCount": 1000,
+    "excludedOperationCount": 0,
+    "formulaVersion": "example-v1",
+    "assertion": "pass"
+  },
+  "redaction": {
+    "validatorVersion": "example-v1",
+    "verdict": "pass"
+  },
+  "cleanup": "complete",
+  "attestation": {
+    "digest": "sha256:1212121212121212121212121212121212121212121212121212121212121212",
+    "locator": "oci://registry.example.invalid/cloudring/attestations/example",
+    "retentionUntil": "2035-01-01T00:00:00Z"
+  }
+}
