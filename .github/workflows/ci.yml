@@ -39,6 +39,53 @@ jobs:
         run: go run ./cmd/cloudring-roadmap verify --root ./roadmap
       - name: Test minimum supported Go
         run: go test ./... -count=1
+      - name: Test real offline etcd snapshot recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='3.6.13'
+          archive="${RUNNER_TEMP}/etcd-v${version}-linux-amd64.tar.gz"
+          release="${RUNNER_TEMP}/etcd-v${version}-linux-amd64"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "${archive}" \
+            "https://github.com/etcd-io/etcd/releases/download/v${version}/etcd-v${version}-linux-amd64.tar.gz"
+          echo 'b4928654aed84d90952620c7144555e4186d795e1e7414e65fe0cf6265fd0465  '"${archive}" | sha256sum --check --strict
+          tar --extract --gzip --file "${archive}" --directory "${RUNNER_TEMP}"
+          data_dir="${RUNNER_TEMP}/synthetic-etcd"
+          snapshot="${RUNNER_TEMP}/synthetic-snapshot.db"
+          loopback_host='127.0.'
+          loopback_host+='0.1'
+          client_url="http://${loopback_host}:2379"
+          peer_url="http://${loopback_host}:2380"
+          "${release}/etcd" \
+            --data-dir "${data_dir}" \
+            --name synthetic \
+            --listen-client-urls "${client_url}" \
+            --advertise-client-urls "${client_url}" \
+            --listen-peer-urls "${peer_url}" \
+            --initial-advertise-peer-urls "${peer_url}" \
+            --initial-cluster "synthetic=${peer_url}" \
+            >"${RUNNER_TEMP}/synthetic-etcd.log" 2>&1 &
+          etcd_pid=$!
+          trap 'kill "${etcd_pid}" 2>/dev/null || true; wait "${etcd_pid}" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if "${release}/etcdctl" --endpoints="${client_url}" endpoint health >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "${attempt}" == 60 ]]; then
+              exit 1
+            fi
+            sleep 1
+          done
+          "${release}/etcdctl" --endpoints="${client_url}" put synthetic-key synthetic-value >/dev/null
+          "${release}/etcdctl" --endpoints="${client_url}" snapshot save "${snapshot}" >/dev/null
+          kill "${etcd_pid}"
+          wait "${etcd_pid}" || true
+          trap - EXIT
+          chmod 0600 "${snapshot}"
+          CLOUDRING_TEST_ETCD_SNAPSHOT="${snapshot}" \
+          CLOUDRING_TEST_ETCDUTL="${release}/etcdutl" \
+            go test -tags=etcdrecoveryintegration ./pkg/backup/etcdrecovery -run '^TestRealSyntheticSnapshotRecovery$' -count=1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 1.26.x

@@ -99,6 +99,7 @@ jobs:
           github_context='git''hub'
           expression_open='$'
           expression_open+='{{'
+          release_guard="github.event_name == 'push' && github.ref_protected && ((github.ref_type == 'branch' && github.ref_name == 'main') || (github.ref_type == 'tag' && startsWith(github.ref_name, 'v')))"
           # shellcheck disable=SC2016 # jq variables intentionally remain literal.
           workflow_policy='
             def safe_root_permissions:
@@ -114,7 +115,10 @@ jobs:
                  $workflow_path == ".github/workflows/security.yml") or
                 (.value == "write" and
                  (.key == "id-token" or .key == "attestations") and
-                 $job_key == "artifact-provenance" and
+                 ($job_key == "artifact-provenance" or $job_key == "recovery-worker-image") and
+                 $workflow_path == ".github/workflows/release-provenance.yml") or
+                (.value == "write" and .key == "packages" and
+                 $job_key == "recovery-worker-image" and
                  $workflow_path == ".github/workflows/release-provenance.yml"))
               end;
             def no_pull_request_target:
@@ -127,12 +131,29 @@ jobs:
                 ($events | has("pull_request_target") | not)
               else false
               end;
+            def exact_release_events($workflow_path):
+              if $workflow_path != ".github/workflows/release-provenance.yml" then true
+              else
+                (.on | type) == "object" and
+                ((.on | keys) == ["push"]) and
+                (.on.push | type) == "object" and
+                ((.on.push | keys) == ["branches", "tags"]) and
+                .on.push.branches == ["main"] and
+                .on.push.tags == ["v*"]
+              end;
+            def exact_job_condition($job_key; $workflow_path; $release_guard):
+              if $workflow_path == ".github/workflows/release-provenance.yml" and
+                ($job_key == "artifact-provenance" or $job_key == "recovery-worker-image")
+              then has("if") and .if == $release_guard
+              else has("if") | not
+              end;
             def reviewed_use:
               type == "string" and
               (. == "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0" or
                . == "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e" or
                . == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" or
                . == "actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6" or
+               . == "docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f" or
                test("^github/codeql-action/(init|autobuild|analyze)@7188fc363630916deb702c7fdcf4e481b751f97a$") or
                test("^docker://[^@[:space:]]+@sha256:[0-9a-f]{64}$"));
             def safe_image:
@@ -156,12 +177,16 @@ jobs:
               ([.. | strings] |
                 all(.[];
                   (test("(^|[^A-Za-z0-9_])" + $name + "([^A-Za-z0-9_]|$)"; "i") | not)));
-            def no_unsafe_github_expressions($github_name; $open):
+            def no_unsafe_github_expressions($github_name; $open; $workflow_path):
               ($github_name + "[[:space:]]*\\.[[:space:]]*(" +
-                "workflow|ref|event_name|" +
+                "workflow|event_name|" +
                 "event[[:space:]]*\\.[[:space:]]*pull_request[[:space:]]*\\.[[:space:]]*(" +
                   "number|base[[:space:]]*\\.[[:space:]]*sha|" +
-                  "head[[:space:]]*\\.[[:space:]]*sha))") as $safe_reference |
+                  "head[[:space:]]*\\.[[:space:]]*sha)" +
+                (if $workflow_path == ".github/workflows/release-provenance.yml" then
+                   "|ref_protected|ref_type|ref_name|actor|token|sha"
+                 else "|ref"
+                 end) + ")") as $safe_reference |
               (([.. | strings | select(contains($open))] +
                 [.. | objects | .if? | select(type == "string")]) |
                 all(.[];
@@ -171,12 +196,13 @@ jobs:
                       "([^A-Za-z0-9_]|$)"; "i")) | not)));
             type == "object" and
             has("on") and no_pull_request_target and
+            exact_release_events($workflow_path) and
             has("permissions") and (.permissions | safe_root_permissions) and
             (.jobs | type == "object" and length > 0) and
             (all(.jobs | to_entries[];
               . as $job |
               ($job.value | safe_job_permissions($job.key; $workflow_path)) and
-              ($job.value | has("if") | not) and
+              ($job.value | exact_job_condition($job.key; $workflow_path; $release_guard)) and
               ($job.value | has("continue-on-error") | not) and
               (all($job.value.steps[]?; has("continue-on-error") | not)) and
               ($job.value | safe_runtime(.)) and
@@ -184,7 +210,7 @@ jobs:
                 map(select(. != null))) |
                 all(.[]; reviewed_use)))) and
             no_restricted_context($restricted_context) and
-            no_unsafe_github_expressions($github_context; $expression_open)
+            no_unsafe_github_expressions($github_context; $expression_open; $workflow_path)
           '
           policy_accepts() {
             local workflow_path="${2:-.github/workflows/fixture.yml}"
@@ -194,6 +220,7 @@ jobs:
                   --arg workflow_path "${workflow_path}" \
                   --arg github_context "${github_context}" \
                   --arg expression_open "${expression_open}" \
+                  --arg release_guard "${release_guard}" \
                   "length == 1 and (.[0] | ${workflow_policy})" >/dev/null
           }
           canonical_workflow_digest() {
@@ -215,7 +242,7 @@ jobs:
             [[ "${candidate_digest}" == "${reviewed_digest}" ]]
           }
           expect_rejected() {
-            if policy_accepts "$2"; then
+            if policy_accepts "$2" "${3:-.github/workflows/fixture.yml}"; then
               echo "workflow policy accepted unsafe fixture: $1" >&2
               exit 1
             fi
@@ -229,6 +256,36 @@ jobs:
 
           valid_fixture=$'"on": [pull_request]\npermissions:\n  contents: read\njobs:\n  build:\n    runs-on: ubuntu-latest\n    container:\n      image: registry.example/build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    services:\n      database:\n        image: registry.example/database@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n    steps:\n      - "uses": actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0\n      - uses : docker://registry.example/tool@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n'
           policy_accepts "${valid_fixture}"
+          valid_release_fixture="$(jq -cn --arg guard "${release_guard}" '
+            {
+              "on": {push: {branches: ["main"], tags: ["v*"]}},
+              permissions: {contents: "read"},
+              jobs: {
+                "recovery-worker-image": {
+                  "if": $guard,
+                  permissions: {
+                    contents: "read",
+                    packages: "write",
+                    "id-token": "write",
+                    attestations: "write"
+                  },
+                  "runs-on": "ubuntu-latest",
+                  steps: [{run: "true"}]
+                }
+              }
+            }
+          ')"
+          policy_accepts "${valid_release_fixture}" '.github/workflows/release-provenance.yml'
+          expect_rejected release-dispatch-event "$(
+            jq -c '."on" = {"workflow_dispatch": {}}' <<<"${valid_release_fixture}"
+          )" '.github/workflows/release-provenance.yml'
+          expect_rejected release-pull-request-event "$(
+            jq -c '."on" = {"pull_request": {}}' <<<"${valid_release_fixture}"
+          )" '.github/workflows/release-provenance.yml'
+          expect_rejected release-missing-protected-ref-guard "$(
+            jq -c '.jobs["recovery-worker-image"].if |= gsub("github.ref_protected && "; "")' \
+              <<<"${valid_release_fixture}"
+          )" '.github/workflows/release-provenance.yml'
 
           multi_document_fixture=$'"on": pull_request_target\npermissions: {contents: read}\njobs:\n  unsafe:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n---\n'
           multi_document_fixture+="${valid_fixture}"
@@ -259,6 +316,7 @@ jobs:
           expect_rejected missing-permissions $'"on": pull_request\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           expect_rejected root-write $'"on": pull_request\npermissions: {contents: write}\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           expect_rejected job-write $'"on": pull_request\npermissions: {contents: read}\njobs:\n  build:\n    permissions: {contents: write}\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
+          expect_rejected unrelated-package-write $'"on": workflow_dispatch\npermissions: {contents: read}\njobs:\n  build:\n    permissions: {contents: read, packages: write}\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           expect_rejected unrelated-attestation-write $'"on": workflow_dispatch\npermissions: {contents: read}\njobs:\n  artifact-provenance:\n    permissions: {contents: read, id-token: write, attestations: write}\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'
           github_token_context='git''hub.to''ken'
           token_property='to''ken'
@@ -442,7 +500,7 @@ jobs:
                 expected_jobs='["license-check"]'
                 ;;
               .github/workflows/release-provenance.yml)
-                expected_jobs='["artifact-provenance"]'
+                expected_jobs='["artifact-provenance","recovery-worker-image"]'
                 ;;
               .github/workflows/security.yml)
                 expected_jobs='["codeql","gosec","govulncheck","secret-scan"]'
@@ -476,6 +534,7 @@ jobs:
                   --arg workflow_path "${workflow}" \
                   --arg github_context "${github_context}" \
                   --arg expression_open "${expression_open}" \
+                  --arg release_guard "${release_guard}" \
                   "length == 1 and (.[0] | ${workflow_policy})" >/dev/null; then
               echo "workflow violates the semantic policy: ${workflow}" >&2
               violations=1

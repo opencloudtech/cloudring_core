@@ -39,7 +39,7 @@ The public CI contract covers these checks:
 | Synthetic reference image | The digest-pinned `Containerfile` must build and its local mock-provider self-check must pass. |
 | Source-safety | The Go scanner must approve the complete tree and pre-push commit range, including intermediate commits and reviewed non-text artifacts. |
 | Security | CodeQL, govulncheck, gosec, and both current-tree and Git-history secret scans must pass without broad exclusions. |
-| Supply chain | Actions must be commit-pinned; workflows must be syntax-checked and must not request unexpected write permissions or PR secrets. The release-only workflow builds the Linux CLI bundle, generates a CycloneDX 1.6 SBOM, uploads both as one short-retention artifact set, and creates GitHub/Sigstore build and SBOM attestations. |
+| Supply chain | Actions must be commit-pinned; workflows must be syntax-checked and must not request unexpected write permissions or PR secrets. The protected-push release workflow builds the Linux CLI bundle plus the digest-pinned etcd recovery worker image, verifies two independent OCI builds have the same Linux AMD64 subject digest, requires the published subject to match, emits separate component-inventory and real image SBOMs, publishes only the immutable GHCR image, creates GitHub/Sigstore attestations, and confirms the published digest is anonymously pullable. |
 | License and contribution docs | `LICENSE`, `NOTICE`, `CONTRIBUTING.md`, `SECURITY.md`, `GOVERNANCE.md`, `CLA.md`, `DCO.md`, and `TRADEMARKS.md` must exist in the public root. |
 
 The PostgreSQL service is an isolated CI dependency. This does not claim that
@@ -89,13 +89,35 @@ granted.
 
 ## Release provenance
 
-`.github/workflows/release-provenance.yml` runs only for a version tag or an
-explicit workflow dispatch. It never runs for a pull request. The job builds
-all public Go commands for Linux AMD64 with read-only modules and embedded VCS
-metadata, packages `LICENSE`, `NOTICE`, and the CycloneDX SBOM, records the
-bundle checksum, and creates a GitHub artifact attestation for the bundle and
-SBOM. The only write permissions are job-local `id-token` and `attestations`
-permissions for this exact reviewed workflow and job.
+`.github/workflows/release-provenance.yml` is triggered only by pushes to
+`main` or `v*` tags, and both jobs additionally require `push`,
+`github.ref_protected`, and the exact `main|v*` ref shape. It has no
+`workflow_dispatch` or pull-request trigger. A protected tag ruleset is
+therefore a prerequisite for version-tag publication. One job builds all
+public Go commands for Linux AMD64 with read-only modules and embedded VCS
+metadata, packages `LICENSE`, `NOTICE`, and the module CycloneDX SBOM, records
+the bundle checksum, and creates GitHub artifact attestations.
+
+The image job independently reproduces the worker binary and two OCI image
+layouts, checks their Linux AMD64 subject manifest digests are identical, and
+requires the separately pushed registry subject to match that reviewed digest.
+The official `etcdutl` 3.6.13 archive, binary, BuildKit, Dockerfile frontend,
+Buildx and Syft inputs are immutable-version or content pinned. The job
+publishes only `sha-<commit>`, creates a real Syft image-package SBOM plus a
+separately named release-component inventory, and emits a canonical
+`cloudring.etcd-recovery.image-identity/v1` document binding source commit,
+image/index and subject digests, executable hashes, base image, Containerfile
+and both SBOM hashes. Image provenance and image SBOM attestations bind the
+published digest; component inventory and identity attestations bind their own
+files rather than being mislabeled as image SBOMs. Finally the job logs out and
+requires an anonymous digest pull.
+
+Job-local `packages`, `id-token`, and `attestations` writes are limited to those
+two exact guarded release jobs. The first GHCR package creation may still need
+an organization owner to set package visibility to public and confirm
+repository permission inheritance; the OCI source label links the package to
+this repository, but it does not override organization policy. A failed
+anonymous-pull gate is a blocked release, not permission to weaken the gate.
 
 After downloading the bundle from its workflow run, verify the provenance and
 SBOM attestation against this repository:

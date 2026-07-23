@@ -1,0 +1,115 @@
+# This is a provider-neutral, deliberately non-runnable template. Replace the
+# image placeholder only with the immutable digest published by this repository
+# and bind both Secrets through a reviewed downstream execution profile.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cloudring-etcd-recovery-worker
+  namespace: kube-system
+spec:
+  backoffLimit: 0
+  # The request permits at most 1800s of work; the Job leaves an additional
+  # bounded window for cleanup and the canonical terminal receipt.
+  activeDeadlineSeconds: 1860
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudring-etcd-recovery-worker
+    spec:
+      serviceAccountName: cloudring-etcd-recovery-worker
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: recover-and-verify
+          image: ghcr.io/opencloudtech/cloudring-etcd-recovery-worker@sha256:REPLACE_WITH_PUBLISHED_DIGEST
+          imagePullPolicy: IfNotPresent
+          terminationMessagePath: /work/output/receipt.json
+          terminationMessagePolicy: File
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: request
+              mountPath: /run/cloudring/request
+              readOnly: true
+            - name: credentials
+              mountPath: /run/cloudring/credentials
+              readOnly: true
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: request
+          secret:
+            secretName: cloudring-etcd-recovery-request
+            optional: false
+            defaultMode: 0440
+            items:
+              - key: request.json
+                path: request.json
+        - name: credentials
+          secret:
+            secretName: cloudring-etcd-recovery-credentials
+            optional: false
+            defaultMode: 0440
+        - name: work
+          emptyDir:
+            sizeLimit: 5Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-etcd-recovery-worker
+  namespace: kube-system
+automountServiceAccountToken: false
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudring-etcd-recovery-worker
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudring-etcd-recovery-worker
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # Deliberately non-runnable documentation address. Replace it with the
+    # exact reviewed object-store CIDR; never widen this to all HTTPS egress.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.0/32
+      ports:
+        - {protocol: TCP, port: 443}
