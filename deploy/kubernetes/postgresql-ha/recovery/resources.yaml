@@ -1,0 +1,347 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (C) IURII TRUKHIN 2012-2022, Elena Trukhina 2023-2026. Project and trademarks: Elena Trukhina ZZP.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+    cloudring.org/postgresql-recovery-only: "true"
+    cloudring.org/openbao-client: "true"
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-postgresql-recovery-reader
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-postgres-recovery-validator
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+    cloudring.org/postgresql-recovery-validator: "true"
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudring-postgresql-recovery-token-request
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts/token
+    resourceNames:
+      - cloudring-postgresql-recovery-reader
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudring-postgresql-recovery-token-request
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudring-postgresql-recovery-token-request
+subjects:
+  - kind: ServiceAccount
+    name: external-secrets
+    namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: cloudring-postgresql-recovery
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-isolated-openbao-policy-role-ca-and-live-sync-proof-required
+spec:
+  provider:
+    vault:
+      server: https://openbao-active.openbao.svc:8200
+      path: cloudring
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: openbao-client-ca
+        key: ca.crt
+      auth:
+        kubernetes:
+          mountPath: kubernetes-cloudring-database-recovery
+          role: cloudring-postgresql-recovery
+          serviceAccountRef:
+            name: cloudring-postgresql-recovery-reader
+            audiences:
+              - openbao
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudring-postgres-offcell-recovery-s3
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-read-only-secret-store-sync-and-revocation-evidence-required
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: cloudring-postgresql-recovery
+  target:
+    name: cloudring-postgres-offcell-recovery-s3
+    creationPolicy: Owner
+    deletionPolicy: Delete
+    template:
+      metadata:
+        labels:
+          cnpg.io/reload: "true"
+          cloudring.org/recovery-credential: "true"
+  data:
+    - secretKey: ACCESS_KEY_ID
+      remoteRef:
+        key: services/postgresql/offcell-recovery-s3
+        property: access-key-id
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: ACCESS_SECRET_KEY
+      remoteRef:
+        key: services/postgresql/offcell-recovery-s3
+        property: secret-access-key
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudring-postgres-recovery-database
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-recovery-only-database-credential-sync-and-revocation-evidence-required
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: cloudring-postgresql-recovery
+  target:
+    name: cloudring-postgres-recovery-owner
+    creationPolicy: Owner
+    deletionPolicy: Delete
+    template:
+      type: kubernetes.io/basic-auth
+      metadata:
+        labels:
+          cnpg.io/reload: "true"
+          cloudring.org/recovery-credential: "true"
+  data:
+    - secretKey: username
+      remoteRef:
+        key: services/postgresql/recovery-database
+        property: username
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: password
+      remoteRef:
+        key: services/postgresql/recovery-database
+        property: password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: cloudring-postgres-offcell-recovery
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: downstream-read-only-object-store-and-recovery-evidence-required
+    cloudring.org/off-cell-required: "true"
+    cloudring.org/recovery-read-only-credentials-required: "true"
+spec:
+  configuration:
+    destinationPath: s3://cloudring-postgresql-offcell/cloudring-postgres
+    s3Credentials:
+      accessKeyId:
+        name: cloudring-postgres-offcell-recovery-s3
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: cloudring-postgres-offcell-recovery-s3
+        key: ACCESS_SECRET_KEY
+    wal:
+      maxParallel: 8
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cloudring-postgres-recovery
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/name: cloudring-postgres-recovery
+    app.kubernetes.io/part-of: cloudring-postgresql
+    cloudring.org/postgresql-recovery-only: "true"
+  annotations:
+    cloudring.org/non-claim: source-template-only-real-isolated-recovery-checksum-and-cleanup-evidence-required
+    cloudring.org/production-route-prohibited: "true"
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4@sha256:17760b4508e1703f7bf3d5ee6c9335ff6d1bf62b034a3d5b32a43414a516789f
+  enableSuperuserAccess: false
+  enablePDB: false
+  bootstrap:
+    recovery:
+      source: cloudring-postgres-source
+      database: cloudring
+      owner: cloudring_owner
+      secret:
+        name: cloudring-postgres-recovery-owner
+  externalClusters:
+    - name: cloudring-postgres-source
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: cloudring-postgres-offcell-recovery
+          serverName: cloudring-postgres
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+    nodeSelector:
+      kubernetes.io/os: linux
+  storage:
+    storageClass: longhorn-replicated
+    size: 50Gi
+    resizeInUseVolumes: true
+  walStorage:
+    storageClass: longhorn-replicated
+    size: 20Gi
+    resizeInUseVolumes: true
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  monitoring:
+    enablePodMonitor: false
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudring-postgres-recovery-isolation
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: cloudring-postgres-recovery
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cloudring.org/postgresql-recovery-validator: "true"
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: cnpg
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudring-postgres-recovery-kubernetes-api-egress-binding
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: documentation-cidr-denies-real-api-until-private-site-binding-and-live-proof
+    cloudring.org/site-binding-required: exact-private-kubernetes-api-cidr-and-port
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: cloudring-postgres-recovery
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.1/32
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudring-postgres-recovery-object-store-egress-binding
+  namespace: cloudring-database-recovery
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: documentation-cidr-denies-real-object-store-until-dedicated-site-binding-and-live-proof
+    cloudring.org/site-binding-required: exact-dedicated-off-cell-object-store-cidr-and-tls-port
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: cloudring-postgres-recovery
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.2/32
+      ports:
+        - protocol: TCP
+          port: 443

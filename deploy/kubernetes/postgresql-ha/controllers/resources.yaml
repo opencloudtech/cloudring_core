@@ -123,3 +123,213 @@ spec:
     matchLabels:
       app.kubernetes.io/instance: cnpg
       app.kubernetes.io/name: cloudnative-pg
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: cnpg-barman-cloud
+  namespace: cnpg-system
+spec:
+  interval: 1h
+  url: oci://ghcr.io/cloudnative-pg/charts/plugin-barman-cloud
+  ref:
+    digest: sha256:5d31605cad886f93abb7cd9884170d74ece913fe8b95c74b127ec5e8bcd2b2b6
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cnpg-barman-cloud
+  namespace: cnpg-system
+  annotations:
+    cloudring.org/non-claim: downstream-plugin-tls-controller-and-live-archive-evidence-required
+spec:
+  suspend: true
+  interval: 15m
+  timeout: 10m
+  releaseName: plugin-barman-cloud
+  chartRef:
+    kind: OCIRepository
+    name: cnpg-barman-cloud
+    namespace: cnpg-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    replicaCount: 2
+    serviceAccount:
+      create: false
+      name: cloudring-cnpg-barman-cloud
+    rbac:
+      create: false
+      cnpgGroup: postgresql.cnpg.io
+    image:
+      registry: ghcr.io
+      repository: cloudnative-pg/plugin-barman-cloud
+      tag: v0.13.0@sha256:71589dbac582333442812b07b31f7ea4d00324a8358aac7ca507dabf9f4b6c96
+      pullPolicy: IfNotPresent
+    sidecarImage:
+      registry: ghcr.io
+      repository: cloudnative-pg/plugin-barman-cloud-sidecar
+      tag: v0.13.0@sha256:990361af3319f9e23aafa0f6d7981f99bf1f69b4e6a85cf1bc7d71d6f09bb288
+    crds:
+      create: true
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsUser: 10001
+      runAsGroup: 10001
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+    podSecurityContext:
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: plugin-barman-cloud
+            app.kubernetes.io/name: plugin-barman-cloud
+    service:
+      ipFamilyPolicy: PreferDualStack
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+    certificate:
+      createClientCertificate: true
+      createServerCertificate: true
+      createIssuer: true
+      duration: 2160h
+      renewBefore: 360h
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudring-cnpg-barman-cloud
+  namespace: cnpg-system
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/rbac-source: plugin-barman-cloud-v0.13.0
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudring-cnpg-barman-cloud-upstream-v0130
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: exact-upstream-v0.13.0-controller-api-requires-cluster-wide-watch
+    cloudring.org/upstream-chart-source-sha: 83bd9c59514cb7ff3692049d85ba604dcb458700
+    cloudring.org/upstream-plugin-source-sha: 1cd26c92867bd27a8cc14beab8e455cf3b64cb10
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - barmancloud.cnpg.io
+    resources:
+      - objectstores
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - barmancloud.cnpg.io
+    resources:
+      - objectstores/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - barmancloud.cnpg.io
+    resources:
+      - objectstores/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - backups
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - postgresql.cnpg.io
+    resources:
+      - clusters/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+      - roles
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cloudring-cnpg-barman-cloud-upstream-v0130
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+  annotations:
+    cloudring.org/non-claim: upstream-controller-api-cluster-scope-is-a-reviewed-residual-limitation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloudring-cnpg-barman-cloud-upstream-v0130
+subjects:
+  - kind: ServiceAccount
+    name: cloudring-cnpg-barman-cloud
+    namespace: cnpg-system
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cnpg-barman-cloud
+  namespace: cnpg-system
+  labels:
+    app.kubernetes.io/part-of: cloudring-postgresql
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: plugin-barman-cloud
+      app.kubernetes.io/name: plugin-barman-cloud

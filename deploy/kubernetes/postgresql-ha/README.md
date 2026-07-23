@@ -22,6 +22,28 @@ The operator remains image-pinned to CloudNativePG `1.30.0`. A mutable Helm
 repository, tag-only chart selection, or documentary checksum annotation is
 not an accepted source contract.
 
+The same suspended controller stage installs the official Barman Cloud CNPG-I
+plugin chart `0.7.0` / application `v0.13.0` from
+`oci://ghcr.io/cloudnative-pg/charts/plugin-barman-cloud` at manifest digest
+`sha256:5d31605cad886f93abb7cd9884170d74ece913fe8b95c74b127ec5e8bcd2b2b6`.
+Both the manager and injected instance sidecar use immutable multi-platform
+image digests recorded in the shared supply-chain manifest. The plugin runs
+two leader-election replicas with hard topology spreading and a disruption
+budget. cert-manager must already be Ready because the official plugin uses
+mutual TLS for its CNPG-I endpoint. Digest pins prove source identity only;
+they do not prove the plugin, certificates, WAL archiver, or backups are live.
+
+The Helm values set both `serviceAccount.create=false` and `rbac.create=false`.
+The profile supplies a dedicated `cloudring-cnpg-barman-cloud` ServiceAccount
+and the exact reviewed upstream v0.13.0 manager ClusterRole and binding instead
+of accepting chart-generated manager RBAC. That manager grant is nevertheless
+cluster-wide: upstream v0.13.0 has no namespace watch restriction, so this is a
+reviewed residual limitation rather than a least-privilege claim. The chart
+also renders its namespaced `cnpg-system` leader-election Role and RoleBinding
+unconditionally; disabling `rbac.create` does not remove that separate grant
+over ConfigMaps, Leases, and Events. Review both residuals on every chart
+upgrade.
+
 The `runtime` stage is an explicit compact-cell reference. It consumes the
 public `longhorn-replicated` StorageClass and `longhorn-retain`
 VolumeSnapshotClass. Sites using another CSI implementation must patch both
@@ -49,13 +71,95 @@ Cross-namespace clients require both that pod label and the namespace label
 `cloudring.org/postgresql-client-namespace: "true"`; neither label alone grants
 access. A downstream may replace this with an equally narrow NetworkPolicy.
 
-The included six-hour online VolumeSnapshot schedule is a local recovery
-layer, not an off-cell disaster-recovery claim. Production promotion still
-requires an immutable off-cell WAL/base-backup target, a real isolated restore,
-retention and cleanup proof, and a one-server-loss drill with an unchanged
-transactional-state digest. A downstream may add the official Barman Cloud
-CNPG-I plugin for S3-compatible storage; it must pin the plugin by version and
-image digest and keep its credentials in the runtime secret manager.
+The included six-hour online VolumeSnapshot schedule remains a local recovery
+layer. It is intentionally preserved alongside the off-cell layer and is not
+an off-cell disaster-recovery claim.
+
+The runtime stage delegates continuous WAL archival to the official
+`barman-cloud.cloudnative-pg.io` plugin and schedules a daily online base backup
+from a preferred standby. The namespaced `ObjectStore` has a 30-day recovery
+window and requires a downstream bucket with at least 30 days of governance or
+compliance Object Lock. It uses a provider-neutral S3 URI in source. Before
+activation, each site must patch that URI to a dedicated bucket and prefix and,
+for a non-AWS S3-compatible implementation, add its reviewed HTTPS endpoint
+and CA reference. The bucket must be in a failure domain distinct from the
+Kubernetes cell, enable versioning and encryption, and deny a controlled
+deletion while retention is active. A source render or a successful upload is
+not evidence of these properties.
+
+No credential value is stored in this profile. The production `ExternalSecret`
+projects only `ACCESS_KEY_ID` and `ACCESS_SECRET_KEY` from the platform runtime
+secret manager. A site may replace access keys with an equally reviewed
+workload-identity mechanism, but it must not put a credential, session token,
+endpoint credential, or rendered Secret in Git. Rotation and revocation remain
+live gates.
+
+The production and recovery projections use separate namespaced `SecretStore`
+objects, never a shared `ClusterSecretStore`. Before activation, OpenBao must
+provide the exact Kubernetes auth mounts and roles declared by each store,
+bound only to its named reader ServiceAccount and `openbao` audience. Its
+policies must limit the production role to the off-cell write credential path
+and the recovery role to the recovery S3 and recovery-database paths. Each
+namespace must also receive the trusted `openbao-client-ca` ConfigMap with the
+reviewed `ca.crt`; the source reference does not prove that the role, policy,
+CA, token exchange, secret sync, rotation, or revocation works live.
+
+The separate `recovery` stage is a drill template, never part of the normal
+application route. It bootstraps a new one-instance Cluster from the off-cell
+base backup and WAL chain in `cloudring-database-recovery`, uses a distinct
+read-only object-store credential plus a separate recovery-only database owner
+credential, and reuses neither production credential. It has no production
+client selector and permits database ingress only from an explicitly labelled
+recovery validator in the same namespace; the only other ingress is the
+operator's TCP/8000 management port from `cnpg-system`. Do not expose TCP/9090
+on a recovery database pod: that is the plugin manager Service port in
+`cnpg-system`, not a recovery-pod ingress requirement. Do not add an Ingress,
+Gateway, HTTPRoute, production client label, or production application workload
+to this namespace. Apply the stage only for a reviewed drill; after validation
+delete the whole namespace using the transaction's recorded UID precondition.
+Physical database recovery never restores Kubernetes Secrets. The namespaced
+SecretStore must project both recovery-only Secrets before the recovery Cluster
+is created, and cleanup must remove those projections with the namespace.
+
+Recovery egress is fail-closed in source. `192.0.2.1/32` and `192.0.2.2/32`
+are TEST-NET documentation bindings, not deployable defaults. A site must
+replace them with the exact private Kubernetes API endpoint CIDR and port and
+the exact dedicated off-cell object-store endpoint CIDR and TLS port; changing
+only the address while retaining an incorrect port is not sufficient. These
+policies use raw `ipBlock` peers. Service translation and CNI DNAT ordering can
+make the address observed by NetworkPolicy differ from the configured Service
+or VIP, so the site must bind the effective destination CIDRs and prove the
+result with its actual CNI. Until then, recovery is intentionally unable to
+reach either endpoint.
+
+[`recovery/evidence.schema.json`](recovery/evidence.schema.json) is the minimum
+sanitized pass contract. A pass requires a completed non-empty base backup,
+continuous WAL replay, a distinct off-cell destination, 30-day retention and
+Object Lock with a denied control deletion, one Ready recovered instance, zero
+production routes, a successful write probe, equal source/recovered canonical
+logical-state SHA-256 values with positive row and byte counts, and two-sweep
+cleanup proving the recovery namespace, Cluster, credential Secret, PVCs,
+Services, and routes are absent. Evidence contains only hashes and counts—never
+bucket names, endpoints, credentials, database values, tenant identifiers, or
+raw command errors. Until a real drill satisfies this schema, the Goal01
+`postgresql-cnpg` evidence class remains blocked.
+
+`VerifyPostgreSQLRecoveryEvidence` validates one evidence instance as strict
+JSON: duplicate or unknown fields fail, every identity and inventory checksum
+must have the required SHA-256 form, and source/recovered logical checksums,
+positive byte counts, and positive row counts must match exactly. It also
+enforces the backup/WAL/recovery/checksum/cleanup/collection chronology and
+exactly two zero-residue cleanup sweeps separated by the declared quiet window
+of at least 30 seconds. Validating the schema in the source tree does not run
+this instance verifier and cannot substitute for independently collected live
+evidence.
+
+The machine source verifier therefore reports the PostgreSQL profile as
+`status: source-contract-ready` with `liveStatus: blocked` and explicit live
+blockers. The aggregate manifest report may say
+`status: source-contracts-verified`, but its `liveStatus` also remains
+`blocked`. Both statuses are limited to source validation; all runtime and
+production gates remain open.
 
 Run schema migration before starting application replicas by passing the DSN
 through an inherited anonymous pipe:

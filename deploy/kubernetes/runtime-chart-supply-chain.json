@@ -1,6 +1,6 @@
 {
   "schemaVersion": "cloudring.runtime-chart-supply-chain/v1",
-  "verifiedAt": "2026-07-22T15:30:00Z",
+  "verifiedAt": "2026-07-23T05:36:00Z",
   "artifacts": [
     {
       "id": "cert-manager",
@@ -24,6 +24,32 @@
       "provenanceDigest": "sha256:9426303423d3b3a303219764468ca15952846928429b2dd6578e60d242fc1a8e",
       "license": "Apache-2.0",
       "officialSource": "https://cloudnative-pg.io/charts/"
+    },
+    {
+      "id": "cloudnative-pg-barman-cloud",
+      "version": "0.7.0",
+      "appVersion": "v0.13.0",
+      "sourceKind": "oci-helm-chart",
+      "source": "oci://ghcr.io/cloudnative-pg/charts/plugin-barman-cloud",
+      "manifestDigest": "sha256:5d31605cad886f93abb7cd9884170d74ece913fe8b95c74b127ec5e8bcd2b2b6",
+      "contentDigest": "sha256:eb2d840e2b22fb2678c4554efdfb3a23cfafb8f8597ef84657c433bbc6a327ea",
+      "provenanceDigest": "sha256:49a423b8a209f252beef4f601795eb005a850595ccd3d1ec0fc7201b5f0bed65",
+      "license": "Apache-2.0",
+      "officialSource": "https://cloudnative-pg.io/plugin-barman-cloud/docs/installation/",
+      "images": [
+        {
+          "key": "manager",
+          "repository": "ghcr.io/cloudnative-pg/plugin-barman-cloud",
+          "tag": "v0.13.0",
+          "digest": "sha256:71589dbac582333442812b07b31f7ea4d00324a8358aac7ca507dabf9f4b6c96"
+        },
+        {
+          "key": "sidecar",
+          "repository": "ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar",
+          "tag": "v0.13.0",
+          "digest": "sha256:990361af3319f9e23aafa0f6d7981f99bf1f69b4e6a85cf1bc7d71d6f09bb288"
+        }
+      ]
     },
     {
       "id": "longhorn",
@@ -58,6 +84,7 @@
   ],
   "nonClaims": [
     "Registry and release-archive digest verification does not prove a live reconciliation or workload health.",
+    "The Barman Cloud Plugin release remains suspended; pinned chart and images do not prove WAL archival, base-backup recovery, bucket retention, or object lock.",
     "The Longhorn release remains suspended; its exact upstream Git commit does not prove remote Git availability or offline installation."
   ]
 }
