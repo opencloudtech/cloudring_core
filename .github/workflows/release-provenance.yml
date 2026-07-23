@@ -255,10 +255,14 @@ jobs:
             (.specVersion == "1.5" or .specVersion == "1.6") and
             (.components | type == "array") and
             (.components | length >= 2) and
-            any(.components[]?.properties[]?;
-              .value == "/usr/local/bin/cloudring-etcd-recovery-worker") and
-            any(.components[]?.properties[]?;
-              .value == "/usr/local/bin/etcdutl")
+            any(.components[]?;
+              .name == "cloudring-etcd-recovery-worker" or
+              any(.properties[]?.value?;
+                . == "/usr/local/bin/cloudring-etcd-recovery-worker")) and
+            any(.components[]?;
+              .name == "etcdutl" or
+              any(.properties[]?.value?;
+                . == "/usr/local/bin/etcdutl"))
           ' dist/etcd-recovery-worker-image.cdx.json >/dev/null
           image_sbom_digest="$(sha256sum dist/etcd-recovery-worker-image.cdx.json | cut -d ' ' -f 1)"
           printf 'sha256=%s\n' "${image_sbom_digest}" >> "${GITHUB_OUTPUT}"
