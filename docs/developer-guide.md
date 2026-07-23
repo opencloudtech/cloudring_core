@@ -27,7 +27,7 @@ cd CloudRING
 go mod download
 go test ./... -count=1
 go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
+go run ./cmd/ocsctl conformance ./examples/synthetic-service-module/connector-package.json
 ```
 
 Use `./evidence/` or another local scratch directory for optional generated
@@ -46,10 +46,11 @@ a package that validates without importing platform internals.
 3. Keep implementation code in the service repository. The CloudRING package
    declares capabilities, lifecycle actions, API refs, tenant permissions,
    microfrontend mount refs, support diagnostics, and durability evidence.
-4. Validate the package:
+4. Validate the package and run conformance against that same artifact:
 
 ```bash
 go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
+go run ./cmd/ocsctl conformance ./examples/synthetic-service-module/connector-package.json
 ```
 
 Expected output:
@@ -63,10 +64,11 @@ digest. It does not emit the selected path or the package-declared name to
 stdout or conformance evidence. Re-running the command with the same selected
 file and unchanged content produces the same identity.
 
-Run conformance against a module package when the package includes the reference
-module surfaces:
+The reference module is a larger example. Validate and check conformance on that
+same package as well:
 
 ```bash
+go run ./cmd/ocsctl validate ./reference/synthetic-service/module-package.json
 go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
 ```
 
@@ -99,7 +101,7 @@ Run the public validation path before publishing docs or examples:
 ```bash
 go test ./... -count=1
 go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
+go run ./cmd/ocsctl conformance ./examples/synthetic-service-module/connector-package.json
 ```
 
 Repository maintainers also run source-safety and publication-boundary checks

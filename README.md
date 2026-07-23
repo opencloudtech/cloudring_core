@@ -203,8 +203,11 @@ git clone https://github.com/opencloudtech/CloudRING.git
 cd CloudRING
 go mod download
 go test ./... -count=1
-go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
+packages=(./examples/synthetic-service-module/connector-package.json ./reference/synthetic-service/module-package.json ./modules/*/module-package.json)
+go run ./cmd/ocsctl validate "${packages[@]}"
+go run ./cmd/ocsctl conformance "${packages[@]}"
+docker build --file ./reference/synthetic-service/Containerfile --tag cloudring-synthetic-service:dev .
+docker run --rm cloudring-synthetic-service:dev --mode=mock-provider --check
 go run ./cmd/cloudring-registry validate ./contracts/module-registry/fixtures/synthetic-module-registry.json
 go run ./cmd/cloudring-manifestcheck --root .
 ```

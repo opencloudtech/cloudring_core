@@ -8,8 +8,9 @@ gh repo clone opencloudtech/CloudRING
 cd CloudRING
 go mod download
 go test ./... -count=1
-go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
+packages=(./examples/synthetic-service-module/connector-package.json ./reference/synthetic-service/module-package.json ./modules/*/module-package.json)
+go run ./cmd/ocsctl validate "${packages[@]}"
+go run ./cmd/ocsctl conformance "${packages[@]}"
 ```
 
 For a module under review, run the same commands against that module package:

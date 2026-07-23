@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+env:
+  OCS_SHIPPED_PACKAGE_GLOBS: >-
+    examples/synthetic-service-module/connector-package.json
+    reference/synthetic-service/module-package.json
+    modules/*/module-package.json
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -172,7 +178,15 @@ jobs:
           go-version: 1.25.x
           check-latest: true
           cache: true
-      - run: go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json ./reference/synthetic-service/module-package.json ./modules/*/module-package.json
+      - name: Validate every shipped connector package
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # shellcheck disable=SC2206 # The reviewed value intentionally contains a tracked glob.
+          packages=(${OCS_SHIPPED_PACKAGE_GLOBS})
+          (( ${#packages[@]} >= 3 ))
+          go run ./cmd/ocsctl validate "${packages[@]}"
 
   ocs-conformance:
     runs-on: ubuntu-latest
@@ -186,7 +200,22 @@ jobs:
           go-version: 1.25.x
           check-latest: true
           cache: true
-      - run: go run ./cmd/ocsctl conformance ./examples/synthetic-service-module/connector-package.json ./reference/synthetic-service/module-package.json ./modules/*/module-package.json
+      - name: Check conformance for the same shipped connector packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # shellcheck disable=SC2206 # The reviewed value intentionally contains a tracked glob.
+          packages=(${OCS_SHIPPED_PACKAGE_GLOBS})
+          (( ${#packages[@]} >= 3 ))
+          go run ./cmd/ocsctl conformance "${packages[@]}"
+      - name: Build and smoke-test the synthetic reference image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='cloudring-synthetic-service:ci'
+          docker build --file ./reference/synthetic-service/Containerfile --tag "${image}" .
+          docker run --rm "${image}" --mode=mock-provider --check
 
   docscheck:
     runs-on: ubuntu-latest

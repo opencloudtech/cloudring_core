@@ -1,0 +1,13 @@
+FROM golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1 AS build
+
+WORKDIR /src
+COPY go.mod ./
+COPY reference/synthetic-service/controller ./reference/synthetic-service/controller
+COPY reference/synthetic-service/cmd/synthetic-service ./reference/synthetic-service/cmd/synthetic-service
+RUN mkdir -p /out && \
+    CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags='-s -w -buildid=' -o /out/synthetic-service ./reference/synthetic-service/cmd/synthetic-service
+
+FROM scratch
+COPY --from=build /out/synthetic-service /synthetic-service
+USER 65532:65532
+ENTRYPOINT ["/synthetic-service"]

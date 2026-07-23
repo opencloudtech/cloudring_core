@@ -10,8 +10,11 @@ go test ./... -count=1
 go test -race ./... -count=1
 go vet ./...
 go run ./cmd/cloudring-sourcecheck scan --scope full
-go run ./cmd/ocsctl validate ./examples/synthetic-service-module/connector-package.json
-go run ./cmd/ocsctl conformance ./reference/synthetic-service/module-package.json
+packages=(./examples/synthetic-service-module/connector-package.json ./reference/synthetic-service/module-package.json ./modules/*/module-package.json)
+go run ./cmd/ocsctl validate "${packages[@]}"
+go run ./cmd/ocsctl conformance "${packages[@]}"
+docker build --file ./reference/synthetic-service/Containerfile --tag cloudring-synthetic-service:ci .
+docker run --rm cloudring-synthetic-service:ci --mode=mock-provider --check
 ```
 
 Enable the tracked local pre-push gate once per clone:
@@ -31,8 +34,9 @@ The public CI contract covers these checks:
 | Go tests | The public module must pass tests on supported minimum/current Go releases, plus race, vet, read-only module graph, and build checks. |
 | PostgreSQL integration | The transactional-state CAS, migrations, digest, and concurrent-writer behavior must pass against a real digest-pinned PostgreSQL service with synthetic, non-secret test configuration. |
 | Windows | The same unit suite is run on `windows-latest` as a portability signal. Native Windows support is not a release-readiness blocker for the current goal. |
-| OCS validation | The synthetic connector package must pass `go run ./cmd/ocsctl validate`. |
-| OCS conformance | The reference synthetic module must pass `go run ./cmd/ocsctl conformance`. |
+| OCS validation | Every shipped connector package selected by the shared CI package list must pass `go run ./cmd/ocsctl validate`. |
+| OCS conformance | The same exact shipped connector packages must pass `go run ./cmd/ocsctl conformance`; validation cannot be green for an artifact that CI omits from conformance. |
+| Synthetic reference image | The digest-pinned `Containerfile` must build and its local mock-provider self-check must pass. |
 | Source-safety | The Go scanner must approve the complete tree and pre-push commit range, including intermediate commits and reviewed non-text artifacts. |
 | Security | CodeQL, govulncheck, gosec, and both current-tree and Git-history secret scans must pass without broad exclusions. |
 | Supply chain | Actions must be commit-pinned; workflows must be syntax-checked and must not request unexpected write permissions or PR secrets. The release-only workflow builds the Linux CLI bundle, generates a CycloneDX 1.6 SBOM, uploads both as one short-retention artifact set, and creates GitHub/Sigstore build and SBOM attestations. |
