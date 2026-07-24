@@ -4,6 +4,7 @@
 package etcdrecovery
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -21,12 +22,7 @@ import (
 	"time"
 )
 
-const (
-	accessKeyFile    = "access-key-id"
-	secretKeyFile    = "secret-access-key"
-	sessionTokenFile = "session-token"
-	emptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-)
+const emptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 type s3Credentials struct {
 	accessKey    []byte
@@ -174,22 +170,87 @@ func readS3Credentials(ctx context.Context, root string) (*s3Credentials, error)
 	values, err := readProjectedSetContext(
 		ctx,
 		root,
-		[]string{accessKeyFile, secretKeyFile},
-		[]string{sessionTokenFile},
+		[]string{SharedCredentialsKey},
+		nil,
 		maximumCredentialBytes,
 	)
 	if err != nil {
 		return nil, errors.New("S3 access key is invalid")
 	}
-	accessIdentifier := values[accessKeyFile]
-	secretKey := values[secretKeyFile]
-	sessionToken := values[sessionTokenFile]
+	payload := values[SharedCredentialsKey]
+	credentials, parseErr := parseSharedS3Credentials(payload)
+	for _, value := range values {
+		clear(value)
+	}
+	if parseErr != nil {
+		return nil, errors.New("S3 access key is invalid")
+	}
+	return credentials, nil
+}
+
+func parseSharedS3Credentials(payload []byte) (*s3Credentials, error) {
+	if len(payload) == 0 || len(payload) > maximumCredentialBytes || bytes.IndexByte(payload, 0) >= 0 {
+		return nil, errors.New("shared S3 credentials are invalid")
+	}
+	var accessIdentifier, secretKey, sessionToken []byte
+	sectionSeen := false
+	seen := map[string]bool{}
+	lines := bytes.Split(payload, []byte{'\n'})
+	if len(lines) > 32 {
+		return nil, errors.New("shared S3 credentials are invalid")
+	}
+	for _, rawLine := range lines {
+		line := bytes.TrimSpace(rawLine)
+		if len(line) == 0 || line[0] == '#' || line[0] == ';' {
+			continue
+		}
+		if line[0] == '[' {
+			if sectionSeen || !bytes.Equal(line, []byte("[default]")) {
+				clear(accessIdentifier)
+				clear(secretKey)
+				clear(sessionToken)
+				return nil, errors.New("shared S3 credentials are invalid")
+			}
+			sectionSeen = true
+			continue
+		}
+		if !sectionSeen {
+			clear(accessIdentifier)
+			clear(secretKey)
+			clear(sessionToken)
+			return nil, errors.New("shared S3 credentials are invalid")
+		}
+		key, value, found := bytes.Cut(line, []byte{'='})
+		key = bytes.TrimSpace(key)
+		value = bytes.TrimSpace(value)
+		keyText := string(key)
+		if !found || len(value) == 0 || seen[keyText] {
+			clear(accessIdentifier)
+			clear(secretKey)
+			clear(sessionToken)
+			return nil, errors.New("shared S3 credentials are invalid")
+		}
+		seen[keyText] = true
+		switch keyText {
+		case "aws_access_key_id":
+			accessIdentifier = append(accessIdentifier[:0], value...)
+		case "aws_secret_access_key":
+			secretKey = append(secretKey[:0], value...)
+		case "aws_session_token":
+			sessionToken = append(sessionToken[:0], value...)
+		default:
+			clear(accessIdentifier)
+			clear(secretKey)
+			clear(sessionToken)
+			return nil, errors.New("shared S3 credentials are invalid")
+		}
+	}
 	if !validCredentialValue(accessIdentifier, 16, 256) ||
 		!validCredentialValue(secretKey, 16, maximumCredentialBytes) ||
 		len(sessionToken) != 0 && !validCredentialValue(sessionToken, 16, maximumCredentialBytes) {
-		for _, value := range values {
-			clear(value)
-		}
+		clear(accessIdentifier)
+		clear(secretKey)
+		clear(sessionToken)
 		return nil, errors.New("S3 secret key is invalid")
 	}
 	return &s3Credentials{accessIdentifier, secretKey, sessionToken}, nil
