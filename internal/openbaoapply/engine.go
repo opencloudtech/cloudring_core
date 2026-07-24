@@ -1009,24 +1009,43 @@ func exactSeed(metadata, seed ReadResult, expected map[string]any) (string, bool
 	casRequired, casOK := metadata.Data["cas_required"].(bool)
 	metadataCASRequired, metadataCASOK := metadata.Data["metadata_cas_required"].(bool)
 	createdAt, updatedAt := textValue(metadata.Data, "created_time"), textValue(metadata.Data, "updated_time")
-	if !currentOK || currentVersion != 1 || !metadataOK || metadataVersion != 0 || !oldestOK || (oldestVersion != 0 && oldestVersion != 1) ||
+	if !currentOK || currentVersion < 1 || !metadataOK || metadataVersion != 0 || !oldestOK || (oldestVersion != 0 && (oldestVersion < 1 || oldestVersion > currentVersion)) ||
 		!maxOK || maxVersions != 0 || !casOK || casRequired || !metadataCASOK || metadataCASRequired ||
-		textValue(metadata.Data, "delete_version_after") != "0s" || !validStableTimestamp(createdAt) || updatedAt != createdAt {
+		textValue(metadata.Data, "delete_version_after") != "0s" || !validStableTimestamp(createdAt) || !validStableTimestamp(updatedAt) {
+		return "", false
+	}
+	createdTime, _ := time.Parse(time.RFC3339Nano, createdAt)
+	updatedTime, _ := time.Parse(time.RFC3339Nano, updatedAt)
+	if updatedTime.Before(createdTime) {
 		return "", false
 	}
 	versions, ok := object(metadata.Data, "versions")
-	if !ok || len(versions) != 1 {
+	if !ok || len(versions) == 0 || int64(len(versions)) > currentVersion {
 		return "", false
 	}
-	versionOne, ok := object(versions, "1")
-	if !ok || len(versionOne) != 3 || textValue(versionOne, "created_time") != createdAt || textValue(versionOne, "deletion_time") != "" {
+	for key, rawVersion := range versions {
+		version, err := strconv.ParseInt(key, 10, 64)
+		versionFacts, versionOK := rawVersion.(map[string]any)
+		if err != nil || version < 1 || version > currentVersion || !versionOK || len(versionFacts) != 3 ||
+			!validStableTimestamp(textValue(versionFacts, "created_time")) {
+			return "", false
+		}
+		deletionTime := textValue(versionFacts, "deletion_time")
+		if deletionTime != "" && !validStableTimestamp(deletionTime) {
+			return "", false
+		}
+		if _, destroyedOK := versionFacts["destroyed"].(bool); !destroyedOK {
+			return "", false
+		}
+	}
+	current, ok := object(versions, strconv.FormatInt(currentVersion, 10))
+	destroyed, destroyedOK := current["destroyed"].(bool)
+	if !ok || !destroyedOK || destroyed || textValue(current, "deletion_time") != "" ||
+		textValue(current, "created_time") != updatedAt ||
+		!exactSeedDataAt(seed, expected, updatedAt, currentVersion) {
 		return "", false
 	}
-	destroyed, ok := versionOne["destroyed"].(bool)
-	if !ok || destroyed || !exactSeedDataAt(seed, expected, createdAt) {
-		return "", false
-	}
-	return createdAt, true
+	return updatedAt, true
 }
 
 func exactSeedData(seed ReadResult, expected map[string]any) bool {
@@ -1034,10 +1053,11 @@ func exactSeedData(seed ReadResult, expected map[string]any) bool {
 		return false
 	}
 	metadata, ok := object(seed.Data, "metadata")
-	return ok && exactSeedDataAt(seed, expected, textValue(metadata, "created_time"))
+	version, versionOK := integer(metadata, "version")
+	return ok && versionOK && version >= 1 && exactSeedDataAt(seed, expected, textValue(metadata, "created_time"), version)
 }
 
-func exactSeedDataAt(seed ReadResult, expected map[string]any, createdAt string) bool {
+func exactSeedDataAt(seed ReadResult, expected map[string]any, createdAt string, expectedVersion int64) bool {
 	if len(seed.Data) != 2 {
 		return false
 	}
@@ -1051,7 +1071,7 @@ func exactSeedDataAt(seed ReadResult, expected map[string]any, createdAt string)
 	}
 	version, ok := integer(metadata, "version")
 	destroyed, destroyedOK := metadata["destroyed"].(bool)
-	return ok && version == 1 && destroyedOK && !destroyed && textValue(metadata, "deletion_time") == ""
+	return ok && expectedVersion >= 1 && version == expectedVersion && destroyedOK && !destroyed && textValue(metadata, "deletion_time") == ""
 }
 
 func exactSeedWrite(result ReadResult, createdAt string) bool {
