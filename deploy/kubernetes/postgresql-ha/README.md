@@ -144,15 +144,15 @@ bucket names, endpoints, credentials, database values, tenant identifiers, or
 raw command errors. Until a real drill satisfies this schema, the Goal01
 `postgresql-cnpg` evidence class remains blocked.
 
-`VerifyPostgreSQLRecoveryEvidence` validates one evidence instance as strict
-JSON: duplicate or unknown fields fail, every identity and inventory checksum
-must have the required SHA-256 form, and source/recovered logical checksums,
-positive byte counts, and positive row counts must match exactly. It also
-enforces the backup/WAL/recovery/checksum/cleanup/collection chronology and
-exactly two zero-residue cleanup sweeps separated by the declared quiet window
-of at least 30 seconds. Validating the schema in the source tree does not run
-this instance verifier and cannot substitute for independently collected live
-evidence.
+The public `pkg/backup/cnpgrecovery.VerifyEvidence` API validates one evidence
+instance as strict JSON: duplicate or unknown fields fail, every identity and
+inventory checksum must have the required SHA-256 form, and source/recovered
+logical checksums, positive byte counts, and positive row counts must match
+exactly. It also enforces the backup/WAL/recovery/checksum/cleanup/collection
+chronology and exactly two zero-residue cleanup sweeps separated by the
+declared quiet window of at least 30 seconds. Validating the schema in the
+source tree does not run this instance verifier and cannot substitute for
+independently collected live evidence.
 
 The machine source verifier therefore reports the PostgreSQL profile as
 `status: source-contract-ready` with `liveStatus: blocked` and explicit live
