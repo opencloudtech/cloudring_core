@@ -22,6 +22,7 @@ const (
 	DefaultRequestPath     = "/run/cloudring/request/request.json"
 	DefaultArchivePath     = "/run/cloudring/archive/snapshot.db"
 	DefaultAuthMountRoot   = "/run/cloudring/credentials"
+	SharedCredentialsKey   = "cloud"
 	DefaultToolPath        = "/usr/local/bin/etcdutl"
 	DefaultWorkspace       = "/work"
 	DefaultReceiptPath     = "/work/output/receipt.json"

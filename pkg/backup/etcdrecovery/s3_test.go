@@ -42,7 +42,7 @@ func TestS3FetchStreamsExactVersionedObjectWithoutLeakingInputs(t *testing.T) {
 	root := resolvedTempDir(t)
 	credentials := filepath.Join(root, "credentials")
 	writeProjectedMount(t, credentials, map[string]string{
-		accessKeyFile: "access-key-canary", secretKeyFile: "secret-key-canary-value",
+		SharedCredentialsKey: validProjectedS3AuthFile(),
 	})
 	workspace := filepath.Join(root, "work")
 	if err := os.Mkdir(workspace, 0o700); err != nil {
@@ -122,7 +122,9 @@ func TestS3FetchRejectsRedirectTLSVersionTruncationOversizeAndCancellation(t *te
 			request.ObjectIdentitySHA256 = ObjectIdentitySHA256(request)
 			root := resolvedTempDir(t)
 			credentialRoot := filepath.Join(root, "credentials")
-			writeProjectedMount(t, credentialRoot, map[string]string{accessKeyFile: "access-key-canary", secretKeyFile: "secret-key-canary-value"})
+			writeProjectedMount(t, credentialRoot, map[string]string{
+				SharedCredentialsKey: validProjectedS3AuthFile(),
+			})
 			workspace := filepath.Join(root, "work")
 			if err := os.Mkdir(workspace, 0o700); err != nil {
 				t.Fatal(err)
@@ -148,6 +150,15 @@ func TestS3FetchRejectsRedirectTLSVersionTruncationOversizeAndCancellation(t *te
 			}
 		})
 	}
+}
+
+func validProjectedS3AuthFile() string {
+	return strings.Join([]string{
+		"[default]",
+		"aws_access_key_id=access-key-canary",
+		"aws_secret_access_key=secret-key-canary-value",
+		"",
+	}, "\n")
 }
 
 func TestProjectedReaderAcceptsOnlyAtomicWriterLayout(t *testing.T) {
@@ -183,6 +194,39 @@ func TestProjectedReaderAcceptsOnlyAtomicWriterLayout(t *testing.T) {
 				t.Fatal("unsafe projected mount was accepted")
 			}
 		})
+	}
+}
+
+func TestSharedS3CredentialsAcceptOnlyOneStrictDefaultProfile(t *testing.T) {
+	credentials, err := parseSharedS3Credentials([]byte(
+		"# projected AWS shared credentials\n" +
+			"[default]\n" +
+			"aws_access_key_id = access-key-canary\n" +
+			"aws_secret_access_key = secret-key-canary-value\n" +
+			"aws_session_token = session-token-canary-value\n",
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer credentials.clear()
+	if string(credentials.accessKey) != "access-key-canary" ||
+		string(credentials.secretKey) != "secret-key-canary-value" ||
+		string(credentials.sessionToken) != "session-token-canary-value" {
+		t.Fatal("strict shared credentials parser returned unexpected values")
+	}
+
+	for _, payload := range []string{
+		"aws_access_key_id=access-key-canary\naws_secret_access_key=secret-key-canary-value\n",
+		"[other]\naws_access_key_id=access-key-canary\naws_secret_access_key=secret-key-canary-value\n",
+		"[default]\naws_access_key_id=access-key-canary\naws_access_key_id=access-key-canary-2\naws_secret_access_key=secret-key-canary-value\n",
+		"[default]\naws_access_key_id=access-key-canary\naws_secret_access_key=secret-key-canary-value\nunsupported=value\n",
+		"[default]\naws_access_key_id=short\naws_secret_access_key=secret-key-canary-value\n",
+		"[default]\naws_access_key_id=access-key-canary\naws_secret_access_key=short\n",
+	} {
+		if parsed, parseErr := parseSharedS3Credentials([]byte(payload)); parseErr == nil {
+			parsed.clear()
+			t.Fatalf("unsafe shared credentials input was accepted: %q", payload)
+		}
 	}
 }
 
